@@ -26,6 +26,8 @@ main()
 		cPrint[0] = 0;
 		cNumber[0] = 0;
 		
+		wTmp++; //???
+		
 		int2str ( wTmp, &cNumber );
 		strcat ( &cPrint, &cNumber );
 		puts ( &cPrint );
@@ -34,5 +36,5 @@ main()
 		puts ( &cBlank );
 		bTmp1=getkey();
 	}
-	
+
 }

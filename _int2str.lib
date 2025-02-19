@@ -15,13 +15,13 @@ INT2STR_LIB:
 			LP		0x08     ; K
 			LIA		0x07
 			EXAM             ; 7 --> K : bit counter
-			LP		0x05     ; X-high
+			LP		0x04     ; X-high
 			LDM	             
 			CALL	INT2STR_L0  ; convert byte
 			LIA		0x07
 			LP		0x08    
 			EXAM             ; 7 --> K ; bit counter?
-			LP		0x04     ; X-low
+			LP		0x05     ; X-low
 			LDM	             
 			CALL	INT2STR_L0  ; convert byte
 			

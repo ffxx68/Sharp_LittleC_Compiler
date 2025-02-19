@@ -1055,15 +1055,15 @@ begin
                 end
                 else if op = '.DW' then
                 begin
-                        while pos(',', params) > 0 do
-                        begin
-                                s := copy(params, 1, pos(',', params) - 1);
-                                addcode((mathparse(s, 16) shr 8) and $FF);
-                                addcode(mathparse(s, 16) and $FF);
-                                delete(params, 1, pos(',', params));
-                        end;
-                        addcode((mathparse(params, 16) shr 8) and $FF);
-                        addcode(mathparse(params, 16) and $FF);
+                    while pos(',', params) > 0 do
+                    begin
+                            s := copy(params, 1, pos(',', params) - 1);
+                            addcode(mathparse(s, 16) and $FF);
+                            addcode((mathparse(s, 16) shr 8) and $FF);
+                            delete(params, 1, pos(',', params));
+                    end;
+                    addcode(mathparse(params, 16) and $FF);
+                    addcode((mathparse(params, 16) shr 8) and $FF);
                 end
                 else if op = '.DS' then
                 begin
