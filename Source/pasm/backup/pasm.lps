@@ -3,15 +3,15 @@
   <ProjectSession>
     <PathDelim Value="\"/>
     <Version Value="12"/>
-    <BuildModes Active="Default"/>
+    <BuildModes Active="Debug"/>
     <Units>
       <Unit>
         <Filename Value="pasm.dpr"/>
         <IsPartOfProject Value="True"/>
         <IsVisibleTab Value="True"/>
-        <TopLine Value="216"/>
-        <CursorPos X="63" Y="234"/>
-        <UsageCount Value="21"/>
+        <TopLine Value="499"/>
+        <CursorPos Y="522"/>
+        <UsageCount Value="26"/>
         <Loaded Value="True"/>
         <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit>
@@ -19,111 +19,163 @@
         <Filename Value="calcunit.pas"/>
         <IsPartOfProject Value="True"/>
         <EditorIndex Value="-1"/>
-        <UsageCount Value="21"/>
+        <UsageCount Value="26"/>
         <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit>
     </Units>
-    <JumpHistory HistoryIndex="23">
+    <JumpHistory HistoryIndex="29">
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="513" Column="16" TopLine="496"/>
+        <Caret Line="758" TopLine="734"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1111" Column="34" TopLine="1091"/>
+        <Caret Line="762" Column="55" TopLine="734"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="959" Column="20" TopLine="943"/>
+        <Caret Line="761" TopLine="734"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1096" Column="42" TopLine="1094"/>
+        <Caret Line="765" Column="31" TopLine="734"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1186" Column="18" TopLine="1159"/>
+        <Caret Line="522" TopLine="499"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1104" Column="62" TopLine="1088"/>
+        <Caret Line="962" TopLine="941"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="210" Column="17" TopLine="189"/>
+        <Caret Line="1111" TopLine="1135"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="954" Column="42" TopLine="929"/>
+        <Caret Line="762" TopLine="753"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1010" Column="56" TopLine="997"/>
+        <Caret Line="522" TopLine="514"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1014" Column="13" TopLine="997"/>
+        <Caret Line="962" TopLine="941"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1100" Column="82" TopLine="1075"/>
+        <Caret Line="1105" Column="81" TopLine="1062"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1178" Column="17" TopLine="1160"/>
+        <Caret Line="766" Column="23" TopLine="756"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="211" Column="6" TopLine="194"/>
+        <Caret Line="347" Column="19" TopLine="321"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1015" Column="9" TopLine="989"/>
+        <Caret Line="523" TopLine="501"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="210" Column="6" TopLine="195"/>
+        <Caret Line="760" Column="23" TopLine="744"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1012" Column="42" TopLine="988"/>
+        <Caret Line="762" Column="21" TopLine="739"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1013" Column="9" TopLine="988"/>
+        <Caret Line="758" TopLine="750"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="210" Column="6" TopLine="194"/>
+        <Caret Line="760" Column="52" TopLine="750"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1193" Column="42" TopLine="1179"/>
+        <Caret Line="761" TopLine="750"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="27" Column="9" TopLine="12"/>
+        <Caret Line="345" TopLine="322"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1194" Column="60" TopLine="1182"/>
+        <Caret Line="346" TopLine="322"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="25" Column="13" TopLine="10"/>
+        <Caret Line="347" TopLine="322"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="221" Column="13" TopLine="197"/>
+        <Caret Line="348" TopLine="322"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="234" Column="88" TopLine="214"/>
+        <Caret Line="350" TopLine="322"/>
+      </Position>
+      <Position>
+        <Filename Value="pasm.dpr"/>
+        <Caret Line="762" TopLine="741"/>
+      </Position>
+      <Position>
+        <Filename Value="pasm.dpr"/>
+        <Caret Line="758" Column="46" TopLine="741"/>
+      </Position>
+      <Position>
+        <Filename Value="pasm.dpr"/>
+        <Caret Line="767" TopLine="741"/>
+      </Position>
+      <Position>
+        <Filename Value="pasm.dpr"/>
+        <Caret Line="511" Column="34" TopLine="500"/>
+      </Position>
+      <Position>
+        <Filename Value="pasm.dpr"/>
+        <Caret Line="758" Column="23" TopLine="738"/>
+      </Position>
+      <Position>
+        <Filename Value="pasm.dpr"/>
+        <Caret Line="766" TopLine="738"/>
       </Position>
     </JumpHistory>
     <RunParams>
       <FormatVersion Value="2"/>
-      <Modes ActiveMode=""/>
+      <Modes ActiveMode="default">
+        <Mode Name="default">
+          <local>
+            <CommandLineParams Value="tmp.asm tmp.bin"/>
+            <WorkingDirectory Value="C:\Users\F.Fumi\Dropbox\sharp_PC_1403\Sharp_LittleC_Compiler"/>
+          </local>
+        </Mode>
+      </Modes>
     </RunParams>
+    <HistoryLists>
+      <List Name="WorkingDirectory" Type="File" Count="2">
+        <Item1 Value="C:\Users\F.Fumi\Dropbox\sharp_PC_1403\Sharp_LittleC_Compiler"/>
+      </List>
+      <List Name="LaunchingApplication" Type="File" Count="1">
+        <Item1 Value="C:\Windows\system32\cmd.exe /C ${TargetCmdLine}"/>
+      </List>
+      <List Name="CommandLineParameters" Count="2">
+        <Item1 Value="tmp.asm tmp.bin"/>
+      </List>
+    </HistoryLists>
   </ProjectSession>
+  <Debugging>
+    <Watches>
+      <Item>
+        <Expression Value="op"/>
+      </Item>
+      <Item>
+        <Expression Value="abs(adr - startadr - codpos)"/>
+      </Item>
+    </Watches>
+  </Debugging>
 </CONFIG>

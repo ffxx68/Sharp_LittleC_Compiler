@@ -9,9 +9,9 @@
         <Filename Value="lcpp.dpr"/>
         <IsPartOfProject Value="True"/>
         <IsVisibleTab Value="True"/>
-        <TopLine Value="55"/>
-        <CursorPos X="12" Y="62"/>
-        <UsageCount Value="20"/>
+        <TopLine Value="152"/>
+        <CursorPos X="3" Y="191"/>
+        <UsageCount Value="54"/>
         <Loaded Value="True"/>
         <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit>
@@ -20,28 +20,169 @@
         <UnitName Value="Errors"/>
         <EditorIndex Value="-1"/>
         <CursorPos X="9" Y="28"/>
-        <UsageCount Value="10"/>
+        <UsageCount Value="7"/>
         <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit>
     </Units>
-    <JumpHistory HistoryIndex="2">
+    <JumpHistory HistoryIndex="29">
       <Position>
         <Filename Value="lcpp.dpr"/>
-        <Caret Line="25" Column="13"/>
+        <Caret Line="90" TopLine="65"/>
       </Position>
       <Position>
         <Filename Value="lcpp.dpr"/>
-        <Caret Line="86" Column="22" TopLine="66"/>
+        <Caret Line="92" TopLine="65"/>
       </Position>
       <Position>
         <Filename Value="lcpp.dpr"/>
-        <Caret Line="20" Column="16" TopLine="8"/>
+        <Caret Line="93" TopLine="65"/>
+      </Position>
+      <Position>
+        <Filename Value="lcpp.dpr"/>
+        <Caret Line="94" TopLine="65"/>
+      </Position>
+      <Position>
+        <Filename Value="lcpp.dpr"/>
+        <Caret Line="95" TopLine="65"/>
+      </Position>
+      <Position>
+        <Filename Value="lcpp.dpr"/>
+        <Caret Line="96" TopLine="65"/>
+      </Position>
+      <Position>
+        <Filename Value="lcpp.dpr"/>
+        <Caret Line="97" TopLine="65"/>
+      </Position>
+      <Position>
+        <Filename Value="lcpp.dpr"/>
+        <Caret Line="101" Column="17" TopLine="65"/>
+      </Position>
+      <Position>
+        <Filename Value="lcpp.dpr"/>
+        <Caret Line="99" TopLine="65"/>
+      </Position>
+      <Position>
+        <Filename Value="lcpp.dpr"/>
+        <Caret Line="100" TopLine="65"/>
+      </Position>
+      <Position>
+        <Filename Value="lcpp.dpr"/>
+        <Caret Line="101" TopLine="65"/>
+      </Position>
+      <Position>
+        <Filename Value="lcpp.dpr"/>
+        <Caret Line="90" TopLine="65"/>
+      </Position>
+      <Position>
+        <Filename Value="lcpp.dpr"/>
+        <Caret Line="191" TopLine="170"/>
+      </Position>
+      <Position>
+        <Filename Value="lcpp.dpr"/>
+        <Caret Line="88" TopLine="65"/>
+      </Position>
+      <Position>
+        <Filename Value="lcpp.dpr"/>
+        <Caret Line="89" TopLine="65"/>
+      </Position>
+      <Position>
+        <Filename Value="lcpp.dpr"/>
+        <Caret Line="90" TopLine="65"/>
+      </Position>
+      <Position>
+        <Filename Value="lcpp.dpr"/>
+        <Caret Line="92" TopLine="65"/>
+      </Position>
+      <Position>
+        <Filename Value="lcpp.dpr"/>
+        <Caret Line="93" TopLine="65"/>
+      </Position>
+      <Position>
+        <Filename Value="lcpp.dpr"/>
+        <Caret Line="94" TopLine="65"/>
+      </Position>
+      <Position>
+        <Filename Value="lcpp.dpr"/>
+        <Caret Line="95" TopLine="65"/>
+      </Position>
+      <Position>
+        <Filename Value="lcpp.dpr"/>
+        <Caret Line="96" TopLine="65"/>
+      </Position>
+      <Position>
+        <Filename Value="lcpp.dpr"/>
+        <Caret Line="97" TopLine="65"/>
+      </Position>
+      <Position>
+        <Filename Value="lcpp.dpr"/>
+        <Caret Line="98" TopLine="65"/>
+      </Position>
+      <Position>
+        <Filename Value="lcpp.dpr"/>
+        <Caret Line="99" TopLine="65"/>
+      </Position>
+      <Position>
+        <Filename Value="lcpp.dpr"/>
+        <Caret Line="100" TopLine="65"/>
+      </Position>
+      <Position>
+        <Filename Value="lcpp.dpr"/>
+        <Caret Line="101" TopLine="65"/>
+      </Position>
+      <Position>
+        <Filename Value="lcpp.dpr"/>
+        <Caret Line="90" TopLine="65"/>
+      </Position>
+      <Position>
+        <Filename Value="lcpp.dpr"/>
+        <Caret Line="191" TopLine="170"/>
+      </Position>
+      <Position>
+        <Filename Value="lcpp.dpr"/>
+        <Caret Line="192" TopLine="170"/>
+      </Position>
+      <Position>
+        <Filename Value="lcpp.dpr"/>
+        <Caret Line="194" TopLine="170"/>
       </Position>
     </JumpHistory>
     <RunParams>
       <FormatVersion Value="2"/>
-      <Modes ActiveMode=""/>
+      <Modes ActiveMode="default">
+        <Mode Name="default">
+          <local>
+            <CommandLineParams Value="main.c tmp.c"/>
+            <WorkingDirectory Value="C:\Users\F.Fumi\Dropbox\sharp_PC_1403\Sharp_LittleC_Compiler"/>
+          </local>
+        </Mode>
+      </Modes>
     </RunParams>
+    <HistoryLists>
+      <List Name="WorkingDirectory" Type="File" Count="2">
+        <Item1 Value="C:\Users\F.Fumi\Dropbox\sharp_PC_1403\Sharp_LittleC_Compiler"/>
+      </List>
+      <List Name="LaunchingApplication" Type="File" Count="1">
+        <Item1 Value="C:\Windows\system32\cmd.exe /C ${TargetCmdLine}"/>
+      </List>
+      <List Name="CommandLineParameters" Count="2">
+        <Item1 Value="main.c tmp.c"/>
+      </List>
+    </HistoryLists>
   </ProjectSession>
-  <SkipCheckLCLInterfaces Value="True"/>
+  <Debugging>
+    <Watches>
+      <Item>
+        <Expression Value="s"/>
+      </Item>
+      <Item>
+        <Expression Value="i"/>
+      </Item>
+      <Item>
+        <Expression Value="Result"/>
+      </Item>
+      <Item>
+        <Expression Value="op"/>
+      </Item>
+    </Watches>
+  </Debugging>
 </CONFIG>

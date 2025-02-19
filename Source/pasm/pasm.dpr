@@ -518,7 +518,7 @@ end;
 
 
 procedure doasm;
-var adr: integer;
+var adr, reladr: integer;
 begin
         param1 := trim(param1);
         if param1 <> '' then
@@ -755,14 +755,15 @@ begin
            adr := calcadr;
            if adr >= 8192 then
            begin
-               if abs(adr - startadr - codpos) <= 255 then
+               if abs(adr - startadr - codpos) < 255 then
                begin
                    if adr > startadr + codpos then addcode(44)
                    else addcode(45);
+                   reladr := (adr - startadr - codpos) ;
                    addcode(abs(adr - startadr - codpos));
                end else
                begin
-                   addcode(121); addcode(adr div 256); addcode(adr mod 256);   // Do absolute jump then
+                   addcode(121); addcode(adr div 256); addcode(adr mod 256); // Do absolute jump then
                end;
            end else
            if (adr >= 1) and (adr <= 255) then
@@ -782,7 +783,7 @@ begin
            adr := calcadr;
            if adr >= 8192 then
            begin
-               if abs(adr - startadr - codpos) <= 255 then
+               if abs(adr - startadr - codpos) < 255 then
                begin
                    if adr > startadr + codpos then addcode(58)
                    else addcode(59);
@@ -811,7 +812,7 @@ begin
            adr := calcadr;
            if adr >= 8192 then
            begin
-               if abs(adr - startadr - codpos) <= 255 then
+               if abs(adr - startadr - codpos) < 255 then
                begin
                    if adr > startadr + codpos then addcode(42)
                    else addcode(43);
@@ -840,10 +841,10 @@ begin
            adr := calcadr;
            if adr >= 8192 then
            begin
-               if abs(adr - startadr - codpos) <= 255 then
+               if abs(adr - startadr - codpos) < 255 then
                begin
                    if adr > startadr + codpos then addcode(40)
-                   else addcode(40);
+                   else addcode(41);
                    addcode(abs(adr - startadr - codpos));
                end else abort('Relative jump exceeds 255 bytes!');
            end else
@@ -869,7 +870,7 @@ begin
            adr := calcadr;
            if adr >= 8192 then
            begin
-               if abs(adr - startadr - codpos) <= 255 then
+               if abs(adr - startadr - codpos) < 255 then
                begin
                    if adr > startadr + codpos then addcode(56)
                    else addcode(57);

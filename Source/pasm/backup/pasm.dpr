@@ -231,7 +231,7 @@ procedure addnlabel(l: string);
 begin
 //	if findnlabel(l) then
 //          abort('Label ' + l + ' already defined!');
-        writeln ( ' *DEBUG* addnlabel ' + l + ' @ ' + IntToStr(codpos) + ', ' + op + ' ' + params) ;
+        //writeln ( ' *DEBUG* addnlabel ' + l + ' @ ' + IntToStr(codpos) + ', ' + op + ' ' + params) ;
         l := uppercase(l);
 	nlab[nlabcnt] := l;
 	nlabpos[nlabcnt] := codpos;
@@ -280,7 +280,7 @@ procedure addlabel(l: string);
 var tpos: integer;
     bup: boolean;
 begin
-        writeln(' *DEBUG* addlabel: '+l);
+        //writeln(' *DEBUG* addlabel: '+l);
         l := uppercase(l);
 	if findlabel(l) then abort('Label ' + l + ' already defined!');
         writeln('SYMBOL: ' + l + ' - ' + inttostr(codpos + startadr));
@@ -471,6 +471,7 @@ var i: integer;
 begin
         i := 1;
         lf := false;
+        //writeln ( ' DEBUG calcadr ', params  );
         while i <= length(params) do
         begin
                 if (params[i] = '0') and ((i < length(params)-2) and (upcase(params[i+1]) = 'X')) then
@@ -497,23 +498,27 @@ begin
                                 lf := true;
                         end else
                         begin
+
                                 s2 := inttostr(startadr + labpos[labp]);
                                 params := replace_text(params, s, s2);
-                                param1 := s;
+                                param1 := params;
                                 param2 := '';
                                 i := i - length(s) + length(s2);
                         end;
                 end;
                 inc(i);
         end;
+
+
         if lf then result := 0
         else if param2 = '' then result := mathparse(param1, 16)
         else result := mathparse(param1, 8) * 256 + mathparse(param2, 8);
+        //writeln ( ' DEBUG calcadr ', result );
 end;
 
 
 procedure doasm;
-var adr: integer;
+var adr, reladr: integer;
 begin
         param1 := trim(param1);
         if param1 <> '' then
@@ -750,14 +755,15 @@ begin
            adr := calcadr;
            if adr >= 8192 then
            begin
-               if abs(adr - startadr - codpos) <= 255 then
+               if abs(adr - startadr - codpos) < 255 then
                begin
                    if adr > startadr + codpos then addcode(44)
                    else addcode(45);
+                   reladr := (adr - startadr - codpos) ;
                    addcode(abs(adr - startadr - codpos));
                end else
                begin
-                   addcode(121); addcode(adr div 256); addcode(adr mod 256);   // Do absolute jump then
+                   addcode(121); addcode(adr div 256); addcode(adr mod 256); // Do absolute jump then
                end;
            end else
            if (adr >= 1) and (adr <= 255) then
@@ -777,7 +783,7 @@ begin
            adr := calcadr;
            if adr >= 8192 then
            begin
-               if abs(adr - startadr - codpos) <= 255 then
+               if abs(adr - startadr - codpos) < 255 then
                begin
                    if adr > startadr + codpos then addcode(58)
                    else addcode(59);
@@ -806,7 +812,7 @@ begin
            adr := calcadr;
            if adr >= 8192 then
            begin
-               if abs(adr - startadr - codpos) <= 255 then
+               if abs(adr - startadr - codpos) < 255 then
                begin
                    if adr > startadr + codpos then addcode(42)
                    else addcode(43);
@@ -835,10 +841,10 @@ begin
            adr := calcadr;
            if adr >= 8192 then
            begin
-               if abs(adr - startadr - codpos) <= 255 then
+               if abs(adr - startadr - codpos) < 255 then
                begin
                    if adr > startadr + codpos then addcode(40)
-                   else addcode(40);
+                   else addcode(41);
                    addcode(abs(adr - startadr - codpos));
                end else abort('Relative jump exceeds 255 bytes!');
            end else
@@ -864,7 +870,7 @@ begin
            adr := calcadr;
            if adr >= 8192 then
            begin
-               if abs(adr - startadr - codpos) <= 255 then
+               if abs(adr - startadr - codpos) < 255 then
                begin
                    if adr > startadr + codpos then addcode(56)
                    else addcode(57);
@@ -1199,6 +1205,7 @@ begin
         writeln;
         writeln('Start address:'#9,startadr);
         writeln('End address:'#9,startadr+codpos-1);
+        writeln('(',codpos,' bytes)');
 
         if codpos = 0 then
         begin

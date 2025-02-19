@@ -89,10 +89,12 @@ begin
      i := 0;
      for c := 1 to p do
      begin
+        i := 0;
         s := trim(s);
         if pos (' ', s) > 0 then i := pos (' ', s);
         if (pos (#9, s) > 0) and (pos (#9, s) < i) then i := pos (#9, s);
         delete(s, 1, i);
+        i := 0;
         if pos (' ', s) > 0 then i := pos (' ', s);
         if (pos (#9, s) > 0) and (pos (#9, s) < i) then i := pos (#9, s);
         if i <> 0 then result := trim(copy(s, 1, i - 1))

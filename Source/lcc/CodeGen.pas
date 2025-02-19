@@ -1232,19 +1232,21 @@ end;
 
 procedure PopDiv;
 begin
+  // TODO - HANDLE RUNTIME ERRORS! (EG. DIV BY ZERO)
   if optype = word then
   begin
+    // 16 bit: B:A = B:A / J:I
     writln(#9'LP'#9'0');
-    writln(#9'EXAM');
+    writln(#9'EXAM'); // A -> I
     writln(#9'EXAB');
     writln(#9'LP'#9'1');
-    writln(#9'EXAM');
+    writln(#9'EXAM'); // B -> J
     writln(#9'POP');
     Dec(pushcnt);
     writln(#9'EXAB');
     writln(#9'POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_DIV16'#9'; Division');
+    writln(#9'CALL'#9'LIB_DIV16'#9'; Division'); // Carry set on error
     addlib(DIV16);
   end else if optype = floatp then
   begin

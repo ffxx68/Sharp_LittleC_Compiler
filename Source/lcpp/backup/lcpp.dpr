@@ -22,7 +22,7 @@ var s: string;
 begin
 	str(cline + 1, s);
 	writeln('Line ' + s + ': ' + t + ' in file ' + cf);
-	halt;
+	halt (1);
 end;
 
 
