@@ -1,0 +1,43 @@
+; using display routines from PC-1403 ROM
+; NOT USABLE on different models!
+LIB_PUTS:
+		
+		; fill destination with 24 blanks, beforehand
+		LII   0x16
+		LP	  0x10   ; destination start (internal ram)
+		LIA	  0x20   ; blank
+		FILM
+		; copy string at (X...) to (10...), 24 max or until string end 00
+		DX
+		LII  0x16      ; max size (23 chars, terminator excluded)
+		LP	 0x10      ; destination
+LIBPUTS_LOOP1:	
+		IXL            ; X -> DP; DP+1 -> DP, X; (DP) -> A 
+		MVMD     	   ; (DP) -> (P)
+		INCP
+		CPIA    0x00   ; string end reached
+		JRZP    LIBPUTS_LB1
+		DECI
+		JRNZM   LIBPUTS_LOOP1 ; until max size
+
+LIBPUTS_LB1:
+		LIA		0x0D	; always terminate with newline char
+		DECP
+		EXAM
+		LIJ 1			; needed
+		
+		; change memory bank to External ROM
+		LIDP 0x3C00	; Read current bank#
+		LDD
+		PUSH		; save it to stack
+		LIA  0x09   ; select bank #9
+		STD
+	
+		; PC-1403 ROM entry point for the print
+		CALL 0x4587
+		
+		POP			; Restore original bank#
+		LIDP 0x3C00	; bankswitch
+		STD			; and write it
+		
+		RTN ; done

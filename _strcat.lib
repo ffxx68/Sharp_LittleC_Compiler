@@ -1,0 +1,20 @@
+; concatenates the destination string, pointed by Y reg,
+; and the source string, pointed by X reg,
+; and the result is stored in the destination string
+; No check on missing termination, or max length!
+LIB_STRCAT:
+	DX
+	DY
+	; search for destination end (0)
+LIB_STRCAT_L1:
+	IY
+	LDD
+	CPIA 0x00
+	JRNZM LIB_STRCAT_L1
+	DY
+LIB_STRCAT_L2:
+	IXL ; X + 1 -> X, X -> DP, (DP) -> A
+	IYS ; Y + 1 -> Y, Y -> DP, A -> (DP)
+	CPIA 0x00
+	JRNZM LIB_STRCAT_L2
+	RTN
