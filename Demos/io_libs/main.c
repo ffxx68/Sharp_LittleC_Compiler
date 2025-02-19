@@ -15,13 +15,13 @@ char xram cPrint[24] = "Hello world!";
 
 #include puts.h  // PC-1403 specific
 #include int2str.h
-#include getchar.h // PC-1403 specific
+#include getkey.h // PC-1403 specific
 #include strcat.h
 
 main()
 {
 	puts ( &cPrint );
-	bTmp1=getchar();
+	bTmp1=getkey();
 	for (bIdx1 = 0; bIdx1 <= 3; bIdx1++) {
 		cPrint[0] = 0;
 		cNumber[0] = 0;
@@ -29,10 +29,10 @@ main()
 		int2str ( wTmp, &cNumber );
 		strcat ( &cPrint, &cNumber );
 		puts ( &cPrint );
-		bTmp1=getchar();
+		bTmp1=getkey();
 		
 		puts ( &cBlank );
-		bTmp1=getchar();
+		bTmp1=getkey();
 	}
 	
 }
