@@ -11,7 +11,7 @@ The compiler is composed of three distinct tools: `lcpp` (C pre-compiler), `lcc`
 these are wrapped for simplicity into a `make.bat` (MS-DOS batch) file.
 
 For example, to compile `Demos\parameters\main.c` and generate POKE instructions ready to be embedded in a BASIC program, 
-in a Windows `cmd` shell, from within the `lcc_b1` dir (home to LittleC tools), enter:
+in a Windows `cmd` shell, from within the LittleC home dir, enter:
 
 ```
  > make.bat Demos\parameters\main.c tmp.bas bas
@@ -22,11 +22,14 @@ in a Windows `cmd` shell, from within the `lcc_b1` dir (home to LittleC tools), 
 ...
 ```
 
+Other example programs are present in the `Demo\` directory.
+
 Note that some bugs might still be present, and the supported language is not the full ANSI-C standard (features and limitations are reported in `Docs/littleC manual.txt`). Not all unsupported features are checked during compilation, so beware! Nonetheless, the job Simon has done is impressive, and even though uncomplete, it can be used to build useful blocks in assembler from simpler C code.
 
 I'm publishing LittleC here on github (including its source code - see below), hoping someone else might find this project interesting enough to improve it even more.
 
-What's mostly missing at present is an, even basic, set of standard libraries for keyboard input and screen output handling...
+What's mostly missing at present is an, even basic, set of standard libraries for keyboard input and screen output handling. 
+I have written something for the PC-1403 but it's still incomplete. See for example `Demo\io_libs\main.c`.
 
 ## Debugging with MAME
 
@@ -88,7 +91,6 @@ The machine code entry point is set at `0xE030 = 57576`, at the beginning of the
 
 ```
 #org 0xE030
-
 ...
 ```
 
@@ -133,10 +135,50 @@ For each new test cycle, rebuild the binary, load it on MAME and restart:
 
 No need to reenter the POKE or the BASIC program, as MAME soft reset won't wipe memory out.
 
+### Automating key input in MAME
+
+*Tested on the PC-1403 only* 
+
+The `key.lua` file is a script for MAME, which can be loaded starting MAME like this:
+
+```
+> mame pc1403 -debug -nomaximize -console
+```
+ 
+opening the *Lua* scripting console, where you can load the script with 
+
+```
+[MAME]>
+
+MAME debugger version 0.267 (mame0267)
+Currently targeting pc1403 (Pocket Computer 1403)
+
+[MAME]> dofile ("[path to lcc home]\key.lua") 
+```
+
+where you might replace [path to lcc home] with your path to the location of LitteC.
+
+With the script loaded, you have a function send key strokes from the console directly to the emulated device keyboard.
+
+For example, the below is the way to enter some of the instructions seen before (note how "#" is a shortcut to toggle BASIC mode):
+
+ 
+```
+[MAME]> key("##POKE&ff01,&30,&e8")
+[MAME]> key("#")
+[MAME]> key("new")
+[MAME]> key("mem")
+[MAME]> key("1call&e030")
+[MAME]> key("#")
+
+```
+
+More could be done, like interacting with the debugger, etc, but this is a starting point for easier test executions.
+
 ## Compiler source code and rebuild
 
 The LittleC version found on present github repo (the source code was published as freeware by the author, on its page), 
-and it was sligthly upgraded and revised, to fix some bugs. Also it has a -still *tentative*-, early implementation
+and it was sligthly upgraded and revised, to fix some bugs. It includes a -still *tentative*-, early implementation
 for floating-point variables. Unfortunately, ROMs differ among different PC models, 
 and I have found some partial documentation for floating-point operation for the PC-1403 only.
 
@@ -152,7 +194,7 @@ In order to build a new executable, for example the `lcc.exe`, you should (assum
 * Exec - Compile (ctrl-F9) menu
 
 which will produce a message, if successful, including the destination of the newly built executable. 
-You should then copy this executable to the main `lcc_b1` dir, so that it can be used by the `make` batch:
+You should then copy this executable to the LittleC home dir, so that it can be used by the `make` batch:
 
 With the aim of reducing executable size, the following Lazarus compiler options could be set, 
 from the 'Project - Project Options - Compiler Options' menu: 
