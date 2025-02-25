@@ -139,13 +139,13 @@ No need to reenter the POKE or the BASIC program, as MAME soft reset won't wipe 
 
 *Tested on the PC-1403 only* 
 
-The `key.lua` file is a script for MAME, which can be loaded starting MAME like this:
+The `key.lua` file is a script for MAME. First, start MAME with the `-console` option:
 
 ```
 > mame pc1403 -debug -nomaximize -console
 ```
  
-opening the *Lua* scripting console, where you can load the script with 
+to open the *Lua* scripting console, where you can load the script with:
 
 ```
 [MAME]>
@@ -156,9 +156,9 @@ Currently targeting pc1403 (Pocket Computer 1403)
 [MAME]> dofile ("[path to lcc home]\key.lua") 
 ```
 
-where you might replace [path to lcc home] with your path to the location of LitteC.
+You might replace `[path to lcc home]` with your path to the location of LitteC where `key.lua` is found.
 
-With the script loaded, you have a function send key strokes from the console directly to the emulated device keyboard.
+With the script loaded, the `key()` function can be used to send key strokes from the console directly to the emulated device keyboard.
 
 For example, the below is the way to enter some of the instructions seen before (note how "#" is a shortcut to toggle BASIC mode):
 
