@@ -22,7 +22,7 @@ in a Windows `cmd` shell, from within the LittleC home dir, enter:
 ...
 ```
 
-Other example programs are present in the `Demo\` directory.
+Other example C programs are present in the `Demo\` directory.
 
 Note that some bugs might still be present, and the supported language is not the full ANSI-C standard (features and limitations are reported in `Docs/littleC manual.txt`). Not all unsupported features are checked during compilation, so beware! Nonetheless, the job Simon has done is impressive, and even though uncomplete, it can be used to build useful blocks in assembler from simpler C code.
 
@@ -160,6 +160,8 @@ You might replace `[path to lcc home]` with your path to the location of LitteC 
 
 With the script loaded, the `key()` function can be used to send key strokes from the console directly to the emulated device keyboard.
 
+Or, `keyfile()`, which is going to send keystrokes to the device from an input file.
+
 For example, the below is the way to enter some of the instructions seen before (note how "#" is a shortcut to toggle BASIC mode):
 
  
@@ -168,21 +170,38 @@ For example, the below is the way to enter some of the instructions seen before 
 [MAME]> key("#")
 [MAME]> key("new")
 [MAME]> key("mem")
-[MAME]> key("1call&e030")
+[MAME]> key("1 call&e030")
 [MAME]> key("#")
-
 ```
 
-More could be done, like interacting with the debugger, etc, but this is a starting point for easier test executions.
+Alternatively, using the text file `pc1403.ini`:
+
+```
+##POKE&ff01,&30,&e8
+# 
+new 
+mem 
+1 call&e030 
+#
+```
+
+and *executing* it from the Lua console:
+
+```
+[MAME]> keyfile("pc1403.ini")
+```
+
+More could be done, like interacting with the debugger, etc., but this is a starting point for easier test replay.
 
 ## Compiler source code and rebuild
 
 The LittleC version found on present github repo (the source code was published as freeware by the author, on its page), 
-and it was sligthly upgraded and revised, to fix some bugs. It includes a -still *tentative*-, early implementation
-for floating-point variables. Unfortunately, ROMs differ among different PC models, 
-and I have found some partial documentation for floating-point operation for the PC-1403 only.
+and it's a sligthly upgraded and revised version, with respect to the original the source code was published as freeware by the author, on its page), 
+to fix some bugs and make some minor upgrades. It includes or example a -still *tentative*-, early implementation
+for floating-point variables (note how ROMs differ among different PC models, and I have found some *partial*
+documentation about floating-point operations for the PC-1403 only).
 
-The compiler source code was written in Pascal, originally for the TurboPascal I think,
+The compiler source code is written in Pascal, originally for the TurboPascal I think,
 but the version on this repo has been ported to modern free Pascal IDE: Lazarus (https://www.lazarus-ide.org/),
 at the expense of getting larger executables, compared to Simon's original ones. On the other hand, TurboPascal isn't for free.
 

@@ -1,8 +1,22 @@
--- assuming the debugger was started, with a command line:
--- > mame pc1403 -nomaximize -console -debug -autoboot_script keyboard_input.lua
-
 local small_set = false
-function keyboard(input_str)
+
+-- invoke 'key' strokes for each line in the inlut file
+function keyfile (path)
+	local file = io.open(path, "rb") 
+	if not file then return nil end
+
+	local lines = {}
+	
+	for line in io.lines(path) do
+		key ( line )
+	end
+
+	file:close()
+	return lines
+end
+	
+-- send key strokes from the input string
+function key(input_str)
 
 	local function key_press(input_tag, input_mask)
 		local machine = manager.machine
@@ -12,13 +26,13 @@ function keyboard(input_str)
 				if field.mask == input_mask then
 					-- Emulate key press
 					field:set_value(1)
-					emu.wait(0.04)  -- Wait for the specified duration
+					emu.wait(0.1)  -- Wait for the specified duration
 					-- Emulate key release
 					field:set_value(0)
 					break
 				end
 			end
-			emu.wait(0.04)
+			emu.wait(0.1)
 		else
 			print("Input port not found.")
 		end
@@ -63,6 +77,11 @@ function keyboard(input_str)
 			end
 		end
 		
+		if char == "#" then -- reserved for BASIC toggling
+			key_press (":KEY11", 0x80)
+			emu.wait(0.2)
+		end 
+			
 		switch (char) {
 		
 			-- List of port-mask codes from mame\artwork\pc1403\pc1403.lay
@@ -88,7 +107,10 @@ function keyboard(input_str)
 			-- Left Row 2 with SHIFT
 			["!"] = function()  key_press (":KEY1", 0x20) key_press (":KEY2", 0x20) end ,
 			["\""] = function() key_press (":KEY1", 0x20) key_press (":KEY3" ,0x20)  end ,
-			["#"] = function()  key_press (":KEY1", 0x20) key_press (":KEY4"  ,0x20) end ,
+			
+			-- # reserved for BASIC toggling
+			-- ["#"] = function()  key_press (":KEY1", 0x20) key_press (":KEY4"  ,0x20) end ,
+			
 			["$"] = function()  key_press (":KEY1", 0x20) key_press (":KEY5"  ,0x20) end ,
 			["%"] = function()  key_press (":KEY1", 0x20) key_press (":KEY6"  ,0x20) end ,
 			["&"] = function()  key_press (":KEY1", 0x20) key_press (":KEY7"  ,0x20) end ,
@@ -142,14 +164,13 @@ function keyboard(input_str)
 			["k"] = function() key_press ( ":KEY9" , 0x40) end ,
 			["l"] = function() key_press ( ":KEY10", 0x40) end ,
 
-			["z"] = function() key_press ( ":KEY2"      ,0x80 )  end ,
-			["x"] = function() key_press ( ":KEY3"      ,0x80 )  end ,
-			["c"] = function() key_press ( ":KEY4"      ,0x80 )  end ,
-			["v"] = function() key_press ( ":KEY5"      ,0x80 )  end ,
-			["b"] = function() key_press ( ":KEY6"      ,0x80 )  end ,
-			["n"] = function() key_press ( ":KEY7"      ,0x80 )  end ,
-			["m"] = function() key_press ( ":KEY8"      ,0x80 )  end ,
-			
+			["z"] = function() key_press ( ":KEY2" ,0x80 )  end ,
+			["x"] = function() key_press ( ":KEY3" ,0x80 )  end ,
+			["c"] = function() key_press ( ":KEY4" ,0x80 )  end ,
+			["v"] = function() key_press ( ":KEY5" ,0x80 )  end ,
+			["b"] = function() key_press ( ":KEY6" ,0x80 )  end ,
+			["n"] = function() key_press ( ":KEY7" ,0x80 )  end ,
+			["m"] = function() key_press ( ":KEY8" ,0x80 )  end ,
 			
 			-- Right Row 3 : ... ( ) 
 			["("] = function() key_press (  ":KEY9" ,0x08 ) end ,
@@ -180,6 +201,12 @@ function keyboard(input_str)
 			["="] = function() key_press (  ":KEY3" ,0x10 ) end ,
 			
 		}
-	end
+		
+	end -- for
+	
+	-- always terminate with ENTER and wait a bit
+	emu.wait(0.1)
+	key_press ( ":KEY10" ,0x80 ) 
+	emu.wait(0.2)
 
 end 
