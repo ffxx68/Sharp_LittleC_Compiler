@@ -11,6 +11,7 @@
         <EditorIndex Value="-1"/>
         <CursorPos Y="28"/>
         <UsageCount Value="246"/>
+        <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit>
       <Unit>
         <Filename Value="input.pas"/>
@@ -44,7 +45,7 @@
         <IsPartOfProject Value="True"/>
         <UnitName Value="Scanner"/>
         <EditorIndex Value="2"/>
-        <TopLine Value="195"/>
+        <TopLine Value="431"/>
         <CursorPos X="11" Y="217"/>
         <UsageCount Value="246"/>
         <Loaded Value="True"/>
@@ -53,8 +54,9 @@
         <Filename Value="parser.pas"/>
         <IsPartOfProject Value="True"/>
         <UnitName Value="Parser"/>
-        <TopLine Value="1672"/>
-        <CursorPos Y="1692"/>
+        <IsVisibleTab Value="True"/>
+        <TopLine Value="1981"/>
+        <CursorPos X="15" Y="2018"/>
         <UsageCount Value="246"/>
         <Loaded Value="True"/>
       </Unit>
@@ -69,10 +71,9 @@
       <Unit>
         <Filename Value="CodeGen.pas"/>
         <IsPartOfProject Value="True"/>
-        <IsVisibleTab Value="True"/>
         <EditorIndex Value="3"/>
-        <TopLine Value="1232"/>
-        <CursorPos Y="1239"/>
+        <TopLine Value="715"/>
+        <CursorPos X="32" Y="728"/>
         <UsageCount Value="246"/>
         <Loaded Value="True"/>
       </Unit>
@@ -88,7 +89,7 @@
       <Unit>
         <Filename Value="..\..\..\LittleC_Compiler_OLD\lcc_b1\Source\lcc\calcunit.pas"/>
         <EditorIndex Value="1"/>
-        <UsageCount Value="14"/>
+        <UsageCount Value="17"/>
         <Loaded Value="True"/>
       </Unit>
     </Units>
@@ -101,123 +102,124 @@
     </OtherDefines>
     <JumpHistory HistoryIndex="29">
       <Position>
-        <Filename Value="parser.pas"/>
-        <Caret Line="2189" Column="38" TopLine="2154"/>
+        <Filename Value="CodeGen.pas"/>
+        <Caret Line="677" Column="10" TopLine="668"/>
       </Position>
       <Position>
         <Filename Value="parser.pas"/>
-        <Caret Line="2210" Column="59" TopLine="2175"/>
+        <Caret Line="1731" TopLine="1708"/>
       </Position>
       <Position>
         <Filename Value="parser.pas"/>
-        <Caret Line="2250" Column="55" TopLine="2215"/>
+        <Caret Line="1738" TopLine="1708"/>
       </Position>
       <Position>
         <Filename Value="parser.pas"/>
-        <Caret Line="2276" Column="33" TopLine="2241"/>
+        <Caret Line="1739" TopLine="1708"/>
       </Position>
       <Position>
         <Filename Value="parser.pas"/>
-        <Caret Line="2284" Column="48" TopLine="2260"/>
+        <Caret Line="1740" TopLine="1708"/>
       </Position>
       <Position>
         <Filename Value="parser.pas"/>
-        <Caret Line="2319" Column="21" TopLine="2315"/>
+        <Caret Line="1741" TopLine="1708"/>
       </Position>
       <Position>
         <Filename Value="parser.pas"/>
-        <Caret Line="2368" Column="32" TopLine="2331"/>
+        <Caret Line="1742" TopLine="1708"/>
       </Position>
       <Position>
         <Filename Value="parser.pas"/>
-        <Caret Line="2364" Column="17" TopLine="2331"/>
+        <Caret Line="1743" TopLine="1708"/>
       </Position>
       <Position>
         <Filename Value="parser.pas"/>
-        <Caret Line="2396" Column="21" TopLine="2364"/>
+        <Caret Line="1748" TopLine="1711"/>
       </Position>
       <Position>
         <Filename Value="parser.pas"/>
-        <Caret Line="22" Column="10"/>
+        <Caret Line="1730" TopLine="1711"/>
       </Position>
       <Position>
         <Filename Value="parser.pas"/>
-        <Caret Line="2495" TopLine="2450"/>
+        <Caret Line="1752" TopLine="1715"/>
       </Position>
       <Position>
         <Filename Value="parser.pas"/>
-        <Caret Line="2339" Column="18" TopLine="2331"/>
+        <Caret Line="888" Column="62" TopLine="857"/>
       </Position>
       <Position>
-        <Filename Value="..\..\..\LittleC_Compiler_OLD\lcc_b1\Source\lcc\calcunit.pas"/>
+        <Filename Value="parser.pas"/>
+        <Caret Line="1173" Column="68" TopLine="1148"/>
+      </Position>
+      <Position>
+        <Filename Value="parser.pas"/>
+        <Caret Line="884" Column="68" TopLine="852"/>
+      </Position>
+      <Position>
+        <Filename Value="parser.pas"/>
+        <Caret Line="1413" Column="32" TopLine="1377"/>
+      </Position>
+      <Position>
+        <Filename Value="parser.pas"/>
+        <Caret Line="2050" Column="20" TopLine="2037"/>
       </Position>
       <Position>
         <Filename Value="CodeGen.pas"/>
-        <Caret Line="1244" Column="50" TopLine="1229"/>
+        <Caret Line="24" Column="11" TopLine="2"/>
+      </Position>
+      <Position>
+        <Filename Value="parser.pas"/>
+        <Caret Line="2019" Column="54" TopLine="2007"/>
       </Position>
       <Position>
         <Filename Value="CodeGen.pas"/>
-        <Caret Line="1270" Column="18" TopLine="1233"/>
+        <Caret Line="733" Column="25" TopLine="720"/>
+      </Position>
+      <Position>
+        <Filename Value="parser.pas"/>
+        <Caret Line="2019" Column="15" TopLine="1997"/>
+      </Position>
+      <Position>
+        <Filename Value="parser.pas"/>
+        <Caret Line="2050" Column="15" TopLine="2013"/>
+      </Position>
+      <Position>
+        <Filename Value="parser.pas"/>
+        <Caret Line="2128" Column="42" TopLine="2091"/>
       </Position>
       <Position>
         <Filename Value="CodeGen.pas"/>
-        <Caret Line="1290" Column="27" TopLine="1263"/>
-      </Position>
-      <Position>
-        <Filename Value="CodeGen.pas"/>
-        <Caret Line="71" Column="8" TopLine="49"/>
+        <Caret Line="23" Column="20" TopLine="10"/>
       </Position>
       <Position>
         <Filename Value="parser.pas"/>
-        <Caret Line="2342" Column="51" TopLine="2336"/>
+        <Caret Line="2050" Column="55" TopLine="2139"/>
       </Position>
       <Position>
         <Filename Value="parser.pas"/>
-        <Caret Line="1300" Column="15" TopLine="1282"/>
-      </Position>
-      <Position>
-        <Filename Value="CodeGen.pas"/>
-        <Caret Line="1099" Column="67" TopLine="1083"/>
+        <Caret Line="1899" Column="62" TopLine="1865"/>
       </Position>
       <Position>
         <Filename Value="parser.pas"/>
-        <Caret Line="1484" Column="6" TopLine="1447"/>
+        <Caret Line="2018" Column="15" TopLine="1981"/>
       </Position>
       <Position>
         <Filename Value="parser.pas"/>
-        <Caret Line="1225" Column="17" TopLine="1207"/>
+        <Caret Line="2079" Column="24" TopLine="2049"/>
       </Position>
       <Position>
         <Filename Value="parser.pas"/>
-        <Caret Line="1482" Column="15" TopLine="1445"/>
-      </Position>
-      <Position>
-        <Filename Value="CodeGen.pas"/>
-        <Caret Line="1238" Column="21" TopLine="1217"/>
-      </Position>
-      <Position>
-        <Filename Value="CodeGen.pas"/>
-        <Caret Line="1230" Column="23" TopLine="1217"/>
+        <Caret Line="2127" Column="25" TopLine="2087"/>
       </Position>
       <Position>
         <Filename Value="parser.pas"/>
-        <Caret Line="1482" Column="9" TopLine="1460"/>
+        <Caret Line="1885" Column="15" TopLine="1862"/>
       </Position>
       <Position>
         <Filename Value="parser.pas"/>
-        <Caret Line="1225" Column="17" TopLine="1201"/>
-      </Position>
-      <Position>
-        <Filename Value="parser.pas"/>
-        <Caret Line="1476" Column="15" TopLine="1445"/>
-      </Position>
-      <Position>
-        <Filename Value="parser.pas"/>
-        <Caret Line="1493" Column="21" TopLine="1456"/>
-      </Position>
-      <Position>
-        <Filename Value="parser.pas"/>
-        <Caret Line="1499" Column="6" TopLine="1462"/>
+        <Caret Line="1899" Column="23" TopLine="1862"/>
       </Position>
     </JumpHistory>
     <RunParams>
@@ -251,9 +253,24 @@
     </HistoryLists>
   </ProjectSession>
   <Debugging>
+    <BreakPoints>
+      <Item>
+        <Kind Value="bpkSource"/>
+        <WatchScope Value="wpsLocal"/>
+        <WatchKind Value="wpkWrite"/>
+        <Source Value="parser.pas"/>
+        <Line Value="1731"/>
+      </Item>
+    </BreakPoints>
     <Watches>
       <Item>
         <Expression Value="VarList"/>
+      </Item>
+      <Item>
+        <Expression Value="Tok"/>
+      </Item>
+      <Item>
+        <Expression Value="optype"/>
       </Item>
     </Watches>
   </Debugging>

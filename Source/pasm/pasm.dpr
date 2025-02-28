@@ -528,7 +528,7 @@ begin
 
         if findop(op) then
         begin
-           if opp in [120, 121, 16, 124..127] then      // abolut
+           if opp in [120, 121, 16, 124..127] then  // abolut
            begin
               adr := calcadr;
               if adr > 0 then
@@ -545,9 +545,8 @@ begin
               if adr >= 8192 then
               begin
                    addcode(opp);
-//                   if opp in JRPLUS then addcode(adr - codpos - startadr)
-//                   else
-                   addcode(abs(codpos + startadr - adr));
+                   if opp in JRPLUS then addcode(adr - codpos - startadr)
+                   else addcode(abs(codpos + startadr - adr));
               end else
               if adr > 0 then
               begin

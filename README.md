@@ -160,10 +160,9 @@ You might replace `[path to lcc home]` with your path to the location of LitteC 
 
 With the script loaded, the `key()` function can be used to send key strokes from the console directly to the emulated device keyboard.
 
-Or, `keyfile()`, which is going to send keystrokes to the device from an input file.
+Or, `keyfile()`, to send a list of keystrokes as from an input file.
 
-For example, the below is the way to enter some of the instructions seen before (note how "#" is a shortcut to toggle BASIC mode):
-
+For example, the below is to enter some of the instructions seen before (note how "#" is a shortcut to toggle BASIC mode):
  
 ```
 [MAME]> key("##POKE&ff01,&30,&e8")

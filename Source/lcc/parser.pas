@@ -1882,7 +1882,7 @@ begin
                 inc(level);
         end;
         L1 := NewLabel; L2 := L1;
-        BranchFalse(L1);
+        BranchAbsFalse(L1);   // potentially large jump
         writln('');
         writln( #9'; If expression = true');
         Block;
@@ -1896,10 +1896,9 @@ begin
                         inc(level);
                 end;
                 L2 := NewLabel;
-                Branch(L2);
+                BranchAbs(L2);   // potentially large jump
                 PostLabel(L1);
                 writln( #9'; If expression = false');
-
                 Block;
         end;
         writln( #9'; End of if');
@@ -2016,7 +2015,7 @@ begin
         PostLabel(L1);
         delete(Tok, 1, 7); //delete(Tok, length(Tok), 1);
         BoolExpression;
-        BranchFalse(L2);
+        BranchAbsFalse(L2); // potentially large jump
         writln( #9'; While expression = true');
         if tok <> '' then
         begin
@@ -2047,7 +2046,7 @@ begin
         PostLabel(L1);
         getToken(MODESTR, dummy);
         BoolExpression;
-        BranchFalse(L2);
+        BranchAbsFalse(L2); // potentially large jump
         if trim(dummy)[1] <> ')' then
         begin
                 getToken(MODESTR, dummy);
@@ -2823,6 +2822,7 @@ begin
         end;
         closefile(f2);
         closefile(f);
+
 
         // Replace PUSH LIB... POP to LIB...
         assignfile(f, 'temp2.asm');

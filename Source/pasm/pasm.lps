@@ -9,9 +9,9 @@
         <Filename Value="pasm.dpr"/>
         <IsPartOfProject Value="True"/>
         <IsVisibleTab Value="True"/>
-        <TopLine Value="1036"/>
-        <CursorPos Y="1063"/>
-        <UsageCount Value="27"/>
+        <TopLine Value="323"/>
+        <CursorPos X="6" Y="345"/>
+        <UsageCount Value="29"/>
         <Loaded Value="True"/>
         <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit>
@@ -19,130 +19,130 @@
         <Filename Value="calcunit.pas"/>
         <IsPartOfProject Value="True"/>
         <EditorIndex Value="-1"/>
-        <UsageCount Value="27"/>
+        <UsageCount Value="29"/>
         <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit>
     </Units>
     <JumpHistory HistoryIndex="29">
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1058" TopLine="1027"/>
+        <Caret Line="493" TopLine="456"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1060" TopLine="1027"/>
+        <Caret Line="490" TopLine="456"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1061" TopLine="1027"/>
+        <Caret Line="492" TopLine="456"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1062" TopLine="1027"/>
+        <Caret Line="493" TopLine="456"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1063" TopLine="1027"/>
+        <Caret Line="490" TopLine="456"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1058" TopLine="1027"/>
+        <Caret Line="495" TopLine="458"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1060" TopLine="1027"/>
+        <Caret Line="502" TopLine="465"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1061" TopLine="1027"/>
+        <Caret Line="503" TopLine="466"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1062" TopLine="1027"/>
+        <Caret Line="504" TopLine="467"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1063" TopLine="1027"/>
+        <Caret Line="505" TopLine="469"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1058" TopLine="1027"/>
+        <Caret Line="506" TopLine="470"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1060" TopLine="1027"/>
+        <Caret Line="509" TopLine="473"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1061" TopLine="1027"/>
+        <Caret Line="475" TopLine="466"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1062" TopLine="1027"/>
+        <Caret Line="513" TopLine="492"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1063" TopLine="1027"/>
+        <Caret Line="514" TopLine="492"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1058" TopLine="1027"/>
+        <Caret Line="471" TopLine="448"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1065" TopLine="1029"/>
+        <Caret Line="517" TopLine="496"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1066" TopLine="1030"/>
+        <Caret Line="471" TopLine="448"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1112" TopLine="1090"/>
+        <Caret Line="517" TopLine="496"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1029" TopLine="1007"/>
+        <Caret Line="545" TopLine="523"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1031" TopLine="1007"/>
+        <Caret Line="544" Column="26" TopLine="523"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1034" TopLine="1007"/>
+        <Caret Line="467" Column="10" TopLine="465"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1035" TopLine="1007"/>
+        <Caret Line="132" Column="83" TopLine="118"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1039" TopLine="1007"/>
+        <Caret Line="48" Column="38" TopLine="79"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1043" TopLine="1007"/>
+        <Caret Line="547" Column="20" TopLine="517"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1056" TopLine="1034"/>
+        <Caret Line="528" Column="68" TopLine="517"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1058" TopLine="1050"/>
+        <Caret Line="547" TopLine="517"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1065" TopLine="1050"/>
+        <Caret Line="548" Column="73" TopLine="517"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1066" TopLine="1050"/>
+        <Caret Line="345" TopLine="323"/>
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="1065" Column="30" TopLine="1036"/>
+        <Caret Line="346" TopLine="323"/>
       </Position>
     </JumpHistory>
     <RunParams>
@@ -178,6 +178,30 @@
       </Item>
       <Item>
         <Expression Value="s"/>
+      </Item>
+      <Item>
+        <Expression Value="opp"/>
+      </Item>
+      <Item>
+        <Expression Value="adr"/>
+      </Item>
+      <Item>
+        <Expression Value="l"/>
+      </Item>
+      <Item>
+        <Expression Value="lab"/>
+      </Item>
+      <Item>
+        <Expression Value="tok"/>
+      </Item>
+      <Item>
+        <Expression Value="nlabcnt"/>
+      </Item>
+      <Item>
+        <Expression Value="nlab"/>
+      </Item>
+      <Item>
+        <Expression Value="Result"/>
       </Item>
     </Watches>
   </Debugging>

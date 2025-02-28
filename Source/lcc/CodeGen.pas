@@ -20,7 +20,9 @@ procedure CompSmOrEq;
 procedure CompGrOrEq;
 procedure CompEqual;
 procedure CompNotEqual;
+procedure BranchAbs(L: string);
 procedure Branch(L: string);
+procedure BranchAbsFalse(L: string);
 procedure BranchFalse(L: string);
 procedure Negate;
 procedure Push;
@@ -707,6 +709,13 @@ begin
   writln('');
 end;
 
+{---------------------------------------------------------------}
+{ Absolute Branch Unconditional  }
+
+procedure BranchAbs(L: string);
+begin
+  writln(#9'JP'#9 + L);
+end;
 
 {---------------------------------------------------------------}
 { Branch Unconditional  }
@@ -727,6 +736,15 @@ begin
   writln('');
 end;
 
+{---------------------------------------------------------------}
+{ Absolute Branch False }
+
+procedure BranchAbsFalse(L: string);
+begin
+  writln(#9'TSIA'#9'255'#9'; Branch if false');
+  writln(#9'JPZ'#9 + L);
+  writln('');
+end;
 
 {--------------------------------------------------------------}
 { Bitwise Not Primary }
