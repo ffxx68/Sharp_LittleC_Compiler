@@ -3,7 +3,7 @@
   <ProjectSession>
     <PathDelim Value="\"/>
     <Version Value="12"/>
-    <BuildModes Active="Release"/>
+    <BuildModes Active="Debug"/>
     <Units>
       <Unit>
         <Filename Value="lcc.dpr"/>
@@ -97,13 +97,6 @@
         <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit>
     </Units>
-    <OtherDefines Count="5">
-      <Define0 Value="Borland"/>
-      <Define1 Value="Ver150"/>
-      <Define2 Value="Delphi7"/>
-      <Define3 Value="Compiler6_Up"/>
-      <Define4 Value="PUREPASCAL"/>
-    </OtherDefines>
     <JumpHistory HistoryIndex="29">
       <Position>
         <Filename Value="parser.pas"/>

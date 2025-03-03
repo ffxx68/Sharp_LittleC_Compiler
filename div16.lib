@@ -1,0 +1,161 @@
+; ***** 6502 CPU
+; from https://codebase64.org/doku.php?id=base:16bit_division_16-bit_result
+; but see also https://en.wikipedia.org/wiki/Division_algorithm#Integer_division_(unsigned)_with_remainder
+;
+;divisor = $58     ;$59 used for hi-byte
+;dividend = $fb	  ;$fc used for hi-byte
+;remainder = $fd	  ;$fe used for hi-byte
+;result = dividend ;save memory by reusing divident to store the result
+;
+;divide	lda #0	        ;preset remainder to 0
+;	sta remainder
+;	sta remainder+1
+;	ldx #16	        ;repeat for each bit: ...
+;
+;divloop	asl dividend	;dividend lb & hb*2, msb -> Carry
+;	rol dividend+1	
+;	rol remainder	;remainder lb & hb * 2 + msb from carry
+;	rol remainder+1
+;	lda remainder
+;	sec
+;	sbc divisor	;remainder - divisor, check if divisor fits in remainder
+;	tay	        ;lb result -> Y, for we may need it later
+;	lda remainder+1
+;	sbc divisor+1  
+;	bcc skip	;if carry=0 then divisor didn't fit in yet
+;
+;	sta remainder+1	;else save substraction result as new remainder,
+;	sty remainder	
+;	inc result	;and INCrement result cause divisor fit in 1 times - CORRECT ?????
+;
+;skip	dex
+;	bne divloop	
+;	rts
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;
+; riscritto per SC68160
+; 16-bit DIVISION
+;
+;   B:A = B:A / J:I 
+;
+; NOT OPTIMIZED!
+; e.g. using registry memory (P)<->(Q) in place of (P)<->(DP) operations,
+; or using X for reminder storage 
+;
+LIB_DIV16:
+	
+	; BA --> dividend
+	LIDP LIB_DIV16_DIVIDEND
+	STD ; A -> (DP)
+	LP 3
+	LIDP LIB_DIV16_DIVIDEND+1
+	MVDM ; (P) -> (DP)
+	
+	; IJ --> divisor
+	LP 0
+	LIDP LIB_DIV16_DIVISOR
+	MVDM
+	LP 1
+	LIDP LIB_DIV16_DIVISOR+1
+	MVDM
+	
+	; preset remainder and result to 0
+	LIA 00
+	LIDP LIB_DIV16_REMAINDER
+	STD
+	LIDP LIB_DIV16_REMAINDER+1
+	STD
+	
+	; repeat for each bit
+	LII 16
+LIB_DIV16L1:	
+
+	; dividend lb & hb*2, msb -> Carry
+    RC
+	LIDP LIB_DIV16_DIVIDEND
+	LDD
+	SL
+	STD
+	LIDP LIB_DIV16_DIVIDEND+1
+	LDD
+	SL
+	STD
+
+	; remainder lb & hb * 2 + msb from carry
+	LIDP LIB_DIV16_REMAINDER
+	LDD
+	SL
+	STD
+	LIDP LIB_DIV16_REMAINDER+1
+	LDD
+	SL
+	STD
+
+	; substract divisor, to see if it fits in remainder
+	; remainder -> X (temporary store)
+	;
+	;
+	LIDP LIB_DIV16_REMAINDER
+	LP 4 ; Xl
+	MVMD
+	LIDP LIB_DIV16_REMAINDER+1
+	LP 5 ; Xh
+	MVMD
+	
+	; compare divisor and reminder
+	RC
+	LIDP LIB_DIV16_DIVISOR
+	LDD 
+	LP 4
+	SBCM ; (P) – A - C -> (P) C,Z  
+	LIDP LIB_DIV16_DIVISOR+1
+	LDD
+	LP 5
+	SBCM ; (P) – A - C -> (P) C,Z  
+
+	; if carry=0 (in 6502 logic) then divisor didn't fit in reminder yet: skip to LIB_DIV16L2
+	; NOTE - 6502 SBC treats carry reversed (1<->0), wrt SC68160 SBC or SBB
+	JRCP LIB_DIV16L2
+	
+	; else save substraction result as new remainder: X -> remainder
+	; Maybe we could permanently use X as reminder! 
+	LIDP LIB_DIV16_REMAINDER
+	LP 4
+	MVDM
+	LIDP LIB_DIV16_REMAINDER+1
+	LP 5
+	MVDM
+	
+	; ... and increment result ( = dividend ) cause divisor fit in 1 times
+	LIDP LIB_DIV16_DIVIDEND
+	LDD
+	INCA
+	STD
+
+LIB_DIV16L2:
+	DECI
+    JRNZM LIB_DIV16L1
+
+LIB_DIV16_DONE:	
+	; result (= dividend) moved to BA before returning
+	LIDP LIB_DIV16_DIVIDEND
+	LDD
+	LIDP LIB_DIV16_DIVIDEND+1
+	LP 3 
+	MVMD	
+	
+	; done
+	RTN
+
+LIB_DIV16_DIVISOR:
+	.DW 0
+	
+LIB_DIV16_DIVIDEND:
+	.DW 0
+	
+LIB_DIV16_REMAINDER:
+	.DW 0
+
+; NOT USED (result = dividend)	
+LIB_DIV16_RESULT:
+	.DW 0

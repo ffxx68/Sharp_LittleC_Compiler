@@ -61,6 +61,7 @@ INT2STR_L2:
 			JRNZP   INT2STR_L8  ; digit is NOT a 0 - print
 			EXAB
 			CPIA    0x00        ; check B: first non-zero digit flag
+			EXAB
 			JRZP    INT2STR_L9  ; not set yet: skip digit (note both A and B are 0)
 INT2STR_L8:
 			LIB     1           ; set non-zero digit flag
