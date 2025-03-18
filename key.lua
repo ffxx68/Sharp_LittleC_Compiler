@@ -183,9 +183,9 @@ function key(input_str)
 			["/"] = function() key_press ( ":KEY0"  ,0x08 ) end ,
 
 			-- Right Row 5 : 4 5 6 *  
-			["5"] = function() key_press (  ":KEY1" ,0x01 ) end ,
-			["6"] = function() key_press (  ":KEY1" ,0x02 ) end ,
-			["7"] = function() key_press (  ":KEY1" ,0x04 ) end ,
+			["4"] = function() key_press (  ":KEY1" ,0x01 ) end ,
+			["5"] = function() key_press (  ":KEY1" ,0x02 ) end ,
+			["6"] = function() key_press (  ":KEY1" ,0x04 ) end ,
 			["*"] = function() key_press (  ":KEY1" ,0x08 ) end ,
 
 			-- Right Row 6 : 1 2 3 -
