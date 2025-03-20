@@ -18,8 +18,9 @@ char xram cNumberBuf[6];
 char xram cPrintBuf[24];
 
 #include puts.h  // PC-1403 specific; put a string on screen
-#include int2str.h
 #include getkey.h // PC-1403 specific; get keycode (stopping execution)
+
+#include int2str.h
 #include strcat.h
 
 main()

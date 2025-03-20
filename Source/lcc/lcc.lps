@@ -44,23 +44,20 @@
         <Filename Value="scanner.pas"/>
         <IsPartOfProject Value="True"/>
         <UnitName Value="Scanner"/>
-        <EditorIndex Value="2"/>
+        <EditorIndex Value="3"/>
         <TopLine Value="431"/>
         <CursorPos X="11" Y="217"/>
         <UsageCount Value="246"/>
         <Loaded Value="True"/>
-        <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit>
       <Unit>
         <Filename Value="parser.pas"/>
         <IsPartOfProject Value="True"/>
         <UnitName Value="Parser"/>
-        <IsVisibleTab Value="True"/>
         <TopLine Value="2014"/>
         <CursorPos X="9" Y="2040"/>
         <UsageCount Value="246"/>
         <Loaded Value="True"/>
-        <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit>
       <Unit>
         <Filename Value="calcunit.pas"/>
@@ -73,12 +70,12 @@
       <Unit>
         <Filename Value="CodeGen.pas"/>
         <IsPartOfProject Value="True"/>
-        <EditorIndex Value="3"/>
-        <TopLine Value="715"/>
-        <CursorPos Y="728"/>
+        <IsVisibleTab Value="True"/>
+        <EditorIndex Value="4"/>
+        <TopLine Value="396"/>
+        <CursorPos X="16" Y="427"/>
         <UsageCount Value="246"/>
         <Loaded Value="True"/>
-        <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\..\..\..\AppData\Local\Temp\962fd489-6260-4894-8347-84ed394fb0f0_lcc_b1.zip.0f0\lcc_b1\Source\lcc\parser.pas"/>
@@ -91,10 +88,15 @@
       </Unit>
       <Unit>
         <Filename Value="..\..\..\LittleC_Compiler_OLD\lcc_b1\Source\lcc\calcunit.pas"/>
-        <EditorIndex Value="1"/>
+        <EditorIndex Value="2"/>
         <UsageCount Value="17"/>
         <Loaded Value="True"/>
-        <DefaultSyntaxHighlighter Value="Delphi"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\pasm\calcunit.pas"/>
+        <EditorIndex Value="1"/>
+        <UsageCount Value="10"/>
+        <Loaded Value="True"/>
       </Unit>
     </Units>
     <OtherDefines Count="5">
@@ -105,26 +107,6 @@
       <Define4 Value="PUREPASCAL"/>
     </OtherDefines>
     <JumpHistory HistoryIndex="29">
-      <Position>
-        <Filename Value="parser.pas"/>
-        <Caret Line="1741" TopLine="1708"/>
-      </Position>
-      <Position>
-        <Filename Value="parser.pas"/>
-        <Caret Line="1742" TopLine="1708"/>
-      </Position>
-      <Position>
-        <Filename Value="parser.pas"/>
-        <Caret Line="1743" TopLine="1708"/>
-      </Position>
-      <Position>
-        <Filename Value="parser.pas"/>
-        <Caret Line="1748" TopLine="1711"/>
-      </Position>
-      <Position>
-        <Filename Value="parser.pas"/>
-        <Caret Line="1730" TopLine="1711"/>
-      </Position>
       <Position>
         <Filename Value="parser.pas"/>
         <Caret Line="1752" TopLine="1715"/>
@@ -224,6 +206,25 @@
       <Position>
         <Filename Value="parser.pas"/>
         <Caret Line="2041" TopLine="2014"/>
+      </Position>
+      <Position>
+        <Filename Value="..\pasm\calcunit.pas"/>
+      </Position>
+      <Position>
+        <Filename Value="CodeGen.pas"/>
+        <Caret Line="170" Column="18" TopLine="141"/>
+      </Position>
+      <Position>
+        <Filename Value="CodeGen.pas"/>
+        <Caret Line="236" Column="36" TopLine="210"/>
+      </Position>
+      <Position>
+        <Filename Value="CodeGen.pas"/>
+        <Caret Line="231" Column="28" TopLine="210"/>
+      </Position>
+      <Position>
+        <Filename Value="CodeGen.pas"/>
+        <Caret Line="244" Column="22" TopLine="216"/>
       </Position>
     </JumpHistory>
     <RunParams>

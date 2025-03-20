@@ -135,9 +135,9 @@ LIB_KEYC05S:
 LIB_KEYC04E:	
 	LP   REG_K		; K->A , A used as return value
 	LDM             ; return with value in A
-#endasm
-
-	return ;
+LIB_KEYC06E:
+	RTN
+	#endasm
 
 }
 
@@ -155,7 +155,5 @@ LIB_KEYCL1E:
 	LIA 1
 	RTN
 #endasm
-
-	return ; // A used as return value
 	
 }
