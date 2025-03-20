@@ -46,6 +46,13 @@ INT2STR_L1:
                        LDM
                        SWP         ; 3rd BCD byte, high nibble only
                        CALL    INT2STR_L2
+					   ; if B wasn't set here yet, it means a '0' has to be printed
+					   EXAB
+					   CPIA        0
+					   JRNZP   INT2STR_L10
+					   LIA         0x30 ; '0' ascii code
+					   IYS
+INT2STR_L10:
                        LIA         00  ; close string
                        IYS
 
@@ -65,7 +72,7 @@ INT2STR_L2:
 INT2STR_L8:
                        LIB     1           ; set non-zero digit flag
                        ADIA    0x30        ; add ASCII value for '0'
-                       IYS                     ; store character: Y + 1 -> Y, Y -> DP, A -> (DP)
+                       IYS                 ; store character: Y + 1 -> Y, Y -> DP, A -> (DP)
 INT2STR_L9:
                        RTN
 
