@@ -2255,7 +2255,7 @@ begin
                     end;
                      // allocating room on stack pointer... either via 'push', or R decrement
                      if aa < 8 then
-                       for c := 0 to aa do
+                       for c := 1 to aa do
                           begin writln( #9'PUSH'); inc(pushcnt); end
                      else
                         begin
@@ -2356,7 +2356,7 @@ begin
                 if not Findvar(name) then error('Var '+name+' not declared!');
                 if not VarList[VarFound].local then error('Var '+name+' not local!');
                 VarList[VarFound].address := m - a;
-                writeln('LOCAL ',ProcList[currproc].procname,' VAR: ', name,
+                writeln('LOCAL ',ProcList[currproc].procname,' PARAM: ', name,
                                '(',ProcList[currproc].partyp[i],')',
                                ': ', VarList[VarFound].address );
                 if ProcList[currproc].partyp[i] = 'float' then inc(a, 8)
@@ -2370,7 +2370,7 @@ begin
                 if not Findvar(name) then error('Var '+name+' not declared!');
                 if not VarList[VarFound].local then error('Var '+name+' not local!');
                 VarList[VarFound].address := m - a;
-                writeln('LOCAL ',ProcList[currproc].procname,' PARAM: ', name,
+                writeln('LOCAL ',ProcList[currproc].procname,' VAR: ', name,
                                '(',ProcList[currproc].loctyp[i],')',
                                ': ', VarList[VarFound].address );
                 if ProcList[currproc].loctyp[i] = 'float' then inc(a, 8)
