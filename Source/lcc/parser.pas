@@ -1600,15 +1600,20 @@ begin
                         and ((varlist[varfound].typ = 'char') or (varlist[varfound].typ = 'byte')) then
                         begin
                                 if look = '+' then writln(#9'; '+name+'++') else writln(#9'; '+name+'--');
-                                a := varlist[varfound].address;
-                                if a = 0 then begin if Look='+' then writln(#9'INCI') else writln(#9'DECI'); end
-                                else if a = 1 then begin if Look='+' then writln(#9'INCJ') else writln(#9'DECJ'); end
-                                else if a = 2 then begin if Look='+' then writln(#9'INCA') else writln(#9'DECA'); end
-                                else if a = 3 then begin if Look='+' then writln(#9'INCB') else writln(#9'DECB'); end
-                                else if a = 8 then begin if Look='+' then writln(#9'INCK') else writln(#9'DECK'); end
-                                else if a = 9 then begin if Look='+' then writln(#9'INCL') else writln(#9'DECL'); end
-                                else if a = 10 then begin if Look='+' then writln(#9'INCM') else writln(#9'DECM'); end
-                                else if a = 11 then begin if Look='+' then writln(#9'INCN') else writln(#9'DECN'); end
+                                if ( not(varlist[varfound].Local)
+                                and ( varlist[varfound].address<12 )
+                                and ( varlist[varfound].address>=0 ) ) then
+                                begin
+                                  a := varlist[varfound].address;
+                                  if a = 0 then begin if Look='+' then writln(#9'INCI') else writln(#9'DECI'); end
+                                  else if a = 1 then begin if Look='+' then writln(#9'INCJ') else writln(#9'DECJ'); end
+                                  else if a = 2 then begin if Look='+' then writln(#9'INCA') else writln(#9'DECA'); end
+                                  else if a = 3 then begin if Look='+' then writln(#9'INCB') else writln(#9'DECB'); end
+                                  else if a = 8 then begin if Look='+' then writln(#9'INCK') else writln(#9'DECK'); end
+                                  else if a = 9 then begin if Look='+' then writln(#9'INCL') else writln(#9'DECL'); end
+                                  else if a = 10 then begin if Look='+' then writln(#9'INCM') else writln(#9'DECM'); end
+                                  else if a = 11 then begin if Look='+' then writln(#9'INCN') else writln(#9'DECN'); end
+                                end
                                 else
                                 begin
                                         Loadvariable(name);
