@@ -1,40 +1,44 @@
-; set / reset pixel on screen
+; set / clear pixel on screen
 ; input 
 ;  X-low as x-position on screen (0 = left)
 ;  Y-low as y-position on screen (0 = top)
-;  K (0x08) mode: 1: set; 0: reset
-LCD_PC1403LIB_PSET:
+;  K (0x08) mode: 1: set; 0: clear
+LCD_LIB_PSET:
 
 	LP 4
-	EXAM Xl --> A
+	EXAM ; Xl --> A
 	CPIA 120
-	JRCP lcd_pc1403lib_lb0 ; ok
-	; A>120 not allowed 
+	JRCP LCD_LIB_PSET_PC1403_LBL0
+	; skip overall if X > 119 not allowed 
 	RTN
 	
-lcd_pc1403lib_lb0:
+LCD_LIB_PSET_PC1403_LBL0:
 	; calc address --> X
-	CALL lcd_pc1403lib_map
+	CALL LCD_LIB_PSET_PC1403_MAP
 	
-	; calc mask --> A
+	; calc pixel mask --> A
 	LP 6
-	EXAM
-	EXAB ; Yl -> B
+	EXAM ; Yl --> A
+	CPIA 8
+	JRCP LCD_LIB_PSET_PC1403_LBL3
+	; skip overall  if Y > 7
+	RTN 
+
+LCD_LIB_PSET_PC1403_LBL3:
+	EXAB ; B keeps Y position 
 	LIA 1
-	LII 6  ; vertical pixel count (7 max)
+	LII 7  ; vertical pixel count (7 max)
 	LP 0   ; I
-lcd_pc1403lib_lb1:
+LCD_LIB_PSET_PC1403_LBL1:
+	DECI
 	EXAB
 	CPMA   ; comparing B with I
 	EXAB
-	JRZP lcd_pc1403lib_lb2 ; B=I
+	JRZP LCD_LIB_PSET_PC1403_LBL2 ; reached B=I, mask is now in A
 	SL
-	DECI
-	JRNZM lcd_pc1403lib_lb1
-	; B>6 impossible
-	RTN
-
-lcd_pc1403lib_lb2:
+	JRM LCD_LIB_PSET_PC1403_LBL1
+	
+LCD_LIB_PSET_PC1403_LBL2:
 	; get pixel at X with mask in A
 	EXAB ; move A (mask) to B
 	DX
@@ -43,20 +47,20 @@ lcd_pc1403lib_lb2:
 	; select mode
 	LP 0x08   ; K   
 	CPIM 0x01 ; 1 = set pixel
-	JRZP lcd_pc1403lib_set
+	JRZP LCD_LIB_PSET_PC1403_SET
 	CPIM 0x00 ; 0 = clear pixel
-	JRZP lcd_pc1403lib_clear
+	JRZP LCD_LIB_PSET_PC1403_CLEAR
 	; mode not allowed
 	RTN
 	
-lcd_pc1403lib_set:
+LCD_LIB_PSET_PC1403_SET:
 	LP 3 ; B (mask)
 	ORMA ; B V A -> B = set mask bit
 	EXAB
 	STD  ; A -> (DP)
 	RTN
 	
-lcd_pc1403lib_clear:
+LCD_LIB_PSET_PC1403_CLEAR:
 	
 
     ; TO DO . . .	
@@ -66,15 +70,15 @@ lcd_pc1403lib_clear:
 
 ; input with A as x-position on screen (0 = left)
 ; return with X as address of corresponding LCD position
-lcd_pc1403lib_map:
+LCD_LIB_PSET_PC1403_MAP:
 
 	; calc table pointer, from x-lcd position in A
 	EXAB  ; save A
-	LP 4  ;  X-low
-	LIA LB(lcd_pc1403lib_memmap)
+	LP 4  ; X-low
+	LIA LB(LCD_LIB_PSET_PC1403_memmap)
 	EXAM
 	LP 5  ; X-high
-	LIA HB(lcd_pc1403lib_memmap)
+	LIA HB(LCD_LIB_PSET_PC1403_memmap)
 	EXAM
 	EXAB  ; restore A
 	LIB 0
@@ -93,7 +97,7 @@ lcd_pc1403lib_map:
 	
 	RTN
 
-lcd_pc1403lib_memmap:
+LCD_LIB_PSET_PC1403_memmap:
 .DB 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F
 .DB 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x2D, 0x2E
 .DB 0x2F, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A, 0x3B, 0x1E, 0x1F, 0x20

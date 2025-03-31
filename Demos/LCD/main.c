@@ -14,13 +14,27 @@ char xram cHelloWorld[25] = "Hello!";
 main()
 {
 	
+	// print string
 	lcd_cls(0);
 	puts(&cHelloWorld);
 	bTmp1=getkey();
-
 	wTmp1 = 0;
 	bXPos = 0;
 	bYPos = 0;
+
+	// fill
+	lcd_cls(1);
+	bTmp1=getkey();
+	
+	// horizontal lines
+	lcd_cls(0);
+	lcd_hline(10,0,100,1);
+	lcd_hline(12,2,100,1);
+	lcd_hline(14,4,100,1);
+	bTmp1=getkey();
+
+	// zig-zag
+	lcd_cls(0);
 	while (wTmp1<1000) {
 		lcd_pset(  bXPos, bYPos, 1 );
 		if (bXPos == 0) bDx=1 ;
@@ -31,7 +45,6 @@ main()
 		if (bDy == 1) bYPos=bYPos+1 ; else bYPos=bYPos-1 ;
 		wTmp1++;
 	}
-	lcd_cls(1);
 	bTmp1=getkey();
-
+	
 }
