@@ -39,11 +39,9 @@ LCD_LIB_PSET_PC1403_LBL1:
 	JRM LCD_LIB_PSET_PC1403_LBL1
 	
 LCD_LIB_PSET_PC1403_LBL2:
-	; get pixel at X with mask in A
+	; set/clear pixel at X with mask in A
 	EXAB ; move A (mask) to B
 	DX
-	IXL  ; get LCD byte (X) -> A, X -> DP
-
 	; select mode
 	LP 0x08   ; K   
 	CPIM 0x01 ; 1 = set pixel
@@ -54,18 +52,22 @@ LCD_LIB_PSET_PC1403_LBL2:
 	RTN
 	
 LCD_LIB_PSET_PC1403_SET:
-	LP 3 ; B (mask)
+	LP 3 ; B (bit mask)
+	IXL  ; get LCD byte (X) -> A, X -> DP
 	ORMA ; B V A -> B = set mask bit
 	EXAB
 	STD  ; A -> (DP)
 	RTN
 	
 LCD_LIB_PSET_PC1403_CLEAR:
-	
-
-    ; TO DO . . .	
-
-
+	LIA 0xFF
+	EXAB
+	LP 3 ; B  
+	SBM  ; 0xFF - A -> B (= NOT B)
+	IXL  ; get LCD byte (X) -> A, X -> DP
+	ANMA ; B ∧ A -> B = clear mask bit
+	EXAB
+	STD  ; A -> (DP)
 	RTN
 
 ; input with A as x-position on screen (0 = left)

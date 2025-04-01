@@ -28,9 +28,12 @@ main()
 	
 	// horizontal lines
 	lcd_cls(0);
-	lcd_hline(10,0,100,1);
-	lcd_hline(12,2,100,1);
-	lcd_hline(14,4,100,1);
+	lcd_hline(10,0,60,1);
+	lcd_hline(22,2,60,1);
+	lcd_hline(34,4,60,1);
+	lcd_hline(46,6,60,1);
+	lcd_hline(44,2,23,0);
+	lcd_hline(54,4,23,0);
 	bTmp1=getkey();
 
 	// zig-zag

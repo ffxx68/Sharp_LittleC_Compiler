@@ -45,9 +45,26 @@ lcd_hline(byte bLcdXpos2, byte bLcdYpos2, byte bLen2, byte bLcdMode2)
 	LP  1
 	ADM 	; A + J -> J  (running position, starting from end: bLcdXpos2+bLen2 )
 	
+	LDR
+	ADIA 2 ; local bLcdMode2 to A
+	STP
+	LDM
+	LP	8	; Store to K
+	EXAM	
+	
 lcd_hline_loop0:
+
 	DECJ    ; e.g. bLen2 = 1 means one dot at position bLcdXpos2+0
-	LP  1
+
+    LDR
+	ADIA 5 ; local bLcdXpos2 into A (end position)
+	STP
+	LDM
+	
+	LP	1 ; compare J with A
+	CPMA  
+	JRZP lcd_hline_end  ; done
+	
 	LDM     ; J -> A
 	LP	4	; Store A to X-low
 	EXAM
@@ -58,27 +75,13 @@ lcd_hline_loop0:
 	LDM
 	LP	6	; store to Y-low
 	EXAM	
-	
-	LDR
-	ADIA 2 ; local bLcdMode2 to A
-	STP
-	LDM
-	LP	8	; Store to K
-	EXAM	
 
 	; takes, X, Y and K as parameters
-	; note - J not used inside!
+	; note - J, K not changed inside
 	call LCD_LIB_PSET
+
+	JRM lcd_hline_loop0 ; next pixel
 	
-	LDR
-	ADIA 5 ; local bLcdXpos2 into A (end position)
-	STP
-	LDM
-	
-	LP	1 ; compare J with A
-	CPMA  
-	JRZP lcd_hline_end  ; 
-	JRM lcd_hline_loop0 ; continue until J<A 
 lcd_hline_end:
 	RTN
 #endasm
