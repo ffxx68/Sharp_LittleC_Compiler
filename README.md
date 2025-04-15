@@ -173,7 +173,7 @@ For example, the below is to enter some of the instructions seen before (note ho
 [MAME]> key("#")
 ```
 
-Alternatively, using the text file `pc1403.ini`:
+Alternatively, using a text file to store the key strokes, named `pc1403_ini.key`:
 
 ```
 ##POKE&ff01,&30,&e8
@@ -187,10 +187,10 @@ mem
 and *executing* it from the Lua console:
 
 ```
-[MAME]> keyfile("pc1403.ini")
+[MAME]> keyfile("pc1403_ini.key")
 ```
 
-More could be done, like interacting with the debugger, etc., but this is a starting point for easier test replay.
+More could be done, like interacting with the debugger, etc., but this is just a starting point, for easier test replay.
 
 ## Compiler source code and rebuild
 

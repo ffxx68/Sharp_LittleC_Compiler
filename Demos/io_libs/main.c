@@ -4,65 +4,87 @@
 // required here as reused by some libraries too
 #include common.h
 
-word xram wTmp = 25873;
-byte xram bIdx1, bIdx2;
-char xram bTmp1;
-char xram cBlank[2] = " ";
-char xram cNumber[6];
-char xram cPrint[24] = " ";
+byte xram bKey1, bKey2, bTmp1, bCpos, bCpos_old, bLoopNr;
+byte xram bXball, bYball, bDxBall, bDyBall;
+//word xram wTmp1;
+//char xram cPtr1[6] = "X";
 
-#include keycode.h  // PC-1403 specific
-#include getkey.h   // PC-1403 specific
-#include puts.h     // PC-1403 specific
-
-#include int2str.h
-#include string.h
+#include lcd.h  // PC-1403 specific
+#include key.h  // PC-1403 specific
+//#include string.h
+//#include puts.h   // PC-1403 specific
 
 main()
 {
-	//strcpy ( &cPrint, &cBlank, 1 );
-	cPrint[0] = 0;
-	wTmp = 0;
-	bIdx1 = 0;
-	bIdx2 = 0;
+	//bCpos = 0; // initial cursor position
+	//bCpos_old = 0;
+	bKey1 = 0xFF; // no key
+	bKey2 = 0xFF; // no key
+	bYball = 1;
 	bTmp1 = 0;
+	// bTmp1 = 0;
+
+	lcd_on();
+	lcd_cls(0);
+	lcd_hline(bCpos, 0, 5, 1);
+
+	/* draw grid
+	for (bTmp1 = 0; bTmp1<120; bTmp1+=5)
+	{
+		lcd_pset(bTmp1-5, 1, 1);
+		lcd_pset(bTmp1-5, 2, 1);
+	}		
+	bTmp1 = 0;
+	*/
+	
+	// main loop
 	while (bTmp1 == 0)
 	{
-		// wait
-		#asm
-			LII 01   
-		WAITLOOP2:
-			WAIT 255 
-			DECI
-			JRNZM WAITLOOP2
-		#endasm
+		bLoopNr++;
 		
-		bIdx1 = keycode();
-		if (bIdx2 != bIdx1 ) { // anti-repeat
-			if (bIdx1 == 44 || bIdx1 == 45 || bIdx1 == 46 ) { // Z A Q (left)
-				wTmp--;
+		
+		// keyboard scan and cursor update
+		bKey1 = key_scan(); 
+		if (bKey1 == 0xFF) { // no key pressed
+			bKey2 = 0xFF;
+		} else {
+			if (bKey2 != bKey1 && bKey1 == 21 && bCpos < 100) { // > : move right 
+				bCpos+=5;
+				bKey2 = bKey1; // anti-repeat
 			}
-			if (bIdx1 == 13 || bIdx1 == 14 || bIdx1 == 15 ) { // SPC K I (right)
-				wTmp++;
+			if (bKey2 != bKey1 && bKey1 == 16 && bCpos > 0) { // < : move left 
+				bCpos-=5;
+				bKey2 = bKey1; // anti-repeat
 			}
-			bIdx2 = bIdx1;
+			if (bCpos_old != bCpos) {
+				// draw cursor in new position
+				lcd_hline(bCpos_old, 0, 5, 0);
+				lcd_hline(bCpos, 0, 5, 1);
+				bCpos_old = bCpos;
+			}
 		}
 		
 		
-		//  . . .
+		// bouncing ball
+		if (bLoopNr == 10) { // delay
+			lcd_pset(  bXball, bYball, 0 );
+			if (bXball == 0) bDxBall=1 ;
+			if (bXball == 100) bDxBall=0 ;
+			if (bYball == 1) bDyBall=1 ;
+			if (bYball == 7) bDyBall=0 ;
+			if (bDxBall == 1) bXball=bXball+1 ; else bXball=bXball-1 ;
+			if (bDyBall == 1) bYball=bYball+1 ; else bYball=bYball-1 ;
+			lcd_pset(  bXball, bYball, 1 );
+			bLoopNr = 0;
+		}
 		
 		
-		bTmp1 = keybrk(); // BRK to exit
+		// ...
+		
+		
+		// BRK to exit
+		bTmp1 = keybrk(); 
 	}
-	
-	cNumber[0] = 0;
-	cPrint[0] = 0;
-	int2str(bIdx1, &cNumber);
-	strcat ( &cPrint, &cNumber );
-	int2str(wTmp, &cNumber);
-	strcat ( &cPrint, &cBlank );
-	strcat ( &cPrint, &cNumber );
-	puts(&cPrint);
-	bTmp1=getkey();
 
 }
+

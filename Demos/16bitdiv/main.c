@@ -6,9 +6,7 @@ byte regI at 0, regJ at 1;
 byte regA at 2, regB at 3; 
 word regX at 4, regY at 6;
 
-word xram quotient1;
-word xram dividend1;
-word xram divisor1;
+word xram quotient1,dividend1,divisor1;
 
 char xram bTmp1;
 char xram cDivSign[5] = "/";
@@ -20,8 +18,7 @@ char xram cPrintBuf[24];
 #include puts.h  // PC-1403 specific; put a string on screen
 #include getkey.h // PC-1403 specific; get keycode (stopping execution)
 
-#include int2str.h
-#include strcat.h
+#include string.h
 
 main()
 {

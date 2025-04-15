@@ -1,6 +1,20 @@
+// convert integer (16bit) to a string
+int2str ( word wNumber, word wNumStr ) 
+{
+	regX = wNumber; // input
+	regY = wNumStr; // destination 
+#asm
+	call INT2STR_LIB
+#endasm
+   return;
+   
+#asm  
+   .include _int2str.lib
+#endasm
+}
 
 // beware - no string end or allocation check!
-strcat(word wDest1, word wSrc1) 
+strcat(word wDest1, word wSrc1)
 {
 	regX = wSrc1;
 	regY = wDest1;

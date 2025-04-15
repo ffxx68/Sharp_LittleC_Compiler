@@ -6,6 +6,29 @@ lcd_dummy ( ) {
 #endasm
 }
 
+// LCD on (PC-14**)
+lcd_on() 
+{
+#asm
+	LIA			1
+	LIP			95
+	EXAM		
+	OUTC	
+#endasm
+	return;
+}
+
+lcd_off() 
+{
+#asm
+	LIA			0
+	LIP			95
+	EXAM		
+	OUTC	
+#endasm
+	return;
+}
+	
 // set pixel
 lcd_pset(byte bLcdXpos1, byte bLcdYpos1, byte bLcdMode1) 
 {

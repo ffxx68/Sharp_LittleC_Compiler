@@ -2,7 +2,7 @@
 byte regI at 0, regJ at 1;
 byte regA at 2, regB at 3; 
 word regX at 4, regY at 6;
-word regK at 8;
+byte regK at 8, regL at 9, regM at 10;
 
 char readbyte(word adr1)
 {
