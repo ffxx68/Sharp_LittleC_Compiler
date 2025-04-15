@@ -3,7 +3,6 @@ littleC Manual
 by Simon Lehmayr
 
 
-
 Contents:
 ---------
 - Supported Pocket Computers from Sharp
@@ -13,7 +12,7 @@ Contents:
 - The Tool "lcpp"
 - The Compiler "lcc"
 - The Assembler "pasm"
-- The Disassembler "dasm"
+- The Disassembler "dasm" or "sdasm"
 - The Transfer Utility "wintr"
 - Writing Code in littleC
 - Adding Libraries
