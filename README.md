@@ -1,6 +1,6 @@
 # Little C Compiler
 
-*Please read docs for a detailed reference*: [LittleC manual.txt](./Docs/littleC\ manual.txt)
+*Please read docs for a detailed reference*: `./Docs/littleC\ manual.txt`
 
 **LittleC** is an almost-C-language cross-compiler (more in the docs, about the "almost"), 
 originally written in the early 2000s by Simon Lehmayr (https://www.simon-lehmayr.de/).
