@@ -1,11 +1,11 @@
 # Little C Compiler
 
-*Please read docs for a more detailed reference*
+*Please read docs for a detailed reference*: [./Docs/littleC manual.txt](./Docs/littleC manual.txt)
 
-"LittleC" is a almost-C-language cross-compiler originally (more in the docs, about the "almost"), 
+**LittleC** is an almost-C-language cross-compiler (more in the docs, about the "almost"), 
 originally written in the early 2000s by Simon Lehmayr (https://www.simon-lehmayr.de/).
 
-The LittleC runs on a reguar Windows/DOS machine and makes ASM and binary code for the SC61860 CPU, used in several Sharp Pocket Computers, like:
+The LittleC runs on a regular Windows/DOS machine, and makes ASM and binary code for the SC61860 CPU, compatible with several Sharp Pocket Computers, like:
 
 PC-1360, PC-1350, PC-1475, PC-1450, PC-1401, PC-1402, PC-1403, PC-1403H, PC-1421, PC-1260, PC-1261
 
@@ -15,7 +15,7 @@ LittleC is composed of three distinct tools:
 * `lcc` (the C-to-ASM compiler)
 * `pasm` (the ASM-to-binary compiler)
 
-but these are wrapped for easier use into a `make.bat` (MS-DOS batch) file, although thety could as well be used as 
+but these are also wrapped for easier use into a `make.bat` (MS-DOS batch) file.
 
 A disassembler `sdasm`, as well as a transer utility `wintr` are included too, but I won't go into the details about these here. Please refer to documentation (`Docs/littleC manual.txt`), for additional info.
 
