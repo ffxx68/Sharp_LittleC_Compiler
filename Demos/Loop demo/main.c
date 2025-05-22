@@ -9,6 +9,9 @@ main()
 {
 	for (a = 1; a < 50; a++)
 		b--;
+	
+	if ( a == b) 
+		c = 0;
 
 	for (b = 100; b > a;)
 		b--;
