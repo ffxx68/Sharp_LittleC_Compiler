@@ -1,5 +1,5 @@
 // convert integer (16bit) to a string
-int2str ( word wNumber, word wNumStr ) 
+int2str( word wNumber, word wNumStr ) 
 {
 	regX = wNumber; // input
 	regY = wNumStr; // destination 

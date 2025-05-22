@@ -1,6 +1,5 @@
 int2str ( word wNumber, word wNumStr ) 
 {
-
 	regX = wNumber; // input
 	regY = wNumStr; // destination 
 #asm
@@ -11,5 +10,4 @@ int2str ( word wNumber, word wNumStr )
 #asm  
    .include _int2str.lib
 #endasm
-
 }
