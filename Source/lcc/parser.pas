@@ -1078,7 +1078,7 @@ begin
                     if adr <> -1 then
                             writln( #9'LIDP'#9+inttostr(adr+1)+#9'; Load 16bit variable '+name)
                     else
-                            writln( #9'LIDP'#9+name+'+1'#9'; Load 16bit variable '+name); // FIXME - PASM doesn't parse "name+1"
+                            writln( #9'LIDP'#9+name+'+1'#9'; Load 16bit variable '+name);
                     writln( #9'LDD'#9#9'; HB');
                     writln( #9'EXAB');
                     if (adr <> -1) and ((adr + 1) div 256 = adr div 256) then
