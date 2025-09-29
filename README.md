@@ -237,3 +237,18 @@ from the 'Project - Project Options - Compiler Options' menu:
  
 but this needs first the installation of the 64-to-32bit cross-compiler extension (`lazarus-3.4-fpc-3.2.2-cross-i386-win32-win64.exe`).
 However, this isn't necessary because the executable size isn't a significant issue.
+
+### C Migration Project
+
+A migration project from Pascal to C has been initiated to modernize the Little C Compiler toolchain. The migration began with the preprocessor component (`lcpp`), which has been successfully ported to C and enhanced with improved functionality and bug fixes.
+
+The C version of `lcpp` can be found in `Source/C/lcpp/` and includes:
+- Complete migration from Pascal to C99 standard
+- Enhanced macro parsing with support for complex expressions and parentheses
+- Improved error handling and memory safety
+- Full compatibility with the original Pascal version
+- Comprehensive test suite
+
+The C version is now at v2.0 and is ready for production use. The migration of `lcpp` was performed with extensive use of AI-assisted coding (GitHub Copilot), demonstrating the effectiveness of modern development tools in code modernization projects.
+
+Future plans include migrating the remaining components (`lcc` and `pasm`) to C to create a fully modernized, cross-platform toolchain.
