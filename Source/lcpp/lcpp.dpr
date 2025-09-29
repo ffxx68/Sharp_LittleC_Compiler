@@ -66,6 +66,62 @@ begin
 end;
 
 
+function normalize_spaces(text: string): string;
+var i: integer;
+    c: char;
+    in_string: boolean;
+    need_space: boolean;
+    prev_char, curr_char: char;
+begin
+    result := '';
+    if text = '' then exit;
+    
+    c := ' ';
+    in_string := false;
+    prev_char := ' ';
+    
+    for i := 1 to length(text) do
+    begin
+        curr_char := text[i];
+        
+        // Track string literal boundaries
+        if (curr_char in ['''','"']) then 
+        begin
+            if c = ' ' then 
+                c := curr_char
+            else 
+                c := ' ';
+            in_string := (c <> ' ');
+        end;
+        
+        if in_string then
+        begin
+            // Inside string literals, preserve everything
+            result := result + curr_char;
+        end
+        else if curr_char = ' ' then
+        begin
+            // Only add space if needed between two alphanumeric/underscore characters
+            need_space := (prev_char in ['_','0'..'9','A'..'Z','a'..'z']) and 
+                         (i < length(text)) and 
+                         (text[i+1] in ['_','0'..'9','A'..'Z','a'..'z']);
+            if need_space then
+                result := result + ' ';
+        end
+        else
+        begin
+            // Non-space character, always add
+            result := result + curr_char;
+        end;
+        
+        if curr_char <> ' ' then
+            prev_char := curr_char;
+    end;
+    
+    result := trim(result);
+end;
+
+
 procedure addsymbol(s1, s2: string);
 begin
 	if findsymbol(s1) then
@@ -195,7 +251,7 @@ begin
                         end else abort('Include file ' + op + ' not found!');
                 end
                 else if pos('#endif', tok) = 0 then
-                        writeln(fout, tok);
+                        writeln(fout, normalize_spaces(tok));
             end;
             tok := readline;
 	end;
