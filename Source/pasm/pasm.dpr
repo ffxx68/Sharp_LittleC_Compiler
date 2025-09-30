@@ -187,15 +187,15 @@ begin
 //  text := lowercase(text);
 	text := ' ' + text + ' ';
         i := 2;
-	while (i < length(text)) do
+	while (i <= length(text) - length(such)) do
 	begin
             if (copy(lowercase(text), i, length(such)) = such)
              and not ((upcase(text[i-1]) in ['_','0'..'9','A'..'Z']) or (upcase(text[i+length(such)]) in ['_','0'..'9','A'..'Z'])) then
             begin
 		delete(text, i, length(such));
 		insert(ers, text, i);
-		i := i + length(ers) - length(such);
-            end;
+		i := i + length(ers);
+            end else
             inc(i);
 	end;
 	result := trim(text);
@@ -1215,4 +1215,3 @@ begin
 
         savefile(paramstr(2));
 end.
-
