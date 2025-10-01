@@ -240,7 +240,10 @@ However, this isn't necessary because the executable size isn't a significant is
 
 ### C Migration Project
 
-A migration project from Pascal to C has been initiated to modernize the Little C Compiler toolchain. The migration began with the preprocessor component (`lcpp`), which has been successfully ported to C and enhanced with improved functionality and bug fixes.
+A migration project from Pascal to C has been initiated to modernize the Little C Compiler toolchain. 
+
+#### ✅ LCPP (Preprocessor) - COMPLETATO
+The migration began with the preprocessor component (`lcpp`), which has been successfully ported to C and enhanced with improved functionality and bug fixes.
 
 The C version of `lcpp` can be found in `Source/C/lcpp/` and includes:
 - Complete migration from Pascal to C99 standard
@@ -249,6 +252,26 @@ The C version of `lcpp` can be found in `Source/C/lcpp/` and includes:
 - Full compatibility with the original Pascal version
 - Comprehensive test suite
 
-The C version is now at v2.0 and is ready for production use. The migration of `lcpp` was performed with extensive use of AI-assisted coding (GitHub Copilot), demonstrating the effectiveness of modern development tools in code modernization projects.
+#### ✅ PASM (Assembler) - COMPLETATO
+The assembler component (`pasm`) has been successfully migrated from Pascal to C with full binary compatibility verified.
 
-Future plans include migrating the remaining components (`lcc` and `pasm`) to C to create a fully modernized, cross-platform toolchain.
+**Status:** Production ready - generates identical binary output to Pascal original
+
+**Key achievements:**
+- Complete migration of all core assembly functions
+- Critical bug fix for relative jumps (JRM instruction handling)
+- Exact replication of OPCODE[256] and NBARGU[256] arrays from Pascal
+- Binary-identical output verified with `test_org_equ.asm`
+- Robust error handling and memory safety improvements
+
+**Test Suite Results:**
+- ✅ Basic assembly instructions (LIA, NOP)
+- ✅ Directive handling (.ORG, .EQU) 
+- ✅ Label resolution and symbol table
+- ✅ Relative jumps (JRP, JRM) - critical fix implemented
+- ✅ Binary output verification: `fc.exe /b` shows identical results
+
+**Location:** `Source/C/pasm/` - includes full test suite and verification binaries
+
+#### 🔄 LCC (Compiler) - TODO
+Future plans include migrating the main compiler component (`lcc`) to complete the fully modernized, cross-platform toolchain.

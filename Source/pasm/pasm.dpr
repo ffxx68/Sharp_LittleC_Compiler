@@ -1102,7 +1102,8 @@ begin
                                 parsefile(params);
                         end else
                         begin
-                                abort('Include file ' + params + ' not found!');
+
+                                abort('Include file ' + params + ' not found in ' + GetCurrentDir);
                         end;
                 end
                 else

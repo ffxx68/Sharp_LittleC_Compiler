@@ -34,16 +34,28 @@ bool mcase = false;
 int ccase = 0, casecnt = 0, cline = 0, i = 0;
 char s[1024], cf[256];
 
-// Funzione di utilità: trim (rimuove spazi iniziali e finali)
+// Funzione di utilità: trim (rimuove spazi, tab, newline)
 void trim(char *str) {
     char *end;
-    // Trim spazi iniziali
-    while(*str == ' ' || *str == '\t') str++;
-    // Se la stringa è vuota
-    if(*str == 0) return;
+    char *start = str;
+
+    // Trova l'inizio dei caratteri non-whitespace
+    while(*start == ' ' || *start == '\t' || *start == '\n' || *start == '\r') start++;
+
+    // Se la stringa è tutta whitespace
+    if(*start == 0) {
+        str[0] = 0;
+        return;
+    }
+
+    // Sposta i caratteri all'inizio della stringa se necessario
+    if (start != str) {
+        memmove(str, start, strlen(start) + 1);
+    }
+
     // Trim spazi finali
     end = str + strlen(str) - 1;
-    while(end > str && (*end == ' ' || *end == '\t')) end--;
+    while(end > str && (*end == ' ' || *end == '\t' || *end == '\n' || *end == '\r')) end--;
     *(end+1) = 0;
 }
 
@@ -323,14 +335,26 @@ void doasm(const char *line) {
     // Ignora righe vuote e commenti
     if (s[0] == '\0' || s[0] == ';') return;
 
-    // Gestisce le etichette (righe che terminano con ':')
-    if (s[strlen(s) - 1] == ':') {
-        s[strlen(s) - 1] = '\0'; // Rimuovi ':'
-        trim(s);
-        if (strlen(s) > 0) {
-            addlabel(s);
+    // Gestisce le etichette (righe che contengono ':' come etichetta) PRIMA di extractop
+    char *colon = strchr(s, ':');
+    if (colon != NULL) {
+        // Verifica che non sia all'interno di un commento
+        char *comment = strchr(s, ';');
+        if (comment == NULL || colon < comment) {
+            // Estrai la parte prima dei due punti come etichetta
+            *colon = '\0';
+            trim(s);
+            if (strlen(s) > 0) {
+                addlabel(s);
+            }
+            // Processa eventuale codice dopo i due punti
+            char *after_colon = colon + 1;
+            trim(after_colon);
+            if (strlen(after_colon) > 0 && after_colon[0] != ';') {
+                doasm(after_colon); // Ricorsione per processare istruzione dopo etichetta
+            }
+            return;
         }
-        return;
     }
 
     // Gestisce direttive assemblatore
@@ -360,10 +384,62 @@ void doasm(const char *line) {
             }
             return;
         }
+        // .include directive (compatibile con virgolette o senza)
+        if (strncasecmp(s, ".include", 8) == 0) {
+            char *rest = s + 8;
+            while (*rest == ' ' || *rest == '\t') rest++;
+            // Rimuovi virgolette se presenti
+            char fname[256];
+            if (*rest == '"' || *rest == '\'') {
+                char quote = *rest;
+                rest++;
+                int i = 0;
+                while (*rest && *rest != quote && i < 255) fname[i++] = *rest++;
+                fname[i] = '\0';
+            } else {
+                int i = 0;
+                while (*rest && *rest != ' ' && *rest != '\t' && *rest != ';' && i < 255) fname[i++] = *rest++;
+                fname[i] = '\0';
+            }
+            // Apri e processa il file di include
+            FILE *inc = fopen(fname, "r");
+            if (!inc) {
+                fprintf(stderr, "Line %d: Include file '%s' not found! in file %s\n", cline + 1, fname, cf);
+                exit(1);
+            }
+            char line[1024];
+            while (fgets(line, sizeof(line), inc)) {
+                trim(line);
+                if (line[0] != '\0') doasm(line);
+            }
+            fclose(inc);
+            return;
+        }
+        // .db directive - definizione dati byte
+        if (strncasecmp(s, ".db", 3) == 0) {
+            char *rest = s + 3;
+            while (*rest == ' ' || *rest == '\t') rest++;
+
+            // Processa i parametri separati da virgola
+            char *token = strtok(rest, ",");
+            while (token != NULL) {
+                // Rimuovi spazi iniziali e finali dal token
+                while (*token == ' ' || *token == '\t') token++;
+                char *end = token + strlen(token) - 1;
+                while (end > token && (*end == ' ' || *end == '\t')) end--;
+                *(end+1) = '\0';
+
+                // Converte il token in byte e lo aggiunge al codice
+                addcode(mathparse(token, 8));
+
+                token = strtok(NULL, ",");
+            }
+            return;
+        }
         return; // Ignora altre direttive non implementate
     }
 
-    // Estrai operazione e parametri
+    // Estrai operazione e parametri SOLO se non è un'etichetta o direttiva
     extractop(s);
 
     // Pulisci param1 rimuovendo virgole finali
@@ -391,19 +467,22 @@ void doasm(const char *line) {
         // Gestione salti relativi
         else if (in_set(opp, JR, 11)) {
             adr = calcadr();
+            addcode(opp);
             if (adr >= 8192) {
-                addcode(opp);
                 if (in_set(opp, JRPLUS, 5)) {
                     addcode(adr - codpos - startadr);
                 } else {
                     addcode(abs(codpos + startadr - adr));
                 }
             } else if (adr > 0) {
-                addcode(opp);
-                addcode(adr);
+                // Per tutti i salti relativi, calcola l'offset relativo
+                if (in_set(opp, JRPLUS, 5)) {
+                    addcode(adr - codpos - startadr);
+                } else {
+                    addcode(abs(codpos + startadr - adr));
+                }
             } else {
-                addcode(NOP);
-                addcode(NOP);
+                addcode(0); // Placeholder per etichette non risolte
             }
         }
         // Gestione istruzioni normali
@@ -425,7 +504,88 @@ void doasm(const char *line) {
     }
     // Gestione istruzioni speciali non nella tabella OPCODE
     else {
-        if (strcmp(op, "LP") == 0) {
+        if (strcmp(op, "ADD") == 0) {
+            if (strcmp(param1, "[P]") == 0 && strcmp(param2, "A") == 0) {
+                addcode(0x44);
+            } else if (strcmp(param1, "[P]") == 0) {
+                addcode(0x70);
+                addcode(mathparse(param2, 8));
+            } else if (strcmp(param1, "A") == 0) {
+                addcode(0x74);
+                addcode(mathparse(param2, 8));
+            }
+        }
+        else if (strcmp(op, "MOV") == 0) {
+            if (strcmp(param1, "A") == 0 && strcmp(param2, "[+X]") == 0) {
+                addcode(36);
+            } else if (strcmp(param1, "A") == 0 && strcmp(param2, "[-X]") == 0) {
+                addcode(37);
+            } else if (strcmp(param1, "[+Y]") == 0 && strcmp(param2, "A") == 0) {
+                addcode(38);
+            } else if (strcmp(param1, "[-Y]") == 0 && strcmp(param2, "A") == 0) {
+                addcode(39);
+            } else if (strcmp(param1, "A") == 0 && strcmp(param2, "R") == 0) {
+                addcode(34);
+            } else if (strcmp(param1, "R") == 0 && strcmp(param2, "A") == 0) {
+                addcode(50);
+            } else if (strcmp(param1, "A") == 0 && strcmp(param2, "Q") == 0) {
+                addcode(33);
+            } else if (strcmp(param1, "Q") == 0 && strcmp(param2, "A") == 0) {
+                addcode(49);
+            } else if (strcmp(param1, "A") == 0 && strcmp(param2, "P") == 0) {
+                addcode(32);
+            } else if (strcmp(param1, "P") == 0 && strcmp(param2, "A") == 0) {
+                addcode(48);
+            } else if (strcmp(param1, "[P]") == 0 && strcmp(param2, "[DP]") == 0) {
+                addcode(85);
+            } else if (strcmp(param1, "[DP]") == 0 && strcmp(param2, "[P]") == 0) {
+                addcode(83);
+            } else if (strcmp(param1, "A") == 0 && strcmp(param2, "[DP]") == 0) {
+                addcode(87);
+            } else if (strcmp(param1, "[DP]") == 0 && strcmp(param2, "A") == 0) {
+                addcode(82);
+            } else if (strcmp(param1, "A") == 0 && strcmp(param2, "[P]") == 0) {
+                addcode(89);
+            } else if (strcmp(param1, "[P]") == 0 && strcmp(param2, "A") == 0) {
+                addcode(219);
+                addcode(89);
+            } else if (strcmp(param1, "A") == 0) {
+                addcode(2);
+                addcode(mathparse(param2, 8));
+            } else if (strcmp(param1, "B") == 0) {
+                addcode(3);
+                addcode(mathparse(param2, 8));
+            } else if (strcmp(param1, "I") == 0) {
+                addcode(0);
+                addcode(mathparse(param2, 8));
+            } else if (strcmp(param1, "J") == 0) {
+                addcode(1);
+                addcode(mathparse(param2, 8));
+            } else if (strcmp(param1, "P") == 0) {
+                addcode(18);
+                addcode(mathparse(param2, 8));
+            } else if (strcmp(param1, "Q") == 0) {
+                addcode(19);
+                addcode(mathparse(param2, 8));
+            } else if (strcmp(param1, "DPL") == 0) {
+                addcode(17);
+                addcode(mathparse(param2, 8));
+            } else if (strcmp(param1, "DP") == 0) {
+                addcode(16);
+                int val = mathparse(param2, 16);
+                addcode(val / 256);
+                addcode(val % 256);
+            }
+        }
+        else if (strcmp(op, "NOP") == 0) {
+            if (param1[0] == '\0') {
+                addcode(77); // NOP constant
+            } else {
+                addcode(78);
+                addcode(mathparse(param1, 8));
+            }
+        }
+        else if (strcmp(op, "LP") == 0) {
             int val = mathparse(param1, 8);
             if (val > 63) abort_c("LP command exceeds range!");
             addcode(128 + val);
