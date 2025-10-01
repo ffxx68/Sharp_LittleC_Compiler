@@ -9,9 +9,9 @@
         <Filename Value="pasm.dpr"/>
         <IsPartOfProject Value="True"/>
         <IsVisibleTab Value="True"/>
-        <TopLine Value="323"/>
-        <CursorPos X="6" Y="345"/>
-        <UsageCount Value="29"/>
+        <TopLine Value="404"/>
+        <CursorPos X="28" Y="429"/>
+        <UsageCount Value="30"/>
         <Loaded Value="True"/>
         <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit>
@@ -19,15 +19,11 @@
         <Filename Value="calcunit.pas"/>
         <IsPartOfProject Value="True"/>
         <EditorIndex Value="-1"/>
-        <UsageCount Value="29"/>
+        <UsageCount Value="30"/>
         <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit>
     </Units>
     <JumpHistory HistoryIndex="29">
-      <Position>
-        <Filename Value="pasm.dpr"/>
-        <Caret Line="493" TopLine="456"/>
-      </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
         <Caret Line="490" TopLine="456"/>
@@ -118,10 +114,6 @@
       </Position>
       <Position>
         <Filename Value="pasm.dpr"/>
-        <Caret Line="48" Column="38" TopLine="79"/>
-      </Position>
-      <Position>
-        <Filename Value="pasm.dpr"/>
         <Caret Line="547" Column="20" TopLine="517"/>
       </Position>
       <Position>
@@ -143,6 +135,14 @@
       <Position>
         <Filename Value="pasm.dpr"/>
         <Caret Line="346" TopLine="323"/>
+      </Position>
+      <Position>
+        <Filename Value="pasm.dpr"/>
+        <Caret Line="345" Column="6" TopLine="323"/>
+      </Position>
+      <Position>
+        <Filename Value="pasm.dpr"/>
+        <Caret Line="114" Column="15" TopLine="93"/>
       </Position>
     </JumpHistory>
     <RunParams>

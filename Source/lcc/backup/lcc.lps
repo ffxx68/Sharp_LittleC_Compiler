@@ -3,7 +3,7 @@
   <ProjectSession>
     <PathDelim Value="\"/>
     <Version Value="12"/>
-    <BuildModes Active="Release"/>
+    <BuildModes Active="Debug"/>
     <Units>
       <Unit>
         <Filename Value="lcc.dpr"/>
@@ -44,18 +44,19 @@
         <Filename Value="scanner.pas"/>
         <IsPartOfProject Value="True"/>
         <UnitName Value="Scanner"/>
-        <EditorIndex Value="3"/>
+        <EditorIndex Value="-1"/>
         <TopLine Value="431"/>
         <CursorPos X="11" Y="217"/>
         <UsageCount Value="246"/>
-        <Loaded Value="True"/>
+        <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit>
       <Unit>
         <Filename Value="parser.pas"/>
         <IsPartOfProject Value="True"/>
         <UnitName Value="Parser"/>
-        <TopLine Value="2014"/>
-        <CursorPos X="9" Y="2040"/>
+        <IsVisibleTab Value="True"/>
+        <TopLine Value="2122"/>
+        <CursorPos Y="2148"/>
         <UsageCount Value="246"/>
         <Loaded Value="True"/>
       </Unit>
@@ -70,9 +71,9 @@
       <Unit>
         <Filename Value="CodeGen.pas"/>
         <IsPartOfProject Value="True"/>
-        <EditorIndex Value="4"/>
-        <TopLine Value="715"/>
-        <CursorPos Y="728"/>
+        <EditorIndex Value="1"/>
+        <TopLine Value="710"/>
+        <CursorPos X="40" Y="634"/>
         <UsageCount Value="246"/>
         <Loaded Value="True"/>
       </Unit>
@@ -82,151 +83,138 @@
         <EditorIndex Value="-1"/>
         <TopLine Value="2020"/>
         <CursorPos X="87" Y="2038"/>
-        <UsageCount Value="9"/>
+        <UsageCount Value="8"/>
         <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\LittleC_Compiler_OLD\lcc_b1\Source\lcc\calcunit.pas"/>
-        <EditorIndex Value="2"/>
-        <UsageCount Value="17"/>
-        <Loaded Value="True"/>
+        <EditorIndex Value="-1"/>
+        <UsageCount Value="16"/>
+        <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit>
       <Unit>
         <Filename Value="..\pasm\calcunit.pas"/>
-        <IsVisibleTab Value="True"/>
-        <EditorIndex Value="1"/>
-        <UsageCount Value="10"/>
-        <Loaded Value="True"/>
+        <EditorIndex Value="-1"/>
+        <UsageCount Value="9"/>
         <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit>
     </Units>
-    <OtherDefines Count="5">
-      <Define0 Value="Borland"/>
-      <Define1 Value="Ver150"/>
-      <Define2 Value="Delphi7"/>
-      <Define3 Value="Compiler6_Up"/>
-      <Define4 Value="PUREPASCAL"/>
-    </OtherDefines>
-    <JumpHistory HistoryIndex="29">
+    <JumpHistory HistoryIndex="28">
       <Position>
         <Filename Value="parser.pas"/>
-        <Caret Line="1741" TopLine="1708"/>
+        <Caret Line="1569" TopLine="1547"/>
       </Position>
       <Position>
         <Filename Value="parser.pas"/>
-        <Caret Line="1742" TopLine="1708"/>
+        <Caret Line="1571" TopLine="1547"/>
       </Position>
       <Position>
         <Filename Value="parser.pas"/>
-        <Caret Line="1743" TopLine="1708"/>
+        <Caret Line="1577" TopLine="1547"/>
       </Position>
       <Position>
         <Filename Value="parser.pas"/>
-        <Caret Line="1748" TopLine="1711"/>
+        <Caret Line="1578" TopLine="1547"/>
       </Position>
       <Position>
         <Filename Value="parser.pas"/>
-        <Caret Line="1730" TopLine="1711"/>
+        <Caret Line="1579" TopLine="1547"/>
       </Position>
       <Position>
         <Filename Value="parser.pas"/>
-        <Caret Line="1752" TopLine="1715"/>
+        <Caret Line="1582" TopLine="1547"/>
       </Position>
       <Position>
         <Filename Value="parser.pas"/>
-        <Caret Line="888" Column="62" TopLine="857"/>
+        <Caret Line="1583" TopLine="1547"/>
       </Position>
       <Position>
         <Filename Value="parser.pas"/>
-        <Caret Line="1173" Column="68" TopLine="1148"/>
+        <Caret Line="1588" TopLine="1551"/>
       </Position>
       <Position>
         <Filename Value="parser.pas"/>
-        <Caret Line="884" Column="68" TopLine="852"/>
+        <Caret Line="1634" TopLine="1613"/>
       </Position>
       <Position>
         <Filename Value="parser.pas"/>
-        <Caret Line="1413" Column="32" TopLine="1377"/>
+        <Caret Line="1569" TopLine="1546"/>
       </Position>
       <Position>
         <Filename Value="parser.pas"/>
-        <Caret Line="2050" Column="20" TopLine="2037"/>
+        <Caret Line="1571" TopLine="1546"/>
+      </Position>
+      <Position>
+        <Filename Value="parser.pas"/>
+        <Caret Line="1577" TopLine="1546"/>
+      </Position>
+      <Position>
+        <Filename Value="parser.pas"/>
+        <Caret Line="1578" TopLine="1546"/>
+      </Position>
+      <Position>
+        <Filename Value="parser.pas"/>
+        <Caret Line="1579" TopLine="1546"/>
+      </Position>
+      <Position>
+        <Filename Value="parser.pas"/>
+        <Caret Line="1582" TopLine="1546"/>
+      </Position>
+      <Position>
+        <Filename Value="parser.pas"/>
+        <Caret Line="1583" TopLine="1546"/>
+      </Position>
+      <Position>
+        <Filename Value="parser.pas"/>
+        <Caret Line="1588" TopLine="1551"/>
+      </Position>
+      <Position>
+        <Filename Value="parser.pas"/>
+        <Caret Line="1569" Column="4" TopLine="1554"/>
+      </Position>
+      <Position>
+        <Filename Value="parser.pas"/>
+        <Caret Line="1002" TopLine="985"/>
+      </Position>
+      <Position>
+        <Filename Value="parser.pas"/>
+        <Caret Line="1005" TopLine="985"/>
+      </Position>
+      <Position>
+        <Filename Value="parser.pas"/>
+        <Caret Line="1006" TopLine="985"/>
+      </Position>
+      <Position>
+        <Filename Value="parser.pas"/>
+        <Caret Line="1007" TopLine="985"/>
+      </Position>
+      <Position>
+        <Filename Value="parser.pas"/>
+        <Caret Line="1008" TopLine="985"/>
+      </Position>
+      <Position>
+        <Filename Value="parser.pas"/>
+        <Caret Line="1009" TopLine="985"/>
+      </Position>
+      <Position>
+        <Filename Value="parser.pas"/>
+        <Caret Line="1011" TopLine="985"/>
+      </Position>
+      <Position>
+        <Filename Value="parser.pas"/>
+        <Caret Line="1013" TopLine="985"/>
+      </Position>
+      <Position>
+        <Filename Value="parser.pas"/>
+        <Caret Line="1015" TopLine="985"/>
+      </Position>
+      <Position>
+        <Filename Value="parser.pas"/>
+        <Caret Line="1017" TopLine="985"/>
       </Position>
       <Position>
         <Filename Value="CodeGen.pas"/>
-        <Caret Line="24" Column="11" TopLine="2"/>
-      </Position>
-      <Position>
-        <Filename Value="parser.pas"/>
-        <Caret Line="2019" Column="54" TopLine="2007"/>
-      </Position>
-      <Position>
-        <Filename Value="CodeGen.pas"/>
-        <Caret Line="733" Column="25" TopLine="720"/>
-      </Position>
-      <Position>
-        <Filename Value="parser.pas"/>
-        <Caret Line="2019" Column="15" TopLine="1997"/>
-      </Position>
-      <Position>
-        <Filename Value="parser.pas"/>
-        <Caret Line="2050" Column="15" TopLine="2013"/>
-      </Position>
-      <Position>
-        <Filename Value="parser.pas"/>
-        <Caret Line="2128" Column="42" TopLine="2091"/>
-      </Position>
-      <Position>
-        <Filename Value="CodeGen.pas"/>
-        <Caret Line="23" Column="20" TopLine="10"/>
-      </Position>
-      <Position>
-        <Filename Value="parser.pas"/>
-        <Caret Line="1899" Column="62" TopLine="1865"/>
-      </Position>
-      <Position>
-        <Filename Value="parser.pas"/>
-        <Caret Line="2018" Column="15" TopLine="1981"/>
-      </Position>
-      <Position>
-        <Filename Value="parser.pas"/>
-        <Caret Line="2079" Column="24" TopLine="2049"/>
-      </Position>
-      <Position>
-        <Filename Value="parser.pas"/>
-        <Caret Line="2127" Column="25" TopLine="2087"/>
-      </Position>
-      <Position>
-        <Filename Value="parser.pas"/>
-        <Caret Line="1885" Column="15" TopLine="1862"/>
-      </Position>
-      <Position>
-        <Filename Value="parser.pas"/>
-        <Caret Line="1899" Column="23" TopLine="1862"/>
-      </Position>
-      <Position>
-        <Filename Value="parser.pas"/>
-        <Caret Line="1839" Column="26" TopLine="1804"/>
-      </Position>
-      <Position>
-        <Filename Value="parser.pas"/>
-        <Caret Line="2039" TopLine="2014"/>
-      </Position>
-      <Position>
-        <Filename Value="parser.pas"/>
-        <Caret Line="2040" TopLine="2014"/>
-      </Position>
-      <Position>
-        <Filename Value="parser.pas"/>
-        <Caret Line="2039" TopLine="2014"/>
-      </Position>
-      <Position>
-        <Filename Value="parser.pas"/>
-        <Caret Line="2040" TopLine="2014"/>
-      </Position>
-      <Position>
-        <Filename Value="parser.pas"/>
-        <Caret Line="2041" TopLine="2014"/>
+        <Caret Line="427" Column="16" TopLine="393"/>
       </Position>
     </JumpHistory>
     <RunParams>
@@ -266,7 +254,7 @@
         <WatchScope Value="wpsLocal"/>
         <WatchKind Value="wpkWrite"/>
         <Source Value="parser.pas"/>
-        <Line Value="1731"/>
+        <Line Value="2223"/>
       </Item>
     </BreakPoints>
     <Watches>
@@ -278,6 +266,12 @@
       </Item>
       <Item>
         <Expression Value="optype"/>
+      </Item>
+      <Item>
+        <Expression Value="ProcList"/>
+      </Item>
+      <Item>
+        <Expression Value="Name"/>
       </Item>
     </Watches>
   </Debugging>
