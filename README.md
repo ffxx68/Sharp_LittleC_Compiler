@@ -252,26 +252,20 @@ The C version of `lcpp` can be found in `Source/C/lcpp/` and includes:
 - Full compatibility with the original Pascal version
 - Comprehensive test suite
 
-#### ✅ PASM (Assembler) - COMPLETATO
-The assembler component (`pasm`) has been successfully migrated from Pascal to C with full binary compatibility verified.
+#### 🔄 PASM (Assembler) - UNDER VERIFICATION
+The assembler component (`pasm`) has been migrated from Pascal to C, but thorough verification of binary and functional compatibility is still ongoing.
 
-**Status:** Production ready - generates identical binary output to Pascal original
+**Status:** Testing in progress - full verification is NOT yet complete
 
-**Key achievements:**
-- Complete migration of all core assembly functions
-- Critical bug fix for relative jumps (JRM instruction handling)
-- Exact replication of OPCODE[256] and NBARGU[256] arrays from Pascal
-- Binary-identical output verified with `test_org_equ.asm`
-- Robust error handling and memory safety improvements
+**Note:** For up-to-date test status, details on covered cases, and any discrepancies found between the Pascal and C versions, please refer to the `README.md` file in `Source/C/pasm/`.
 
-**Test Suite Results:**
-- ✅ Basic assembly instructions (LIA, NOP)
-- ✅ Directive handling (.ORG, .EQU) 
-- ✅ Label resolution and symbol table
-- ✅ Relative jumps (JRP, JRM) - critical fix implemented
-- ✅ Binary output verification: `fc.exe /b` shows identical results
+**Main results so far:**
+- Migration of core assembler functions
+- Critical fix in relative jump handling (JRM instruction)
+- Replication of OPCODE[256] and NBARGU[256] tables from Pascal
+- Initial binary output checks with `fc.exe /b`
 
-**Location:** `Source/C/pasm/` - includes full test suite and verification binaries
+**Location:** `Source/C/pasm/` - includes test suite and verification binaries
 
 #### 🔄 LCC (Compiler) - TODO
 Future plans include migrating the main compiler component (`lcc`) to complete the fully modernized, cross-platform toolchain.
