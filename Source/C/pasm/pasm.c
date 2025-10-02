@@ -8,12 +8,18 @@
 #include <stdbool.h>
 #include <ctype.h>
 #include "pasm_constants.h"
+#include <stdarg.h>
 
 #define CODE_SIZE 100001
 #define SYM_SIZE 1001
 #define LAB_SIZE 1001
 #define NLAB_SIZE 1001
 
+// Dichiarazioni forward
+void doasm(const char *line);
+void extractop(const char *src);
+int mathparse(const char *expr, int base);
+int calcadr();
 
 // Variabili globali
 char tok[256], op[256], param1[256], param2[256], params[256];
@@ -33,6 +39,36 @@ int startadr = 0, blcnt, opp = 0;
 bool mcase = false;
 int ccase = 0, casecnt = 0, cline = 0, i = 0;
 char s[1024], cf[256];
+
+// Handle globale per il file di debug e flag di controllo
+FILE *debug_file = NULL;
+bool debug_enabled = false;
+
+// Funzione per aprire il file di debug
+void open_debug_file() {
+    if (debug_enabled && !debug_file) {
+        debug_file = fopen("debug.txt", "w");
+    }
+}
+
+// Funzione per scrivere nel file di debug
+void write_debug(const char *format, ...) {
+    if (debug_file) {
+        va_list args;
+        va_start(args, format);
+        vfprintf(debug_file, format, args);
+        va_end(args);
+        fflush(debug_file);
+    }
+}
+
+// Funzione per chiudere il file di debug
+void close_debug_file() {
+    if (debug_file) {
+        fclose(debug_file);
+        debug_file = NULL;
+    }
+}
 
 // Funzione di utilità: trim (rimuove spazi, tab, newline)
 void trim(char *str) {
@@ -245,42 +281,58 @@ void extractop(const char *src) {
     }
 }
 
-// Funzione di utilità: calcadr migliorata per gestire simboli
+// Funzione di utilità: calcadr migliorata per replicare esattamente la logica Pascal
 int calcadr() {
-    int val = 0;
-    char *endptr;
+    int i = 0;
+    char s[256], s2[256];
+    bool lf = false;
 
-    // Prima prova a convertire come numero
-    val = (int)strtol(param1, &endptr, 0);
-    if (*endptr == '\0') {
-        return val; // È un numero valido
-    }
-
-    // Se non è un numero, cerca tra i simboli
-    for (int i = 0; i < symcnt; i++) {
-        if (strcmp(sym[i], param1) == 0) {
-            return atoi(symval[i]);
+    // Replica la logica Pascal: scansiona params per trovare etichette
+    while (i < strlen(params)) {
+        // Salta numeri esadecimali (0x...)
+        if (i < strlen(params) - 2 && params[i] == '0' && toupper(params[i+1]) == 'X') {
+            i += 2;
+            while (i < strlen(params) && (isdigit(params[i]) || (toupper(params[i]) >= 'A' && toupper(params[i]) <= 'F'))) i++;
         }
-    }
+        // Salta numeri binari (0b...)
+        else if (i < strlen(params) - 2 && params[i] == '0' && toupper(params[i+1]) == 'B') {
+            i += 2;
+            while (i < strlen(params) && (params[i] == '0' || params[i] == '1')) i++;
+        }
+        // Cerca etichette (iniziano con lettera o underscore)
+        else if (isalpha(params[i]) || params[i] == '_') {
+            int j = 0;
+            s[0] = '\0';
+            // Estrai il nome dell'etichetta
+            while (i < strlen(params) && (isalnum(params[i]) || params[i] == '_')) {
+                s[j++] = toupper(params[i++]);
+            }
+            s[j] = '\0';
 
-    // Per i salti relativi, restituisci l'indirizzo assoluto dell'etichetta
-    if (opp == 44 || opp == 45 || (opp >= 40 && opp <= 43) || (opp >= 56 && opp <= 59) || opp == 47) {
-        if (findlabel(param1)) {
-            return labpos[labp] + startadr;  // Indirizzo assoluto come nel Pascal
+            if (!findlabel(s)) {
+                addnlabel(s);
+                lf = true;
+            } else {
+                // Sostituisci l'etichetta con il suo valore assoluto come fa Pascal
+                snprintf(s2, 255, "%d", startadr + labpos[labp]);
+                replace_text(params, s, s2);
+                strcpy(param1, params);
+                param2[0] = '\0';
+                i = i - strlen(s) + strlen(s2);
+            }
         } else {
-            addnlabel(param1);
-            return 0; // Placeholder
+            i++;
         }
     }
 
-    // Per altri tipi di istruzioni, cerca le etichette
-    if (findlabel(param1)) {
-        return labpos[labp] + startadr;
+    // Restituisci il risultato come fa Pascal
+    if (lf) {
+        return 0;  // Etichetta non risolta
+    } else if (param2[0] == '\0') {
+        return mathparse(param1, 16);
+    } else {
+        return mathparse(param1, 8) * 256 + mathparse(param2, 8);
     }
-
-    // Se non trovato da nessuna parte, aggiungi come etichetta non risolta
-    addnlabel(param1);
-    return 0;
 }
 
 
@@ -467,22 +519,22 @@ void doasm(const char *line) {
         // Gestione salti relativi
         else if (in_set(opp, JR, 11)) {
             adr = calcadr();
+            write_debug("DEBUG: JR/JRPLUS codpos=%d startadr=%d adr=%d param1=%s\n", codpos, startadr, adr, param1);
             addcode(opp);
             if (adr >= 8192) {
                 if (in_set(opp, JRPLUS, 5)) {
-                    addcode(adr - codpos - startadr);
+                    write_debug("DEBUG: JRPLUS offset usato = %d\n", adr - codpos - startadr);
+                    addcode(adr - codpos - startadr);  // Fix: usa la formula Pascal corretta
                 } else {
+                    write_debug("DEBUG: JRMINUS offset usato = %d\n", abs(codpos + startadr - adr));
                     addcode(abs(codpos + startadr - adr));
                 }
             } else if (adr > 0) {
-                // Per tutti i salti relativi, calcola l'offset relativo
-                if (in_set(opp, JRPLUS, 5)) {
-                    addcode(adr - codpos - startadr);
-                } else {
-                    addcode(abs(codpos + startadr - adr));
-                }
+                write_debug("DEBUG: JR diretto adr usato = %d\n", adr);
+                addcode(adr);
             } else {
-                addcode(0); // Placeholder per etichette non risolte
+                write_debug("DEBUG: JR placeholder 0 (etichetta non risolta)\n");
+                addcode(0);
             }
         }
         // Gestione istruzioni normali
@@ -628,6 +680,7 @@ void doasm(const char *line) {
     }
 }
 
+
 // Funzione di utilità: resolve_labels_and_write_bin implementazione completa
 void resolve_labels_and_write_bin(const char *output_filename) {
     FILE *fout;
@@ -661,18 +714,16 @@ void resolve_labels_and_write_bin(const char *output_filename) {
                 if (findop(op)) {
                     // Sostituisci il placeholder NOP con l'istruzione vera
                     if (in_set(opp, JR, 11)) {
-                        // Salto relativo - usa posizioni relative
-                        int dest = labpos[labp];  // Posizione relativa dell'etichetta
-                        int current = codpos + 2; // Posizione corrente + dimensione istruzione
-                        int offset = dest - current; // Calcolo offset relativo
-                        code[codpos] = opp;
-                        code[codpos + 1] = offset & 0xFF;
+                        int dest = labpos[labp];
+                        int offset = dest - (nlabpos[i] + 1);
+                        write_debug("RESOLVE: nlab=%s nlabpos=%d dest=%d current=%d offset=%d\n", nlab[i], nlabpos[i], dest, nlabpos[i] + 1, offset);
+                        code[nlabpos[i]] = opp;
+                        code[nlabpos[i] + 1] = offset & 0xFF;
                     } else if (opp == 120 || opp == 121 || opp == 16 || (opp >= 124 && opp <= 127)) {
-                        // Salto assoluto
                         int dest = labpos[labp] + startadr;
-                        code[codpos] = opp;
-                        code[codpos + 1] = dest / 256;
-                        code[codpos + 2] = dest % 256;
+                        code[nlabpos[i]] = opp;
+                        code[nlabpos[i] + 1] = dest / 256;
+                        code[nlabpos[i] + 2] = dest % 256;
                     }
                 }
 
@@ -734,20 +785,73 @@ void resolve_labels_and_write_bin(const char *output_filename) {
     }
 }
 
-// Funzione main di esempio (da estendere per lettura file)
+// Funzione per mostrare l'help
+void show_help(const char *program_name) {
+    printf("Uso: %s [opzioni] <file.asm> <file.bin>\n", program_name);
+    printf("\nOpzioni:\n");
+    printf("  -d, --debug    Abilita la generazione del file debug.txt\n");
+    printf("  -h, --help     Mostra questo messaggio di aiuto\n");
+    printf("\nEsempi:\n");
+    printf("  %s program.asm program.bin\n", program_name);
+    printf("  %s -d program.asm program.bin    (con debug abilitato)\n", program_name);
+}
+
+// Funzione main con gestione opzioni
 int main(int argc, char *argv[]) {
     char line[1024];
     FILE *fin;
-    if (argc < 3) {
-        printf("Uso: %s <file.asm> <file.bin>\n", argv[0]);
+    char *input_file = NULL;
+    char *output_file = NULL;
+
+    // Parsing degli argomenti da riga di comando
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "--debug") == 0) {
+            debug_enabled = true;
+        } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
+            show_help(argv[0]);
+            return 0;
+        } else if (argv[i][0] == '-') {
+            fprintf(stderr, "Opzione sconosciuta: %s\n", argv[i]);
+            show_help(argv[0]);
+            return 1;
+        } else {
+            // Argomenti posizionali (file input e output)
+            if (input_file == NULL) {
+                input_file = argv[i];
+            } else if (output_file == NULL) {
+                output_file = argv[i];
+            } else {
+                fprintf(stderr, "Troppi argomenti!\n");
+                show_help(argv[0]);
+                return 1;
+            }
+        }
+    }
+
+    // Verifica che siano stati forniti i file necessari
+    if (input_file == NULL || output_file == NULL) {
+        fprintf(stderr, "Errore: Specificare file di input e output\n");
+        show_help(argv[0]);
         return 1;
     }
-    fin = fopen(argv[1], "r");
+
+    // Apri il file di debug solo se richiesto
+    open_debug_file();
+
+    if (debug_enabled) {
+        printf("Debug abilitato: generazione di debug.txt\n");
+    }
+
+    fin = fopen(input_file, "r");
     if (!fin) {
         perror("Errore apertura file sorgente");
+        close_debug_file();
         return 1;
     }
+
+    strcpy(cf, input_file); // Salva il nome del file per i messaggi di errore
     cline = 0;
+
     while (fgets(line, sizeof(line), fin)) {
         cline++;
         // Rimuovi newline
@@ -755,7 +859,10 @@ int main(int argc, char *argv[]) {
         doasm(line);
     }
     fclose(fin);
+
     printf("Assemblaggio completato. Byte generati: %d\n", codpos);
-    resolve_labels_and_write_bin(argv[2]);
+    resolve_labels_and_write_bin(output_file);
+    close_debug_file();
+
     return 0;
 }
