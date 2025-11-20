@@ -2,56 +2,68 @@
 
 ## Project Overview
 
-This project documents the migration of the **PASM** assembler from the original Pascal language to C, with the goal of maintaining full functional compatibility and identical binary output.
+Questo progetto documenta la migrazione dell'assembler **PASM** dall'originale Pascal a C, con l'obiettivo di mantenere piena compatibilità funzionale e output binario identico.
 
-**Last modified:** October 2, 2025
+**Ultima modifica:** 20 novembre 2025
 
-## Current Status - 🔄 VALIDATION IN PROGRESS
+## Stato attuale - 🔄 VALIDAZIONE IN CORSO
 
-### ⚠️ Validation Tests Ongoing
+### ⚠️ Test di validazione
 
-- The migration of the codebase is complete and initial validation tests are passing
-- **Two test cases** have been successfully verified with binary-identical output
-- **Additional testing required** for complex features and edge cases
-- The assembler should NOT be considered fully production-ready until all validation steps are complete
+- La migrazione del codice è completa e i test iniziali sono in corso
+- **Test 2 (test_jump_only.asm)** ha prodotto output binario identico
+- **Test 1 (test_jrm.asm)** presenta differenze tra i file binari generati
+- Sono richiesti ulteriori test su funzionalità avanzate e casi limite
+- L'assembler NON è ancora considerato pronto per la produzione finché tutti i test non saranno superati
 
-## Compatibility Verification - ✅ PARTIAL SUCCESS
+## Script di confronto
 
-### Tests Performed
+Per automatizzare la verifica tra i file binari generati dalle versioni C e Pascal di pasm.exe, è disponibile lo script PowerShell `test_pasm.ps1` nella cartella `Source/C/pasm`. Lo script:
+- Compila il file .asm indicato con entrambe le versioni di pasm
+- Genera i file binari con suffisso `_c.bin` e `_pascal.bin`
+- Esegue automaticamente il confronto binario tramite `fc.exe /b`
+- Mostra a terminale eventuali differenze
 
-#### Test 1: Basic Directives and Backward Jumps ✅ PASSED
-- **Test file:** `test_org_equ.asm`
-- **Binary comparison:** `fc.exe /b test_org_equ_corrected.bin test_org_equ_pascal.bin`
-- **Result:** **IDENTICAL byte by byte** ✅
+Esempio d'uso:
+```
+.\test_pasm.ps1 nomefile.asm
+```
 
-#### Test 2: Forward Jumps and Label Resolution ✅ PASSED
-- **Test file:** `test_jump_forward.asm`
-- **Features tested:** Forward jump (`JRP NEXT`), label resolution, etichette non ancora definite
-- **Binary comparison:** `fc.exe /b test_jump_forward_c.bin test_jump_forward_pascal.bin`
-- **Result:** **IDENTICAL byte by byte** ✅
+## Verifica compatibilità - ⚠️ SUCCESSO PARZIALE
+
+### Test eseguiti
+
+#### Test 1: Direttive base e salti all'indietro ❌ FALLITO
+- **File di test:** `test_jrm.asm` (ex test_org_equ.asm)
+- **Confronto binario:** `fc.exe /b test_jrm_c.bin test_jrm_pascal.bin`
+- **Risultato:** **DIFFERENZE TROVATE** ❌
+- **Note:** I file binari generati non sono identici. Serve analisi e correzione della logica di generazione.
+
+#### Test 2: Salto relativo in avanti e risoluzione etichette ✅ SUPERATO
+- **File di test:** `test_jump_only.asm`
+- **Confronto binario:** `fc.exe /b test_jump_only_c.bin test_jump_only_pascal.bin`
+- **Risultato:** **IDENTICI byte per byte** ✅
 - **Debug output:** File `debug.txt` generato correttamente con traccia di risoluzione etichette
 
-#### Test 3: Extended Features ⏳ PENDING
-- **Test file:** `test_extended_features.asm`
-- **Status:** **NOT YET TESTED**
-- **Features to verify:** Complex assembly constructs, edge cases, advanced directives
+#### Test 3: Funzionalità estese ⏳ IN ATTESA
+- **File di test:** `test_extended_features.asm`
+- **Stato:** **NON ANCORA TESTATO**
+- **Da verificare:** Costrutti complessi, casi limite, direttive avanzate
 
-### Verified Features
-- ✅ Handling of `.ORG 40000` and `.EQU regB 3` directives
-- ✅ Assembly of `LIA regB` instructions (02 03)
-- ✅ Relative jumps `JRM START` (2D 03)
-- ✅ Forward jumps `JRP NEXT`
-- ✅ Forward label resolution
-- ✅ Symbol and label resolution
-- ✅ Generation of binary file identical to Pascal
-- ✅ Debug mode (-d flag)
+### Funzionalità verificate
+- ✅ Gestione di `.ORG 40000` e `.EQU regB 3`
+- ✅ Assembly di `LIA regB` (02 03)
+- ✅ Salti relativi in avanti `JRP NEXT`
+- ✅ Risoluzione etichette forward
+- ✅ Generazione file binario identico a Pascal (test 2)
+- ✅ Modalità debug (-d flag)
 
-### Features Still to Verify
-- ⏳ Extended assembly features in `test_extended_features.asm`
-- ⏳ Complex edge cases and error conditions
-- ⏳ All demo files compatibility
+### Funzionalità da verificare
+- ⏳ Funzionalità estese in `test_extended_features.asm`
+- ⏳ Casi limite e condizioni di errore
+- ⏳ Compatibilità con tutti i file demo
 
-## File Structure
+## Struttura file
 
 ```
 Source/C/pasm/
@@ -59,12 +71,15 @@ Source/C/pasm/
 ├── pasm_constants.h            # Header with protected OPCODE/NBARGU arrays
 ├── pasm.exe                    # Generated C executable
 ├── debug.txt                   # Debug output (when -d flag used)
-├── test_org_equ.asm            # Assembly test file (backward jumps)
-├── test_org_equ_pascal.bin     # Pascal reference output
-├── test_org_equ_corrected.bin  # Verified identical C output
+├── test_jrm.asm                # Assembly test file (backward jumps, ex test_org_equ.asm)
+├── test_jrm_pascal.bin         # Pascal reference output
+├── test_jrm_corrected.bin      # Verified identical C output
 ├── test_jump_forward.asm       # Assembly test file (forward jumps)
 ├── test_jump_forward_c.bin     # C version output
 ├── test_jump_forward_pascal.bin # Pascal reference output
+├── test_jump_only.asm          # Assembly test file (relative jump only)
+├── test_jump_only_c.bin        # C version output
+├── test_jump_only_pascal.bin   # Pascal reference output
 ├── test_extended_features.asm  # Complex features test ⏳ PENDING
 └── README.md                   # This file
 ```
@@ -79,35 +94,37 @@ Source/C/pasm/
   - Debug di salti relativi e calcolo offset
   - Informazioni dettagliate su operazioni JR/JRPLUS
 
-## Next Steps - 🔄 TESTING REQUIRED
+## Prossimi passi - 🔄 TEST IN ATTESA
 
-### Pending Tasks
-- ⏳ **Test extended features** with `test_extended_features.asm`
-- ⏳ **Verify complex assembly constructs**
-- ⏳ **Test edge cases and error handling**
-- ⏳ **Validate all demo files**
+### Task da completare
+- ⏳ **Analisi e correzione della logica di generazione per test 1**
+- ⏳ **Test funzionalità estese** con `test_extended_features.asm`
+- ⏳ **Verifica costrutti complessi**
+- ⏳ **Test casi limite e gestione errori**
+- ⏳ **Validazione di tutti i file demo**
 
-### Optional Future Enhancements
+### Miglioramenti futuri opzionali
 - [ ] Performance benchmarking vs Pascal version
 - [ ] Extended error reporting and validation
 - [ ] Integration with build system
 
-## Current Status Summary
+## Sommario stato attuale
 
-**The PASM C migration is FUNCTIONALLY COMPLETE but requires additional validation.** 
+**La migrazione PASM C è FUNZIONALMENTE COMPLETA ma richiede ulteriore validazione.** 
 
-✅ **Working and verified:**
-- Basic assembly instructions
-- Backward relative jumps (JRM)
-- Forward relative jumps (JRP)  
-- Label resolution (both forward and backward)
-- Basic assembler directives (.org, .equ)
-- Debug mode functionality
+✅ **Funzionalità verificate:**
+- Salti relativi in avanti (JRP)
+- Risoluzione etichette forward
+- Direttive base (.org, .equ)
+- Modalità debug
 
-⏳ **Still to be tested:**
-- Extended features and complex constructs
-- Edge cases and error conditions
-- Full demo compatibility
+❌ **Non ancora compatibile:**
+- Salti all'indietro (JRM) e direttive base (test_jrm.asm)
+
+⏳ **Da testare:**
+- Funzionalità estese e costrutti complessi
+- Casi limite e condizioni di errore
+- Compatibilità demo completa
 
 ---
-*Status as of: October 2, 2025 - Partial validation completed, extended testing pending*
+*Stato al: 20 novembre 2025 - Validazione parziale, test estesi in attesa*

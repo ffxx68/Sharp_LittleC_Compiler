@@ -56,6 +56,8 @@ void write_debug(const char *format, ...) {
     if (debug_file) {
         va_list args;
         va_start(args, format);
+        // Stampa la linea di origine prima del messaggio
+        fprintf(debug_file, "[Linea %d] ", cline);
         vfprintf(debug_file, format, args);
         va_end(args);
         fflush(debug_file);
@@ -225,15 +227,24 @@ bool findop(const char *l) {
     for (i = 0; i < 256; i++) {
         if (strcmp(OPCODE[i], l) == 0) {
             opp = i;
+            if (debug_enabled) {
+                write_debug("DEBUG: findop match: op='%s' index=%d\n", l, i);
+            }
             return true;
         }
+    }
+    if (debug_enabled) {
+        write_debug("DEBUG: findop NO match: op='%s'\n", l);
     }
     return false;
 }
 
 // Funzione di utilità: addcode
 void addcode(unsigned char b) {
-    code[codpos] = b;
+    if (debug_enabled) {
+        write_debug("DEBUG: addcode b=%d codpos=%d\n", b, codpos);
+    }
+    code[codpos] = (unsigned char)(b & 0xFF);
     codpos++;
     if (codpos + startadr >= 65536) {
         abort_c("Code exceeds maximum memory!");
@@ -329,7 +340,7 @@ int calcadr() {
     if (lf) {
         return 0;  // Etichetta non risolta
     } else if (param2[0] == '\0') {
-        return mathparse(param1, 16);
+        return mathparse(param1, 10);
     } else {
         return mathparse(param1, 8) * 256 + mathparse(param2, 8);
     }
@@ -386,6 +397,16 @@ void doasm(const char *line) {
 
     // Ignora righe vuote e commenti
     if (s[0] == '\0' || s[0] == ';') return;
+
+    // Ignora righe che contengono solo spazi o tab
+    bool only_whitespace = true;
+    for (int i = 0; s[i] != '\0'; i++) {
+        if (s[i] != ' ' && s[i] != '\t') {
+            only_whitespace = false;
+            break;
+        }
+    }
+    if (only_whitespace) return;
 
     // Gestisce le etichette (righe che contengono ':' come etichetta) PRIMA di extractop
     char *colon = strchr(s, ':');
@@ -471,19 +492,19 @@ void doasm(const char *line) {
         if (strncasecmp(s, ".db", 3) == 0) {
             char *rest = s + 3;
             while (*rest == ' ' || *rest == '\t') rest++;
-
-            // Processa i parametri separati da virgola
             char *token = strtok(rest, ",");
             while (token != NULL) {
-                // Rimuovi spazi iniziali e finali dal token
                 while (*token == ' ' || *token == '\t') token++;
                 char *end = token + strlen(token) - 1;
                 while (end > token && (*end == ' ' || *end == '\t')) end--;
                 *(end+1) = '\0';
-
-                // Converte il token in byte e lo aggiunge al codice
-                addcode(mathparse(token, 8));
-
+                if (strlen(token) > 0) {
+                    int val = mathparse(token, 0);
+                    if (debug_enabled) {
+                        write_debug("DEBUG: .DB token='%s' val=%d\n", token, val);
+                    }
+                    addcode(val);
+                }
                 token = strtok(NULL, ",");
             }
             return;
@@ -493,6 +514,9 @@ void doasm(const char *line) {
 
     // Estrai operazione e parametri SOLO se non è un'etichetta o direttiva
     extractop(s);
+    if (debug_enabled) {
+        write_debug("DEBUG: op='%s' param1='%s' param2='%s'\n", op, param1, param2);
+    }
 
     // Pulisci param1 rimuovendo virgole finali
     if (strlen(param1) > 0 && param1[strlen(param1) - 1] == ',') {
@@ -526,8 +550,8 @@ void doasm(const char *line) {
                     write_debug("DEBUG: JRPLUS offset usato = %d\n", adr - codpos - startadr);
                     addcode(adr - codpos - startadr);  // Fix: usa la formula Pascal corretta
                 } else {
-                    write_debug("DEBUG: JRMINUS offset usato = %d\n", abs(codpos + startadr - adr));
-                    addcode(abs(codpos + startadr - adr));
+                    write_debug("DEBUG: JRMINUS offset usato = %d\n", (codpos + startadr) - adr);
+                    addcode((codpos + startadr) - adr);
                 }
             } else if (adr > 0) {
                 write_debug("DEBUG: JR diretto adr usato = %d\n", adr);
@@ -541,15 +565,21 @@ void doasm(const char *line) {
         else {
             addcode(opp);
             if (NBARGU[opp] == 2) {
-                addcode(mathparse(param1, 8));
+                if (strlen(param1) > 0) {
+                    addcode(mathparse(param1, 8));
+                }
             } else if (NBARGU[opp] == 3) {
                 if (param2[0] == '\0') {
                     int val = mathparse(param1, 16);
                     addcode((val >> 8) & 0xFF);
                     addcode(val & 0xFF);
                 } else {
-                    addcode(mathparse(param1, 8));
-                    addcode(mathparse(param2, 8));
+                    if (strlen(param1) > 0) {
+                        addcode(mathparse(param1, 8));
+                    }
+                    if (strlen(param2) > 0) {
+                        addcode(mathparse(param2, 8));
+                    }
                 }
             }
         }
