@@ -1,6 +1,6 @@
 // pasm.c
-// File generato per la migrazione da Pascal a C
-// Strutture dati e costanti iniziali
+// File generated for migration from Pascal to C
+// Data structures and initial constants
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,13 +15,13 @@
 #define LAB_SIZE 1001
 #define NLAB_SIZE 1001
 
-// Dichiarazioni forward
+// Forward declarations
 void doasm(const char *line);
 void extractop(const char *src);
 int mathparse(const char *expr, int base);
 int calcadr();
 
-// Variabili globali
+// Global variables
 char tok[256], op[256], param1[256], param2[256], params[256];
 unsigned char code[CODE_SIZE];
 int codpos = 0;
@@ -30,6 +30,7 @@ char symval[SYM_SIZE][256];
 int symcnt = 0;
 char lab[LAB_SIZE][256];
 int labpos[LAB_SIZE];
+int labbase[LAB_SIZE];
 int labcnt = 0, labp = 0;
 char nlab[NLAB_SIZE][256];
 int nlabpos[NLAB_SIZE];
@@ -40,31 +41,31 @@ bool mcase = false;
 int ccase = 0, casecnt = 0, cline = 0, i = 0;
 char s[1024], cf[256];
 
-// Handle globale per il file di debug e flag di controllo
+// Global handle for debug file and control flag
 FILE *debug_file = NULL;
 bool debug_enabled = false;
 
-// Funzione per aprire il file di debug
+// Function to open the debug file
 void open_debug_file() {
     if (debug_enabled && !debug_file) {
         debug_file = fopen("debug.txt", "w");
     }
 }
 
-// Funzione per scrivere nel file di debug
+// Function to write to the debug file
 void write_debug(const char *format, ...) {
     if (debug_file) {
         va_list args;
         va_start(args, format);
-        // Stampa la linea di origine prima del messaggio
-        fprintf(debug_file, "[Linea %d] ", cline);
+        // Print the source line number before the message
+        fprintf(debug_file, "[Line %d] ", cline);
         vfprintf(debug_file, format, args);
         va_end(args);
         fflush(debug_file);
     }
 }
 
-// Funzione per chiudere il file di debug
+// Function to close the debug file
 void close_debug_file() {
     if (debug_file) {
         fclose(debug_file);
@@ -72,32 +73,32 @@ void close_debug_file() {
     }
 }
 
-// Funzione di utilità: trim (rimuove spazi, tab, newline)
+// Utility: trim (remove spaces, tabs, newline)
 void trim(char *str) {
     char *end;
     char *start = str;
 
-    // Trova l'inizio dei caratteri non-whitespace
+    // Find the start of non-whitespace characters
     while(*start == ' ' || *start == '\t' || *start == '\n' || *start == '\r') start++;
 
-    // Se la stringa è tutta whitespace
+    // If the string is all whitespace
     if(*start == 0) {
         str[0] = 0;
         return;
     }
 
-    // Sposta i caratteri all'inizio della stringa se necessario
+    // Move characters to the beginning of the string if necessary
     if (start != str) {
         memmove(str, start, strlen(start) + 1);
     }
 
-    // Trim spazi finali
+    // Trim trailing spaces
     end = str + strlen(str) - 1;
     while(end > str && (*end == ' ' || *end == '\t' || *end == '\n' || *end == '\r')) end--;
     *(end+1) = 0;
 }
 
-// Funzione di utilità: replace_text
+// Utility: replace_text (safe copy limit)
 void replace_text(char *text, const char *such, const char *ers) {
     char buffer[1024];
     char *pos, *start = text;
@@ -111,18 +112,19 @@ void replace_text(char *text, const char *such, const char *ers) {
         start = pos + such_len;
     }
     strcat(buffer, start);
-    strncpy(text, buffer, 1023);
-    text[1023] = '\0';
+    // Copia sicura limitata alla dimensione del buffer destinazione (256)
+    snprintf(text, 256, "%s", buffer);
+    text[255] = '\0';
     trim(text);
 }
 
-// Funzione di utilità: abort
+// Utility: abort
 void abort_c(const char *t) {
     fprintf(stderr, "Line %d: %s in file %s\n", cline + 1, t, cf);
     exit(1);
 }
 
-// Funzione di utilità: findnlabel
+// Utility: findnlabel
 bool findnlabel(const char *l) {
     char up[256];
     int i;
@@ -139,13 +141,18 @@ bool findnlabel(const char *l) {
     return false;
 }
 
-// Funzione di utilità: addnlabel
+// Utility: addnlabel
 void addnlabel(const char *l) {
     char up[256];
     int i;
     strncpy(up, l, 255);
     up[255] = '\0';
     for (i = 0; up[i]; i++) up[i] = toupper(up[i]);
+    // Validate label name: must start with letter or underscore and contain only alnum or underscore
+    if (!(isalpha((unsigned char)up[0]) || up[0] == '_')) return;
+    for (i = 1; up[i]; i++) {
+        if (!(isalnum((unsigned char)up[i]) || up[i] == '_')) return;
+    }
     strcpy(nlab[nlabcnt], up);
     nlabpos[nlabcnt] = codpos;
     snprintf(nlabasm[nlabcnt], 255, "%s %s", op, params);
@@ -157,7 +164,7 @@ void addnlabel(const char *l) {
     nlabcnt++;
 }
 
-// Funzione di utilità: delnlabel
+// Utility: delnlabel
 void delnlabel(int l) {
     int i;
     for (i = l; i < nlabcnt - 1; i++) {
@@ -168,7 +175,7 @@ void delnlabel(int l) {
     nlabcnt--;
 }
 
-// Funzione di utilità: findlabel
+// Utility: findlabel
 bool findlabel(const char *l) {
     char up[256];
     int i;
@@ -185,22 +192,23 @@ bool findlabel(const char *l) {
     return false;
 }
 
-// Funzione di utilità: addlabel (parziale, da completare con logica di estrazione e doasm)
+// Utility: addlabel (partial)
 void addlabel(const char *l) {
     char up[256];
     int tpos, bup;
     strncpy(up, l, 255);
     up[255] = '\0';
     for (int i = 0; up[i]; i++) up[i] = toupper(up[i]);
-    if (findlabel(up)) abort_c("Label già definita!");
+    if (findlabel(up)) abort_c("Label already defined!");
     printf("SYMBOL: %s - %d\n", up, codpos + startadr);
     strcpy(lab[labcnt], up);
     labpos[labcnt] = codpos;
+    labbase[labcnt] = startadr; // store origin at definition time
     labcnt++;
-    // La parte di gestione nlab, estrazione e doasm va completata con le funzioni migrate successive
+    // The nlab handling, extraction and doasm will be completed with subsequent migration functions
 }
 
-// Funzione di utilità: findsymbol
+// Utility: findsymbol
 bool findsymbol(const char *l) {
     int i;
     for (i = 0; i < symcnt; i++) {
@@ -211,16 +219,19 @@ bool findsymbol(const char *l) {
     return false;
 }
 
-// Funzione di utilità: addsymbol
+// Utility: addsymbol (ensure defined for .equ)
 void addsymbol(const char *s1, const char *s2) {
-    if (findsymbol(s1)) abort_c("Symbol già definito!");
-    strcpy(sym[symcnt], s1);
-    strcpy(symval[symcnt], s2);
-    printf("SYMBOL: %s - %s\n", s1, s2);
+    if (findsymbol(s1)) abort_c("Symbol already defined!");
+    // store symbol name uppercase for consistent lookup
+    char up[256]; strncpy(up, s1, 255); up[255] = '\0';
+    for (int k = 0; up[k]; k++) up[k] = toupper((unsigned char)up[k]);
+    strncpy(sym[symcnt], up, 255); sym[symcnt][255] = '\0';
+    strncpy(symval[symcnt], s2, 255); symval[symcnt][255] = '\0';
+    printf("SYMBOL: %s - %s\n", sym[symcnt], s2);
     symcnt++;
 }
 
-// Funzione di utilità: findop
+// Utility: findop
 bool findop(const char *l) {
     int i;
     opp = -1;
@@ -239,19 +250,23 @@ bool findop(const char *l) {
     return false;
 }
 
-// Funzione di utilità: addcode
+// Utility: addcode
 void addcode(unsigned char b) {
     if (debug_enabled) {
         write_debug("DEBUG: addcode b=%d codpos=%d\n", b, codpos);
     }
-    code[codpos] = (unsigned char)(b & 0xFF);
+    int idx = codpos;
+    code[idx] = (unsigned char)(b & 0xFF);
     codpos++;
+    if (debug_enabled) {
+        write_debug("DEBUG: wrote code[%d]=%02X\n", idx, code[idx]);
+    }
     if (codpos + startadr >= 65536) {
         abort_c("Code exceeds maximum memory!");
     }
 }
 
-// Funzione di utilità: extractop
+// Utility: extractop
 void extractop(const char *src) {
     char s[1024];
     int i = 0, j = 0;
@@ -259,23 +274,26 @@ void extractop(const char *src) {
     strncpy(s, src, 1023);
     s[1023] = '\0';
     strcat(s, " ");
-    // Salta spazi iniziali
+    // Skip initial spaces
     while (s[i] == ' ' || s[i] == '\t') i++;
-    // Copia l'operatore
+    // Copy the operator
     j = 0;
     while (s[i] != ' ' && s[i] != '\t' && s[i] != '\0') {
         op[j++] = toupper(s[i++]);
     }
     op[j] = '\0';
-    // Salta spazi dopo l'operatore
+    // Skip spaces after operator
     while (s[i] == ' ' || s[i] == '\t') i++;
-    // Copia i parametri
+    // Copy the parameters
     strncpy(params, s + i, 255);
     params[255] = '\0';
-    // Sostituisci la prima virgola con spazio
+    // Truncate params at inline comment ';' if present
+    char *pcomment = strchr(params, ';');
+    if (pcomment) *pcomment = '\0';
+    // Replace the first comma with space
     char *comma = strchr(params, ',');
     if (comma) *comma = ' ';
-    // Estrai param1 e param2
+    // Extract param1 and param2
     i = 0;
     while (params[i] == ' ' || params[i] == '\t') i++;
     j = 0;
@@ -290,31 +308,38 @@ void extractop(const char *src) {
     } else {
         param2[0] = '\0';
     }
+    // Clean residual comments and whitespace from parameters
+    char *c;
+    c = strchr(param1, ';'); if (c) *c = '\0';
+    c = strchr(param2, ';'); if (c) *c = '\0';
+    trim(param1);
+    trim(param2);
+    if (param1[0] == ';' || param1[0] == '\0') param1[0] = '\0';
 }
 
-// Funzione di utilità: calcadr migliorata per replicare esattamente la logica Pascal
+// Utility: calcadr improved to replicate Pascal logic
 int calcadr() {
     int i = 0;
     char s[256], s2[256];
     bool lf = false;
 
-    // Replica la logica Pascal: scansiona params per trovare etichette
+    // Replicate Pascal logic: scan params to find labels
     while (i < strlen(params)) {
-        // Salta numeri esadecimali (0x...)
+        // Skip hexadecimal numbers (0x...)
         if (i < strlen(params) - 2 && params[i] == '0' && toupper(params[i+1]) == 'X') {
             i += 2;
             while (i < strlen(params) && (isdigit(params[i]) || (toupper(params[i]) >= 'A' && toupper(params[i]) <= 'F'))) i++;
         }
-        // Salta numeri binari (0b...)
+        // Skip binary numbers (0b...)
         else if (i < strlen(params) - 2 && params[i] == '0' && toupper(params[i+1]) == 'B') {
             i += 2;
             while (i < strlen(params) && (params[i] == '0' || params[i] == '1')) i++;
         }
-        // Cerca etichette (iniziano con lettera o underscore)
+        // Look for labels (starting with a letter or underscore)
         else if (isalpha(params[i]) || params[i] == '_') {
             int j = 0;
             s[0] = '\0';
-            // Estrai il nome dell'etichetta
+            // Extract the label name
             while (i < strlen(params) && (isalnum(params[i]) || params[i] == '_')) {
                 s[j++] = toupper(params[i++]);
             }
@@ -324,8 +349,8 @@ int calcadr() {
                 addnlabel(s);
                 lf = true;
             } else {
-                // Sostituisci l'etichetta con il suo valore assoluto come fa Pascal
-                snprintf(s2, 255, "%d", startadr + labpos[labp]);
+                // Replace the label with its absolute value as Pascal does
+                snprintf(s2, 255, "%d", labbase[labp] + labpos[labp]);
                 replace_text(params, s, s2);
                 strcpy(param1, params);
                 param2[0] = '\0';
@@ -336,9 +361,9 @@ int calcadr() {
         }
     }
 
-    // Restituisci il risultato come fa Pascal
+    // Return the result as Pascal does
     if (lf) {
-        return 0;  // Etichetta non risolta
+        return 0;  // unresolved label
     } else if (param2[0] == '\0') {
         return mathparse(param1, 10);
     } else {
@@ -347,7 +372,7 @@ int calcadr() {
 }
 
 
-// Funzione di utilità per verificare se un opcode è in un set
+// Utility: in_set
 bool in_set(int value, const int *set, int size) {
     for (int i = 0; i < size; i++) {
         if (set[i] == value) return true;
@@ -355,82 +380,135 @@ bool in_set(int value, const int *set, int size) {
     return false;
 }
 
-// Funzione di parsing matematico migliorata per gestire simboli
-int mathparse(const char *expr, int base) {
-    char *endptr;
-    int result = 0;
-
-    if (expr == NULL || *expr == '\0') return 0;
-
-    // Prima cerca tra i simboli definiti
-    for (int i = 0; i < symcnt; i++) {
-        if (strcmp(sym[i], expr) == 0) {
-            return atoi(symval[i]);
+// Utility: parse and evaluate simple expressions (supports +, -, parentheses, symbols, hex 0x, bin 0b, decimal)
+static int parse_number(const char **sp) {
+    const char *s = *sp;
+    while (*s == ' ' || *s == '\t') s++;
+    // symbol check
+    char tok[256]; int ti=0;
+    if (isalpha((unsigned char)*s) || *s == '_') {
+        while (isalnum((unsigned char)*s) || *s == '_') {
+            if (ti < 255) tok[ti++] = toupper((unsigned char)*s);
+            s++;
         }
+        tok[ti] = '\0';
+        // lookup symbol
+        for (int i=0;i<symcnt;i++) if (strcmp(sym[i], tok)==0) {
+            *sp = s; return atoi(symval[i]);
+        }
+        // if not found, return 0
+        *sp = s; return 0;
     }
-
-    // Gestione esadecimale (0x...)
-    if (strncmp(expr, "0x", 2) == 0 || strncmp(expr, "0X", 2) == 0) {
-        result = (int)strtol(expr, &endptr, 16);
+    // parentheses
+    if (*s == '(') {
+        s++;
+        *sp = s;
+        int v = 0;
+        // call expr parser below by setting pointer
+        // we'll use parse_expr which accepts const char**
+        // forward declare
+        extern int parse_expr(const char **p);
+        v = parse_expr(&s);
+        while (*s == ' ' || *s == '\t') s++;
+        if (*s == ')') s++; // consume
+        *sp = s; return v;
     }
-    // Gestione binario (0b...)
-    else if (strncmp(expr, "0b", 2) == 0 || strncmp(expr, "0B", 2) == 0) {
-        result = (int)strtol(expr + 2, &endptr, 2);
+    // hex
+    if (s[0]=='0' && (s[1]=='x' || s[1]=='X')) {
+        s += 2;
+        long val = strtol(s, (char**)&s, 16);
+        *sp = s; return (int)val;
     }
-    // Gestione decimale/ottale
-    else {
-        result = (int)strtol(expr, &endptr, base);
+    // bin
+    if (s[0]=='0' && (s[1]=='b' || s[1]=='B')) {
+        s += 2;
+        int val=0;
+        while(*s=='0' || *s=='1') { val = (val<<1) + (*s - '0'); s++; }
+        *sp = s; return val;
     }
-
-    return result;
+    // decimal
+    long val = strtol(s, (char**)&s, 10);
+    *sp = s; return (int)val;
 }
 
-// Funzione di utilità: doasm implementazione completa
+// forward declare to allow recursion
+int parse_expr(const char **p) {
+    const char *s = *p;
+    while (*s == ' ' || *s == '\t') s++;
+    int value = parse_number(&s);
+    while (1) {
+        while (*s == ' ' || *s == '\t') s++;
+        if (*s == '+') {
+            s++; int r = parse_number(&s); value += r; continue;
+        } else if (*s == '-') {
+            s++; int r = parse_number(&s); value -= r; continue;
+        }
+        break;
+    }
+    *p = s;
+    return value;
+}
+
+int mathparse(const char *expr, int base) {
+    if (!expr || expr[0]=='\0') return 0;
+    char tmp[512]; strncpy(tmp, expr, 511); tmp[511]='\0'; trim(tmp);
+    // uppercase tmp for symbol lookup
+    for (int k = 0; tmp[k]; k++) tmp[k] = toupper((unsigned char)tmp[k]);
+    // check symbols exact match
+    for (int i=0;i<symcnt;i++) if (strcmp(sym[i], tmp)==0) return atoi(symval[i]);
+    // use expression parser
+    const char *p = tmp;
+    int v = parse_expr(&p);
+    return v;
+}
+
+// doasm implementation
 void doasm(const char *line) {
     char s[1024];
     int adr, reladr;
 
-    // Copia la riga ed elabora
+    // Copy the line and process
     strncpy(s, line, 1023);
     s[1023] = '\0';
     trim(s);
 
-    // Ignora righe vuote e commenti
-    if (s[0] == '\0' || s[0] == ';') return;
+    // Remove inline comments: everything after ';' is a comment
+    char *inline_comment = strchr(s, ';');
+    if (inline_comment) {
+        *inline_comment = '\0';
+        trim(s);
+    }
 
-    // Ignora righe che contengono solo spazi o tab
+    // Ignore empty lines and comments
+    if (s[0] == '\0') return;
+
+    // Ignore lines that contain only whitespace
     bool only_whitespace = true;
-    for (int i = 0; s[i] != '\0'; i++) {
-        if (s[i] != ' ' && s[i] != '\t') {
-            only_whitespace = false;
-            break;
-        }
+    for (int ii = 0; s[ii] != '\0'; ii++) {
+        if (s[ii] != ' ' && s[ii] != '\t') { only_whitespace = false; break; }
     }
     if (only_whitespace) return;
 
-    // Gestisce le etichette (righe che contengono ':' come etichetta) PRIMA di extractop
+    // Handle labels (lines containing ':') BEFORE extractop
     char *colon = strchr(s, ':');
     if (colon != NULL) {
-        // Verifica che non sia all'interno di un commento
         char *comment = strchr(s, ';');
         if (comment == NULL || colon < comment) {
-            // Estrai la parte prima dei due punti come etichetta
             *colon = '\0';
             trim(s);
             if (strlen(s) > 0) {
                 addlabel(s);
             }
-            // Processa eventuale codice dopo i due punti
             char *after_colon = colon + 1;
             trim(after_colon);
             if (strlen(after_colon) > 0 && after_colon[0] != ';') {
-                doasm(after_colon); // Ricorsione per processare istruzione dopo etichetta
+                doasm(after_colon); // recurse to process instruction after label
             }
             return;
         }
     }
 
-    // Gestisce direttive assemblatore
+    // Handle assembler directives
     if (s[0] == '.') {
         // .org directive
         if (strncmp(s, ".org", 4) == 0 || strncmp(s, ".ORG", 4) == 0) {
@@ -457,11 +535,10 @@ void doasm(const char *line) {
             }
             return;
         }
-        // .include directive (compatibile con virgolette o senza)
+        // .include directive (supports quotes or not)
         if (strncasecmp(s, ".include", 8) == 0) {
             char *rest = s + 8;
             while (*rest == ' ' || *rest == '\t') rest++;
-            // Rimuovi virgolette se presenti
             char fname[256];
             if (*rest == '"' || *rest == '\'') {
                 char quote = *rest;
@@ -474,7 +551,6 @@ void doasm(const char *line) {
                 while (*rest && *rest != ' ' && *rest != '\t' && *rest != ';' && i < 255) fname[i++] = *rest++;
                 fname[i] = '\0';
             }
-            // Apri e processa il file di include
             FILE *inc = fopen(fname, "r");
             if (!inc) {
                 fprintf(stderr, "Line %d: Include file '%s' not found! in file %s\n", cline + 1, fname, cf);
@@ -488,7 +564,7 @@ void doasm(const char *line) {
             fclose(inc);
             return;
         }
-        // .db directive - definizione dati byte
+        // .db directive - define data bytes
         if (strncasecmp(s, ".db", 3) == 0) {
             char *rest = s + 3;
             while (*rest == ' ' || *rest == '\t') rest++;
@@ -498,6 +574,10 @@ void doasm(const char *line) {
                 char *end = token + strlen(token) - 1;
                 while (end > token && (*end == ' ' || *end == '\t')) end--;
                 *(end+1) = '\0';
+                // Strip inline comment from token if present
+                char *sc = strchr(token, ';');
+                if (sc) *sc = '\0';
+                trim(token);
                 if (strlen(token) > 0) {
                     int val = mathparse(token, 0);
                     if (debug_enabled) {
@@ -507,28 +587,50 @@ void doasm(const char *line) {
                 }
                 token = strtok(NULL, ",");
             }
+            // dump after .DB for debugging
+            if (debug_enabled && cline == 5) {
+                write_debug("DEBUG-SNAP: after .DB codpos=%d:\n", codpos);
+                for (int k = 0; k < codpos; k++) write_debug("%02X ", code[k]);
+                write_debug("\n");
+            }
             return;
         }
-        return; // Ignora altre direttive non implementate
+        return; // Ignore other directives not implemented
     }
 
-    // Estrai operazione e parametri SOLO se non è un'etichetta o direttiva
+    // Extract operation and parameters ONLY if not a label or directive
     extractop(s);
     if (debug_enabled) {
         write_debug("DEBUG: op='%s' param1='%s' param2='%s'\n", op, param1, param2);
     }
 
-    // Pulisci param1 rimuovendo virgole finali
+    // Clean param1 removing trailing commas
     if (strlen(param1) > 0 && param1[strlen(param1) - 1] == ',') {
         param1[strlen(param1) - 1] = '\0';
     }
     trim(param1);
     trim(param2);
 
-    // Cerca l'opcode nella tabella
+    // Search opcode in table
     if (findop(op)) {
-        // Gestione salti assoluti
-        if (opp == 120 || opp == 121 || opp == 16 || (opp >= 124 && opp <= 127)) {
+        // Absolute jumps
+        if (opp == 120) { // CALL
+            adr = calcadr();
+            if (adr > 0) {
+                if (adr < 8192) {
+                    addcode(0xE0 + (adr / 256));
+                    addcode(adr % 256);
+                } else {
+                    addcode(opp);
+                    addcode(adr / 256);
+                    addcode(adr % 256);
+                }
+            } else {
+                addcode(NOP);
+                addcode(NOP);
+                addcode(NOP);
+            }
+        } else if (opp == 121 || opp == 16 || (opp >= 124 && opp <= 127)) {
             adr = calcadr();
             if (adr > 0) {
                 addcode(opp);
@@ -540,51 +642,88 @@ void doasm(const char *line) {
                 addcode(NOP);
             }
         }
-        // Gestione salti relativi
+        // Relative jumps
         else if (in_set(opp, JR, 11)) {
             adr = calcadr();
             write_debug("DEBUG: JR/JRPLUS codpos=%d startadr=%d adr=%d param1=%s\n", codpos, startadr, adr, param1);
             addcode(opp);
             if (adr >= 8192) {
                 if (in_set(opp, JRPLUS, 5)) {
-                    write_debug("DEBUG: JRPLUS offset usato = %d\n", adr - codpos - startadr);
-                    addcode(adr - codpos - startadr);  // Fix: usa la formula Pascal corretta
+                    write_debug("DEBUG: JRPLUS offset used = %d\n", adr - codpos - startadr);
+                    addcode(adr - codpos - startadr);
                 } else {
-                    write_debug("DEBUG: JRMINUS offset usato = %d\n", (codpos + startadr) - adr);
+                    write_debug("DEBUG: JRMINUS offset used = %d\n", (codpos + startadr) - adr);
                     addcode((codpos + startadr) - adr);
                 }
             } else if (adr > 0) {
-                write_debug("DEBUG: JR diretto adr usato = %d\n", adr);
+                write_debug("DEBUG: JR direct adr used = %d\n", adr);
                 addcode(adr);
             } else {
-                write_debug("DEBUG: JR placeholder 0 (etichetta non risolta)\n");
+                write_debug("DEBUG: JR placeholder 0 (label unresolved)\n");
                 addcode(0);
             }
+            if (debug_enabled && cline == 9) {
+                write_debug("DEBUG-SNAP: after JRM codpos=%d:\n", codpos);
+                for (int k = 0; k < codpos; k++) write_debug("%02X ", code[k]);
+                write_debug("\n");
+            }
         }
-        // Gestione istruzioni normali
+        // Normal instructions
         else {
             addcode(opp);
             if (NBARGU[opp] == 2) {
                 if (strlen(param1) > 0) {
-                    addcode(mathparse(param1, 8));
+                    int val = mathparse(param1, 0);
+                    if (val == 0 && strcmp(param1, "0") != 0) {
+                        printf("Warning: invalid parameter for %s: '%s' at line %d\n", op, param1, cline);
+                        return;
+                    }
+                    addcode(val);
+                } else {
+                    printf("Warning: missing parameter for %s at line %d\n", op, cline);
+                    return;
                 }
             } else if (NBARGU[opp] == 3) {
                 if (param2[0] == '\0') {
+                    if (strlen(param1) == 0) {
+                        printf("Warning: missing parameter for %s at line %d\n", op, cline);
+                        return;
+                    }
                     int val = mathparse(param1, 16);
+                    if (val == 0 && strcmp(param1, "0") != 0) {
+                        printf("Warning: invalid parameter for %s: '%s' at line %d\n", op, param1, cline);
+                        return;
+                    }
                     addcode((val >> 8) & 0xFF);
                     addcode(val & 0xFF);
                 } else {
                     if (strlen(param1) > 0) {
-                        addcode(mathparse(param1, 8));
+                        int val1 = mathparse(param1, 0);
+                        if (val1 == 0 && strcmp(param1, "0") != 0) {
+                            printf("Warning: invalid parameter for %s: '%s' at line %d\n", op, param1, cline);
+                            return;
+                        }
+                        addcode(val1);
+                    } else {
+                        printf("Warning: missing parameter for %s at line %d\n", op, cline);
+                        return;
                     }
                     if (strlen(param2) > 0) {
-                        addcode(mathparse(param2, 8));
+                        int val2 = mathparse(param2, 0);
+                        if (val2 == 0 && strcmp(param2, "0") != 0) {
+                            printf("Warning: invalid parameter for %s: '%s' at line %d\n", op, param2, cline);
+                            return;
+                        }
+                        addcode(val2);
+                    } else {
+                        printf("Warning: missing parameter for %s at line %d\n", op, cline);
+                        return;
                     }
                 }
             }
         }
     }
-    // Gestione istruzioni speciali non nella tabella OPCODE
+    // Special instructions not in OPCODE table
     else {
         if (strcmp(op, "ADD") == 0) {
             if (strcmp(param1, "[P]") == 0 && strcmp(param2, "A") == 0) {
@@ -711,15 +850,20 @@ void doasm(const char *line) {
 }
 
 
-// Funzione di utilità: resolve_labels_and_write_bin implementazione completa
+// resolve_labels_and_write_bin implementation
 void resolve_labels_and_write_bin(const char *output_filename) {
     FILE *fout;
     int i, j;
     bool resolved;
 
-    printf("Risolvendo etichette non definite...\n");
+    printf("Resolving undefined labels...\n");
 
-    // Risolvi le etichette non definite con multiple passate
+    if (debug_enabled) {
+        write_debug("DEBUG: nlabcnt=%d\n", nlabcnt);
+        for (i = 0; i < nlabcnt; i++) write_debug("DEBUG: nlab[%d]=%s nlabpos=%d nlabasm=%s\n", i, nlab[i], nlabpos[i], nlabasm[i]);
+    }
+
+    // Resolve undefined labels with multiple passes
     for (int pass = 0; pass < 10 && nlabcnt > 0; pass++) {
         resolved = false;
 
@@ -729,35 +873,40 @@ void resolve_labels_and_write_bin(const char *output_filename) {
                 int saved_opp = opp;
                 char saved_op[256], saved_params[256], saved_param1[256], saved_param2[256];
 
-                // Salva stato corrente
+                // Save current state
                 strcpy(saved_op, op);
                 strcpy(saved_params, params);
                 strcpy(saved_param1, param1);
                 strcpy(saved_param2, param2);
 
-                // Riposiziona il codice alla posizione dell'etichetta non risolta
+                // Reposition code to the unresolved label position
                 codpos = nlabpos[i];
 
-                // Riesegui l'assemblaggio dell'istruzione con l'etichetta ora risolta
+                // Reassemble the instruction now that the label is resolved
                 extractop(nlabasm[i]);
 
                 if (findop(op)) {
-                    // Sostituisci il placeholder NOP con l'istruzione vera
+                    // Replace placeholder NOP with the real instruction
                     if (in_set(opp, JR, 11)) {
                         int dest = labpos[labp];
                         int offset = dest - (nlabpos[i] + 1);
                         write_debug("RESOLVE: nlab=%s nlabpos=%d dest=%d current=%d offset=%d\n", nlab[i], nlabpos[i], dest, nlabpos[i] + 1, offset);
+                        write_debug("RESOLVE: before write code[%d]=%02X code[%d]=%02X\n", nlabpos[i], code[nlabpos[i]], nlabpos[i]+1, code[nlabpos[i]+1]);
                         code[nlabpos[i]] = opp;
                         code[nlabpos[i] + 1] = offset & 0xFF;
+                        write_debug("RESOLVE: after write code[%d]=%02X code[%d]=%02X\n", nlabpos[i], code[nlabpos[i]], nlabpos[i]+1, code[nlabpos[i]+1]);
                     } else if (opp == 120 || opp == 121 || opp == 16 || (opp >= 124 && opp <= 127)) {
-                        int dest = labpos[labp] + startadr;
+                        int dest = labpos[labp] + labbase[labp];
+                        int adj = dest - 4; // Pascal encodes destination minus 4
+                        write_debug("RESOLVE: before write code[%d]=%02X code[%d]=%02X code[%d]=%02X\n", nlabpos[i], code[nlabpos[i]], nlabpos[i]+1, code[nlabpos[i]+1], nlabpos[i]+2, code[nlabpos[i]+2]);
                         code[nlabpos[i]] = opp;
-                        code[nlabpos[i] + 1] = dest / 256;
-                        code[nlabpos[i] + 2] = dest % 256;
+                        code[nlabpos[i] + 1] = (adj / 256) & 0xFF;
+                        code[nlabpos[i] + 2] = adj & 0xFF;
+                        write_debug("RESOLVE: after write code[%d]=%02X code[%d]=%02X code[%d]=%02X\n", nlabpos[i], code[nlabpos[i]], nlabpos[i]+1, code[nlabpos[i]+1], nlabpos[i]+2, code[nlabpos[i]+2]);
                     }
                 }
 
-                // Ripristina stato
+                // Restore state
                 codpos = saved_codpos;
                 opp = saved_opp;
                 strcpy(op, saved_op);
@@ -765,75 +914,74 @@ void resolve_labels_and_write_bin(const char *output_filename) {
                 strcpy(param1, saved_param1);
                 strcpy(param2, saved_param2);
 
-                printf("Risolta etichetta: %s -> %d\n", nlab[i], labpos[labp] + startadr);
+                printf("Resolved label: %s -> %d\n", nlab[i], labpos[labp] + startadr);
 
-                // Rimuovi l'etichetta non risolta dalla lista
+                // Remove the unresolved label from the list
                 delnlabel(i);
-                i--; // Decrementa per compensare la rimozione
+                i--; // Decrement to compensate for removal
                 resolved = true;
             }
         }
 
-        if (!resolved) break; // Nessuna etichetta risolta in questo passaggio
+        if (!resolved) break; // No labels resolved in this pass
     }
 
     if (nlabcnt > 0) {
-        printf("Warning: %d etichette non risolte:\n", nlabcnt);
+        printf("Warning: %d unresolved labels:\n", nlabcnt);
         for (i = 0; i < nlabcnt; i++) {
-            printf("  %s (linea con istruzione: %s)\n", nlab[i], nlabasm[i]);
+            printf("  %s (line with instruction: %s)\n", nlab[i], nlabasm[i]);
         }
     }
 
-    // Scrivi il file binario
+    // Write the binary file
     fout = fopen(output_filename, "wb");
     if (!fout) {
-        perror("Errore creazione file output");
+        perror("Error creating output file");
         return;
     }
 
-    // Scrivi tutti i byte del codice generato
     size_t written = fwrite(code, 1, codpos, fout);
     fclose(fout);
 
-    printf("File binario scritto: %s (%zu byte)\n", output_filename, written);
-    printf("Indirizzo di partenza: %d (0x%X)\n", startadr, startadr);
-    printf("Dimensione codice: %d byte\n", codpos);
+    printf("Binary file written: %s (%zu bytes)\n", output_filename, written);
+    printf("Start address: %d (0x%X)\n", startadr, startadr);
+    printf("Code size: %d bytes\n", codpos);
 
-    // Stampa riepilogo simboli e etichette
+    // Print defined symbols and labels
     if (symcnt > 0) {
-        printf("\nSimboli definiti:\n");
+        printf("\nDefined symbols:\n");
         for (i = 0; i < symcnt; i++) {
             printf("  %s = %s\n", sym[i], symval[i]);
         }
     }
 
     if (labcnt > 0) {
-        printf("\nEtichette definite:\n");
+        printf("\nDefined labels:\n");
         for (i = 0; i < labcnt; i++) {
             printf("  %s: %d (0x%X)\n", lab[i], labpos[i] + startadr, labpos[i] + startadr);
         }
     }
 }
 
-// Funzione per mostrare l'help
+// Show help
 void show_help(const char *program_name) {
-    printf("Uso: %s [opzioni] <file.asm> <file.bin>\n", program_name);
-    printf("\nOpzioni:\n");
-    printf("  -d, --debug    Abilita la generazione del file debug.txt\n");
-    printf("  -h, --help     Mostra questo messaggio di aiuto\n");
-    printf("\nEsempi:\n");
+    printf("Usage: %s [options] <file.asm> <file.bin>\n", program_name);
+    printf("\nOptions:\n");
+    printf("  -d, --debug    Enable generation of debug.txt\n");
+    printf("  -h, --help     Show this help message\n");
+    printf("\nExamples:\n");
     printf("  %s program.asm program.bin\n", program_name);
-    printf("  %s -d program.asm program.bin    (con debug abilitato)\n", program_name);
+    printf("  %s -d program.asm program.bin    (with debug enabled)\n", program_name);
 }
 
-// Funzione main con gestione opzioni
+// main
 int main(int argc, char *argv[]) {
     char line[1024];
     FILE *fin;
     char *input_file = NULL;
     char *output_file = NULL;
 
-    // Parsing degli argomenti da riga di comando
+    // Parse command line arguments
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "--debug") == 0) {
             debug_enabled = true;
@@ -841,56 +989,54 @@ int main(int argc, char *argv[]) {
             show_help(argv[0]);
             return 0;
         } else if (argv[i][0] == '-') {
-            fprintf(stderr, "Opzione sconosciuta: %s\n", argv[i]);
+            fprintf(stderr, "Unknown option: %s\n", argv[i]);
             show_help(argv[0]);
             return 1;
         } else {
-            // Argomenti posizionali (file input e output)
             if (input_file == NULL) {
                 input_file = argv[i];
             } else if (output_file == NULL) {
                 output_file = argv[i];
             } else {
-                fprintf(stderr, "Troppi argomenti!\n");
+                fprintf(stderr, "Too many arguments!\n");
                 show_help(argv[0]);
                 return 1;
             }
         }
     }
 
-    // Verifica che siano stati forniti i file necessari
     if (input_file == NULL || output_file == NULL) {
-        fprintf(stderr, "Errore: Specificare file di input e output\n");
+        fprintf(stderr, "Error: specify input and output files\n");
         show_help(argv[0]);
         return 1;
     }
 
-    // Apri il file di debug solo se richiesto
+    // Open debug file only if requested
     open_debug_file();
 
     if (debug_enabled) {
-        printf("Debug abilitato: generazione di debug.txt\n");
+        printf("Debug enabled: generating debug.txt\n");
     }
 
     fin = fopen(input_file, "r");
     if (!fin) {
-        perror("Errore apertura file sorgente");
+        perror("Error opening source file");
         close_debug_file();
         return 1;
     }
 
-    strcpy(cf, input_file); // Salva il nome del file per i messaggi di errore
+    strcpy(cf, input_file); // Save filename for error messages
     cline = 0;
 
     while (fgets(line, sizeof(line), fin)) {
         cline++;
-        // Rimuovi newline
         line[strcspn(line, "\r\n")] = 0;
         doasm(line);
     }
     fclose(fin);
 
-    printf("Assemblaggio completato. Byte generati: %d\n", codpos);
+    printf("Assembly completed. Bytes generated: %d\n", codpos);
+
     resolve_labels_and_write_bin(output_file);
     close_debug_file();
 

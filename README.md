@@ -255,17 +255,9 @@ The C version of `lcpp` can be found in `Source/C/lcpp/` and includes:
 #### 🔄 PASM (Assembler) - UNDER VERIFICATION
 The assembler component (`pasm`) has been migrated from Pascal to C, but thorough verification of binary and functional compatibility is still ongoing.
 
-**Status:** Testing in progress - full verification is NOT yet complete
+For detailed test cases, a verification harness and current status, see the dedicated README for the `pasm` C migration at:
 
-**Note:** For up-to-date test status, details on covered cases, and any discrepancies found between the Pascal and C versions, please refer to the `README.md` file in `Source/C/pasm/`.
-
-**Main results so far:**
-- Migration of core assembler functions
-- Critical fix in relative jump handling (JRM instruction)
-- Replication of OPCODE[256] and NBARGU[256] tables from Pascal
-- Initial binary output checks with `fc.exe /b`
-
-**Location:** `Source/C/pasm/` - includes test suite and verification binaries
+- `Source/C/pasm/README.md` — contains test instructions, `test_pasm.ps1` usage, current pass/fail status and debugging notes.
 
 #### 🔄 LCC (Compiler) - TODO
 Future plans include migrating the main compiler component (`lcc`) to complete the fully modernized, cross-platform toolchain.

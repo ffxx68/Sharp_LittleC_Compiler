@@ -1,0 +1,6 @@
+; Test semplice PASM
+.ORG 40000
+STP 3
+LIB 2
+LIA 1
+RTN
