@@ -200,7 +200,8 @@ void addlabel(const char *l) {
     up[255] = '\0';
     for (int i = 0; up[i]; i++) up[i] = toupper(up[i]);
     if (findlabel(up)) abort_c("Label already defined!");
-    printf("SYMBOL: %s - %d\n", up, codpos + startadr);
+    // Stampa di debug dettagliata
+    printf("[DEBUG] addlabel: %s codpos=%d startadr=%d (addr=%d)\n", up, codpos, startadr, codpos + startadr);
     strcpy(lab[labcnt], up);
     labpos[labcnt] = codpos;
     labbase[labcnt] = startadr; // store origin at definition time
@@ -361,6 +362,18 @@ int calcadr() {
         }
     }
 
+    // For CALL/JP, force param1 to be the resolved label value if present
+    // This ensures the correct address is used in the encoding
+    if (opp == 120 || opp == 121) {
+        for (int k = 0; k < labcnt; k++) {
+            if (strstr(params, lab[k]) != NULL) {
+                snprintf(param1, 255, "%d", labbase[k] + labpos[k]);
+                param2[0] = '\0';
+                break;
+            }
+        }
+    }
+
     // Return the result as Pascal does
     if (lf) {
         return 0;  // unresolved label
@@ -496,13 +509,14 @@ void doasm(const char *line) {
         if (comment == NULL || colon < comment) {
             *colon = '\0';
             trim(s);
-            if (strlen(s) > 0) {
-                addlabel(s);
-            }
             char *after_colon = colon + 1;
             trim(after_colon);
+            // Se la riga dopo la label è una direttiva .DW, registra la label PRIMA di processare la direttiva
+            if (strlen(s) > 0) {
+                addlabel(s); // registra la label
+            }
             if (strlen(after_colon) > 0 && after_colon[0] != ';') {
-                doasm(after_colon); // recurse to process instruction after label
+                doasm(after_colon); // processa la direttiva o istruzione
             }
             return;
         }
@@ -592,6 +606,30 @@ void doasm(const char *line) {
                 write_debug("DEBUG-SNAP: after .DB codpos=%d:\n", codpos);
                 for (int k = 0; k < codpos; k++) write_debug("%02X ", code[k]);
                 write_debug("\n");
+            }
+            return;
+        }
+        // .dw directive - define data words (big endian)
+        if (strncasecmp(s, ".dw", 3) == 0) {
+            char *rest = s + 3;
+            while (*rest == ' ' || *rest == '\t') rest++;
+            char *token = strtok(rest, ",");
+            while (token != NULL) {
+                while (*token == ' ' || *token == '\t') token++;
+                char *end = token + strlen(token) - 1;
+                while (end > token && (*end == ' ' || *end == '\t')) end--;
+                *(end+1) = '\0';
+                // Strip inline comment from token if present
+                char *sc = strchr(token, ';');
+                if (sc) *sc = '\0';
+                trim(token);
+                if (strlen(token) > 0) {
+                    int val = mathparse(token, 0);
+                    // Big endian: MSB first
+                    addcode((val >> 8) & 0xFF);
+                    addcode(val & 0xFF);
+                }
+                token = strtok(NULL, ",");
             }
             return;
         }
@@ -897,11 +935,11 @@ void resolve_labels_and_write_bin(const char *output_filename) {
                         write_debug("RESOLVE: after write code[%d]=%02X code[%d]=%02X\n", nlabpos[i], code[nlabpos[i]], nlabpos[i]+1, code[nlabpos[i]+1]);
                     } else if (opp == 120 || opp == 121 || opp == 16 || (opp >= 124 && opp <= 127)) {
                         int dest = labpos[labp] + labbase[labp];
-                        int adj = dest - 4; // Pascal encodes destination minus 4
+                        // RIMUOVO la correzione -4 per CALL/JMP, come fa la versione Pascal
                         write_debug("RESOLVE: before write code[%d]=%02X code[%d]=%02X code[%d]=%02X\n", nlabpos[i], code[nlabpos[i]], nlabpos[i]+1, code[nlabpos[i]+1], nlabpos[i]+2, code[nlabpos[i]+2]);
                         code[nlabpos[i]] = opp;
-                        code[nlabpos[i] + 1] = (adj / 256) & 0xFF;
-                        code[nlabpos[i] + 2] = adj & 0xFF;
+                        code[nlabpos[i] + 1] = (dest / 256) & 0xFF;
+                        code[nlabpos[i] + 2] = dest & 0xFF;
                         write_debug("RESOLVE: after write code[%d]=%02X code[%d]=%02X code[%d]=%02X\n", nlabpos[i], code[nlabpos[i]], nlabpos[i]+1, code[nlabpos[i]+1], nlabpos[i]+2, code[nlabpos[i]+2]);
                     }
                 }

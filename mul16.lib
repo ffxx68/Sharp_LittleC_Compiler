@@ -4,7 +4,7 @@ LIB_MUL16:		; B:A = J:I*B:A (M2*M1)
 	LP	7
 	ANIM	0
 	
-  LM16:
+LM16:
 	LP	1	; M1 >> 1
 	EXAM
 	RC

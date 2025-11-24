@@ -8,7 +8,7 @@ LIB_MUL8:		; B:A = A*B (M2*M1)
 	RA
 	EXAB		; move M2->A, 0->B
 	
-  LM81:
+LM81:
 	LP	0	; M1 >> 1
 	EXAM
 	RC
