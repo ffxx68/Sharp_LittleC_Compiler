@@ -1,162 +1,162 @@
-# Refactor roadmap per `lcc` (SC61860)
+# Refactor roadmap for `lcc` (SC61860)
 
-Questo documento raccoglie l'analisi e il piano di refactor per rendere più modulare, leggibile e manutenibile il compilatore `lcc` presente in `Source/lcc`.
+This document collects the analysis and the refactor plan to make the `lcc` compiler located in `Source/lcc` more modular, readable and maintainable.
 
-## Sommario esecutivo
-- Obiettivo: separare responsabilità (lexing, parsing, symbol table, semantic, codegen, output, ottimizzazioni, utilità) in unit Pascal distinte, mantenendo retrocompatibilità e permettendo refactor incrementali e verificabili.
-- Approccio: refactor incrementale in fasi, test e compilazione dopo ogni fase, wrapper compatibili per preservare API pubbliche.
-
----
-
-## Checklist iniziale (da completare)
-- [ ] Creare branch git `refactor/modular-lcc` (consigliato).
-- [ ] Eseguire build baseline (compilare `Source/lcc`) e salvare output/log.
-- [ ] Creare file di roadmap (questo file).
+## Executive summary
+- Goal: separate responsibilities (lexing, parsing, symbol table, semantic, codegen, output, optimizations, utilities) into distinct Pascal units, keeping backward compatibility and allowing incremental, verifiable refactors.
+- Approach: incremental refactor in phases, running tests and compilation after each phase, using compatibility wrappers to preserve public APIs.
 
 ---
 
-## Mappa componenti attuali (high-level)
-- `input.pas`: lettura carattere, `GetChar`, variabile globale `Look`.
-- `scanner.pas`: tokenizzazione (GetToken, GetName, GetNumber, GetFloat), utilità di parsing stringhe, modalità di input (file/string/keyboard), variabili globali `Tok`, `dummy`, `Level`, `md`, `linecnt`.
-- `parser.pas` / `parser_new.pas`: parsing, symbol table (VarList/ProcList), semantic actions (AddVar/AddProc/AllocVar/repadr), generazione asm diretta, ottimizzazioni post-process.
-- `CodeGen.pas`: generazione label, helper varxram/varcode/varreg, op helpers (CompEqual, CompGreater, ...), gestione librerie.
-- `output.pas`: accumulo `asmtext`/`libtext`/`asmlist`, funzioni `writeln` wrapper e `addasm`.
-- `errors.pas`: Error/Expected che usano variabili globali del scanner.
-- `calcunit.pas`: Evaluate() per valutazione espressioni matematiche.
+## Initial checklist (to complete)
+- [ ] Create a git branch `refactor/modular-lcc` (recommended).
+- [ ] Run a baseline build (compile `Source/lcc`) and save the output/log.
+- [ ] Create this roadmap file (this file).
 
 ---
 
-## Problemi principali identificati
-- Parsing, semantic analysis e emissione di codice mescolati nello stesso file (`parser.pas`).
-- Forti globali condivise tra unit (Look, Tok, dummy, linecnt, pushcnt, optype...).
-- Duplicazione tra `parser.pas` e `parser_new.pas`.
-- Post-processing/ottimizzazioni mescolati nel `SecondScan`.
+## Current component map (high-level)
+- `input.pas`: character input, `GetChar`, global variable `Look`.
+- `scanner.pas`: tokenization (GetToken, GetName, GetNumber, GetFloat), string parsing utilities, input modes (file/string/keyboard), global variables `Tok`, `dummy`, `Level`, `md`, `linecnt`.
+- `parser.pas` / `parser_new.pas`: parsing, symbol table (VarList/ProcList), semantic actions (AddVar/AddProc/AllocVar/repadr), direct asm generation, post-process optimizations.
+- `CodeGen.pas`: label generation, helpers varxram/varcode/varreg, operation helpers (CompEqual, CompGreater, ...), library handling.
+- `output.pas`: accumulation of `asmtext`/`libtext`/`asmlist`, `writeln` wrapper and `addasm` functions.
+- `errors.pas`: Error/Expected that use scanner globals for context.
+- `calcunit.pas`: Evaluate() for evaluating mathematical expressions.
 
 ---
 
-## Componenti target (proposti)
-Per ogni componente riporto responsabilità, API minime, dipendenze e priorità.
-
-1) `Lexer` (estratto da `scanner.pas`)
-- Responsabilità: lexing/tokenization, utilità stringhe strettamente necessarie al lexer.
-- API minima: `InitFromFile`, `InitFromString`, `GetToken(mode, var s)`, `GetName`, `GetNumber`, `GetFloat`, `CopyToken`, `CurrentToken`, `CurrentLine`.
-- Dipendenze: `Input`, `Errors`.
-- Priorità: Alta.
-
-2) `SymbolTable` (estratto da parser VarList/ProcList)
-- Responsabilità: gestione VarList/ProcList, Find/Add/Alloc/IsVarAtAdr/RemoveLocalVars.
-- API minima: `FindVar`, `AddVar`, `AllocVar`, `FindProc`, `AddProc`, `RemoveLocalVars`, getters per metadati.
-- Dipendenze: `CalcUnit` (per mathparse), `Errors`.
-- Priorità: Alta.
-
-3) `Semantic` (logica vardecl / repadr / controlli)
-- Responsabilità: vardecl parsing helper, repadr, validazioni di tipo/overlap.
-- API minima: `ParseVarDecl(tok: string): string` (o wrapper), `RepAdr(currproc)`.
-- Dipendenze: `SymbolTable`, `CalcUnit`, `Errors`.
-- Priorità: Alta.
-
-4) `CodeGen` (rifattorizzazione)
-- Responsabilità: emissione istruzioni, gestione labels, gestione librerie, helper varXxx.
-- API minima: `NewLabel`, `PostLabel`, `EmitInst`, `AddLib`, `VarXram`, `VarCode`, `VarReg`, `Flush`.
-- Dipendenze: `Output`.
-- Priorità: Alta.
-
-5) `Output` (pulito)
-- Responsabilità: accumulo di `asmtext`/`libtext`/`asmlist`, scrittura su file.
-- API minima: `Emit`, `AddAsm`, `SaveToFile`, `Reset`.
-- Priorità: Alta.
-
-6) `Backend` (ottimizzazioni e post-processing)
-- Responsabilità: logiche di trasformazione `asmtext` (pattern replace), compressione istruzioni, step attualmente in `SecondScan`.
-- API minima: `OptimizeAsm(asmText): string`, `WriteAsmFile(filename, asmText, libText)`.
-- Priorità: Media-Alta.
-
-7) `CalcUnit` (ripulire)
-- Responsabilità: Evaluate() per espressioni e conversioni hex/bin.
-- API minima: `Evaluate`, `ConvertHex`, `ConvertBin`.
-- Priorità: Media.
-
-8) `Errors` (migliorare)
-- Responsabilità: reporting errori con contesto (line, token, dummy).
-- API minima: `Error(msg)`, `Expected(msg)`, `Warning(msg)`.
-- Priorità: Media.
+## Main issues identified
+- Parsing, semantic analysis and code emission are mixed in the same file (`parser.pas`).
+- Heavy use of global variables shared between units (Look, Tok, dummy, linecnt, pushcnt, optype...).
+- Duplication between `parser.pas` and `parser_new.pas`.
+- Post-processing/optimizations are mixed into `SecondScan`.
 
 ---
 
-## Task concreti e ordinati (iterazioni incrementali)
-Ogni item è pensato per essere piccolo e verificabile.
+## Target components (proposed)
+For each component I list responsibilities, minimal API, dependencies and priority.
 
-Fase 0 — Preparazione (0.5 gg)
-- Task 0.1: creare branch git per il refactor.
-- Task 0.2: run build baseline (compilare `Source/lcc`) e salvare output.
+1) `Lexer` (extracted from `scanner.pas`)
+- Responsibility: lexing/tokenization, string utilities strictly necessary for the lexer.
+- Minimal API: `InitFromFile`, `InitFromString`, `GetToken(mode, var s)`, `GetName`, `GetNumber`, `GetFloat`, `CopyToken`, `CurrentToken`, `CurrentLine`.
+- Dependencies: `Input`, `Errors`.
+- Priority: High.
 
-Fase 1 — Estrarre `Lexer` (2 gg)
-- Task 1.1: creare `Lexer.pas` che re-esporta le funzioni pubbliche di `scanner.pas` (GetToken, GetName...).
-- Task 1.2: sostituire usi diretti in `parser` con `Lexer` (usare wrappers per mantenere compatibilità).
-- Verifica: build OK, test su file demo (token stream atteso).
+2) `SymbolTable` (extracted from parser VarList/ProcList)
+- Responsibility: management of VarList/ProcList, Find/Add/Alloc/IsVarAtAdr/RemoveLocalVars.
+- Minimal API: `FindVar`, `AddVar`, `AllocVar`, `FindProc`, `AddProc`, `RemoveLocalVars`, getters for metadata.
+- Dependencies: `CalcUnit` (for mathparse), `Errors`.
+- Priority: High.
 
-Fase 2 — Estrarre `SymbolTable` e `Semantic` (3 gg)
-- Task 2.1: creare `SymbolTable.pas` e spostare VarList/ProcList, Find/Add/Alloc.
-- Task 2.2: creare `Semantic.pas` per vardecl/repadr/controlli.
-- Verifica: FirstScan produce tavole var/proc identiche al baseline.
+3) `Semantic` (vardecl / repadr / checks logic)
+- Responsibility: var-declaration parsing helpers, repadr, type/overlap validations.
+- Minimal API: `ParseVarDecl(tok: string): string` (or similar wrapper), `RepAdr(currproc)`.
+- Dependencies: `SymbolTable`, `CalcUnit`, `Errors`.
+- Priority: High.
 
-Fase 3 — Refactor `CodeGen` + `Output` (3 gg)
-- Task 3.1: aggiungere `EmitInst` in CodeGen e usare `Output.Emit` al posto di `writeln` diretto.
-- Task 3.2: consolidare `addlib` e gestione `libtext` in `CodeGen` -> `Output`.
-- Verifica: SecondScan genera asm funzionante; build OK.
+4) `CodeGen` (refactor)
+- Responsibility: instruction emission, label management, library handling, varXxx helpers.
+- Minimal API: `NewLabel`, `PostLabel`, `EmitInst`, `AddLib`, `VarXram`, `VarCode`, `VarReg`, `Flush`.
+- Dependencies: `Output`.
+- Priority: High.
 
-Fase 4 — Ridurre Parser: separare sintassi da emissione (4-6 gg)
-- Task 4.1: sostituire generazione asm inline con chiamate a `CodeGen.Emit*`.
-- Task 4.2: valutare introduzione AST (opzionale) per espressioni complesse.
-- Verifica: output asm semantico identico; test su demo.
+5) `Output` (clean)
+- Responsibility: accumulate `asmtext`/`libtext`/`asmlist`, write to file.
+- Minimal API: `Emit`, `AddAsm`, `SaveToFile`, `Reset`.
+- Priority: High.
 
-Fase 5 — Backend e ottimizzazioni (2-3 gg)
-- Task 5.1: estrarre logiche di ottimizzazione (temp -> temp2 passes) in `Backend.pas`.
-- Task 5.2: creare test per le ottimizzazioni (input con pattern noto => output atteso).
-- Verifica: ottimizzazioni mantengono equivalenza e non introducono regressioni.
+6) `Backend` (optimizations and post-processing)
+- Responsibility: transformations of `asmtext` (pattern replace), instruction compression, steps currently in `SecondScan`.
+- Minimal API: `OptimizeAsm(asmText): string`, `WriteAsmFile(filename, asmText, libText)`.
+- Priority: Medium-High.
 
-Fase 6 — Hardening, cleanup, docs e test (2 gg)
-- Task 6.1: rimuovere duplicati (`parser` vs `parser_new`) dopo verifica e consolidamento.
-- Task 6.2: aggiornare README, aggiungere piccoli script/ci per test automatici.
-- Verifica: build + smoke tests verdi.
+7) `CalcUnit` (clean up)
+- Responsibility: `Evaluate()` for expressions and hex/bin conversions.
+- Minimal API: `Evaluate`, `ConvertHex`, `ConvertBin`.
+- Priority: Medium.
 
-Stima totale: ~14-18 giornate.
-
----
-
-## Rischi principali e mitigazioni
-- R: rottura API perché molte funzioni fanno uso di variabili globali: mitigare creando wrappers identici e spostando progressivamente.
-- R: differenze tra `parser.pas` e `parser_new.pas`: mitigare comparando outputs su suite di test e scegliere la base migliore.
-- R: ottimizzazioni basate su matching testuali molto sensibili a formato/whitespace: mitigare creando funzioni di trasformazione documentate e testate.
-
----
-
-## Suggerimenti pratici per lo sviluppo
-- Fare commit frequenti e piccoli per ogni estrazione ("extract Lexer", "extract SymbolTable").
-- Aggiungere un piccolo harness che lanci `lcc` su un elenco di demo e confronti l'asm prodotto con file di riferimento (regressione).
-- Usare wrapper per preservare le chiamate pubbliche esistenti (es. `GetToken`) e poi deprecare direttamente i vecchi file.
+8) `Errors` (improve)
+- Responsibility: error reporting with context (line, token, dummy)
+- Minimal API: `Error(msg)`, `Expected(msg)`, `Warning(msg)`.
+- Priority: Medium.
 
 ---
 
-## Checklist di qualità (Quality Gates)
-- Build: compila l'intero `Source/lcc` dopo ogni fase — PASS.
-- Lint/Typecheck: verificare warning e risolverli — preferibile PASS con zero warning critici.
-- Unit tests: aggiungere test per `Lexer`, `SymbolTable`, `Backend.OptimizeAsm` — PASS.
-- Smoke tests: lanciare `lcc` su 3-5 demo e verificare che l'asm sia assemblabile — PASS.
+## Concrete ordered tasks (incremental iterations)
+Each item is designed to be small and verifiable.
+
+Phase 0 — Preparation (0.5 day)
+- Task 0.1: create a git branch for the refactor.
+- Task 0.2: run baseline build (compile `Source/lcc`) and save the output.
+
+Phase 1 — Extract `Lexer` (2 days)
+- Task 1.1: create `Lexer.pas` that re-exports the public functions from `scanner.pas` (GetToken, GetName...).
+- Task 1.2: replace direct uses in the `parser` with `Lexer` (use wrappers to keep compatibility).
+- Verification: build OK, run tokenization test on a demo file.
+
+Phase 2 — Extract `SymbolTable` and `Semantic` (3 days)
+- Task 2.1: create `SymbolTable.pas` and move VarList/ProcList, Find/Add/Alloc.
+- Task 2.2: create `Semantic.pas` for vardecl/repadr/checks.
+- Verification: `FirstScan` produces var/proc tables identical to the baseline.
+
+Phase 3 — Refactor `CodeGen` + `Output` (3 days)
+- Task 3.1: add `EmitInst` in CodeGen and use `Output.Emit` instead of direct `writeln`.
+- Task 3.2: consolidate `addlib` and `libtext` handling into `CodeGen` -> `Output`.
+- Verification: `SecondScan` generates functional asm; build OK.
+
+Phase 4 — Reduce Parser: separate syntax from emission (4-6 days)
+- Task 4.1: replace inline asm generation with calls to `CodeGen.Emit*`.
+- Task 4.2: consider introducing an AST (optional) for complex expressions.
+- Verification: generated asm is semantically identical; tests on demos pass.
+
+Phase 5 — Backend and optimizations (2-3 days)
+- Task 5.1: extract optimization logic (temp -> temp2 passes) into `Backend.pas`.
+- Task 5.2: create tests for optimizations (input with known pattern => expected output).
+- Verification: optimizations preserve equivalence and do not introduce regressions.
+
+Phase 6 — Hardening, cleanup, docs and tests (2 days)
+- Task 6.1: remove duplicates (`parser` vs `parser_new`) after verification and consolidation.
+- Task 6.2: update README, add small scripts/CI for automated tests.
+- Verification: build + smoke tests green.
+
+Estimated total: ~14-18 working days.
 
 ---
 
-## Criteri di accettazione
-- Tutte le unit del nuovo set compilano senza errori con FPC/Delphi.
-- Il comportamento esterno di `lcc` sui demo di riferimento rimane equivalente (output assemblatore assemblabile con `pasm`).
-- Il `parser` non emette più stringhe asm direttamente ma chiama `CodeGen`/`Output` (obiettivo intermedio verificabile).
-- Documentazione aggiornata (`Source/lcc/README.md` o questo `refactor_roadmap.md`).
+## Main risks and mitigations
+- Risk: API breakage because many functions rely on globals — Mitigation: create identical wrappers and move functionality progressively.
+- Risk: Differences between `parser.pas` and `parser_new.pas` — Mitigation: compare outputs using a test suite and choose the best base.
+- Risk: optimizations rely on textual matching and are sensitive to formatting/whitespace — Mitigation: implement documented, testable transformation functions.
 
 ---
 
-## Esempi veloci di stub di unità (da implementare come primo passo)
+## Practical development suggestions
+- Make frequent, small commits for each extraction ("extract Lexer", "extract SymbolTable").
+- Add a small harness that runs `lcc` over a list of demos and compares the generated asm with reference files (regression tests).
+- Use wrappers to preserve existing public calls (e.g., `GetToken`) and then deprecate the old files gradually.
 
-`Lexer.pas` (interfaccia suggerita):
+---
+
+## Quality checklist (Quality Gates)
+- Build: compile the whole `Source/lcc` after each phase — PASS.
+- Lint/Typecheck: check warnings and resolve them — preferably PASS with no critical warnings.
+- Unit tests: add tests for `Lexer`, `SymbolTable`, `Backend.OptimizeAsm` — PASS.
+- Smoke tests: run `lcc` on 3-5 demos and check the asm is assemblable — PASS.
+
+---
+
+## Acceptance criteria
+- All new units compile without errors with FPC/Delphi.
+- The external behavior of `lcc` on reference demos remains equivalent (assembler output is assemblable with `pasm`).
+- The `parser` no longer emits asm strings directly but calls `CodeGen`/`Output` (intermediate target).
+- Documentation updated (`Source/lcc/README.md` or this `refactor_roadmap.md`).
+
+---
+
+## Quick stub unit examples (first-step implementations)
+
+`Lexer.pas` (suggested interface):
 ```pascal
 unit Lexer;
 interface
@@ -170,11 +170,11 @@ function GetFloat: string;
 function CurrentToken: string;
 function CurrentLine: Integer;
 implementation
-// ...existing code... (migrato da scanner.pas) ...
+// ...existing code... (migrated from scanner.pas) ...
 end.
 ```
 
-`SymbolTable.pas` (interfaccia suggerita):
+`SymbolTable.pas` (suggested interface):
 ```pascal
 unit SymbolTable;
 interface
@@ -189,17 +189,16 @@ function FindVar(const nm: string; out idx: Integer): Boolean;
 function AddVar(const info: TVarInfo): Integer;
 function AllocVar(xr, at: Boolean; size, adr: Integer): Integer;
 implementation
-// ...existing code... (migrato da parser.pas VarList/ProcList) ...
+// ...existing code... (migrated from parser.pas VarList/ProcList) ...
 end.
 ```
 
 ---
 
-## Prossimi passi raccomandati (subito)
-1. Confermi che posso creare il branch e iniziare implementando `Lexer.pas` come wrapper di `scanner.pas`? (posso eseguire e compilare in seguito). 
-2. Se preferisci, posso invece generare subito gli stub file (`Lexer.pas` e `SymbolTable.pas`) e testarli con una compilazione minima.
+## Recommended next steps (immediately)
+1. Confirm I can create the branch and start implementing `Lexer.pas` as a wrapper of `scanner.pas` (I can run and compile afterwards).
+2. Alternatively, I can immediately generate the stub files (`Lexer.pas` and `SymbolTable.pas`) and perform a minimal compilation test.
 
 ---
 
-File creato automaticamente: `Source/lcc/refactor_roadmap.md`.
-
+File created automatically: `Source/lcc/refactor_roadmap.md`.
