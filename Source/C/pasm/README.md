@@ -8,6 +8,7 @@ File di interesse
 - `test/test_simple.asm` — test minimale: LIA, LIB, STP, RTN
 - `test/test_complicated.asm` — test esteso: opcode, .DB, label, salti, chiamate, espressioni, direttiva EQU
 - `test/test_complicated_2.asm` — test esteso con funzionalità aggiuntive
+- `test/test_complicated_3.asm` — test con molte istruzioni e casi particolari
 
 Come funziona lo script di test
 - Esegui `test/test_pasm.ps1` dalla subdirectory `test`, passando il nome del file `.asm` come parametro. Lo script:
@@ -22,6 +23,7 @@ cd test
 .\test_pasm.ps1 test_simple.asm
 .\test_pasm.ps1 test_complicated.asm
 .\test_pasm.ps1 test_complicated_2.asm
+.\test_pasm.ps1 test_complicated_3.asm
 ```
 
 ## Stato dei test
@@ -31,14 +33,15 @@ cd test
 - `test_complicated.asm` — PASS
 - `test_complicated_2.asm` — PASS
 
+**Test falliti:**
+- `test_complicated_3.asm` — FAIL (molte differenze tra binari C e Pascal)
+
 **Note:**
-- La versione C ora genera binari identici alla versione Pascal, come verificato con `fc /b`.
+- La versione C ora genera binari identici alla versione Pascal per i primi tre test, come verificato con `fc /b`.
 - La gestione delle label e delle direttive (.DW, .DB, .ORG) è stata allineata e validata.
 - **Da verificare ancora:**
-  - L'uso degli include (`.include`)
   - La direttiva `.EQU` (definizione simboli)
-- In caso di aggiunta di nuovi test, aggiornare questa sezione.
-- In caso di discrepanze, riportare qui lo stato e la causa individuata.
+- Per `test_complicated_3.asm` sono presenti molte differenze nei binari: analisi in corso.
 
 ---
-Ultimo aggiornamento: 2025-11-24
+Ultimo aggiornamento: 2025-11-25

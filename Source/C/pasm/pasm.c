@@ -10,6 +10,39 @@
 #include "pasm_constants.h"
 #include <stdarg.h>
 
+// Provide fallback implementations for strcasecmp/strncasecmp if missing
+#ifndef HAVE_STRCASECMP
+static int my_strcasecmp(const char *a, const char *b) {
+    unsigned char ca, cb;
+    while (*a && *b) {
+        ca = (unsigned char) tolower((unsigned char)*a);
+        cb = (unsigned char) tolower((unsigned char)*b);
+        if (ca != cb) return (int)ca - (int)cb;
+        a++; b++;
+    }
+    ca = (unsigned char) tolower((unsigned char)*a);
+    cb = (unsigned char) tolower((unsigned char)*b);
+    return (int)ca - (int)cb;
+}
+static int my_strncasecmp(const char *a, const char *b, size_t n) {
+    unsigned char ca, cb;
+    size_t i = 0;
+    for (; i < n && *a && *b; i++) {
+        ca = (unsigned char) tolower((unsigned char)*a);
+        cb = (unsigned char) tolower((unsigned char)*b);
+        if (ca != cb) return (int)ca - (int)cb;
+        a++; b++;
+    }
+    if (i == n) return 0;
+    ca = (unsigned char) tolower((unsigned char)*a);
+    cb = (unsigned char) tolower((unsigned char)*b);
+    return (int)ca - (int)cb;
+}
+// Map names used in code to the fallback implementations
+#define strcasecmp my_strcasecmp
+#define strncasecmp my_strncasecmp
+#endif
+
 #define CODE_SIZE 100001
 #define SYM_SIZE 1001
 #define LAB_SIZE 1001
@@ -20,6 +53,7 @@ void doasm(const char *line);
 void extractop(const char *src);
 int mathparse(const char *expr, int base);
 int calcadr();
+int parse_expr(const char **p); // aggiunta dichiarazione
 
 // Global variables
 char tok[256], op[256], param1[256], param2[256], params[256];
@@ -100,20 +134,65 @@ void trim(char *str) {
 
 // Utility: replace_text (safe copy limit)
 void replace_text(char *text, const char *such, const char *ers) {
-    char buffer[1024];
-    char *pos, *start = text;
+    if (!text || !such || strlen(such) == 0 || strlen(text) == 0) return;
+    char work[1024];
+    char lower_work[1024];
+    char lower_such[256];
     size_t such_len = strlen(such);
-    size_t ers_len = strlen(ers);
-    if (such_len == 0 || strlen(text) == 0) return;
+
+    // Build work = ' ' + text + ' '
+    snprintf(work, sizeof(work), " %s ", text);
+    work[sizeof(work)-1] = '\0';
+
+    // Lowercase copies for case-insensitive matching
+    for (size_t i = 0; work[i] && i < sizeof(lower_work)-1; i++) lower_work[i] = tolower((unsigned char)work[i]);
+    lower_work[strlen(work)] = '\0';
+
+    for (size_t i = 0; i < such_len && i < sizeof(lower_such)-1; i++) lower_such[i] = tolower((unsigned char)such[i]);
+    lower_such[such_len < sizeof(lower_such) ? such_len : sizeof(lower_such)-1] = '\0';
+
+    char buffer[1024];
     buffer[0] = '\0';
-    while ((pos = strstr(start, such)) != NULL) {
-        strncat(buffer, start, pos - start);
-        strcat(buffer, ers);
-        start = pos + such_len;
+
+    int wlen = (int)strlen(work);
+    int i = 1; // start after leading space to mimic Pascal behavior
+    int last = 0;
+    while (i <= wlen - (int)such_len - 1) {
+        if (strncmp(lower_work + i, lower_such, such_len) == 0) {
+            // check boundaries: previous and next chars must NOT be alnum or underscore
+            char prev = lower_work[i-1];
+            char next = lower_work[i + such_len];
+            bool prev_ok = !(prev == '_' || isalnum((unsigned char)prev));
+            bool next_ok = !(next == '_' || isalnum((unsigned char)next));
+            if (prev_ok && next_ok) {
+                // append original substring from last to i
+                int chunk_len = i - last;
+                if ((int)strlen(buffer) + chunk_len + (int)strlen(ers) < (int)sizeof(buffer)-1) {
+                    strncat(buffer, work + last, chunk_len);
+                    strcat(buffer, ers);
+                }
+                i += (int)such_len;
+                last = i;
+                continue;
+            }
+        }
+        i++;
     }
-    strcat(buffer, start);
-    // Copia sicura limitata alla dimensione del buffer destinazione (256)
-    snprintf(text, 256, "%s", buffer);
+    // append the remainder
+    if ((int)strlen(buffer) + (wlen - last) < (int)sizeof(buffer)-1) {
+        strncat(buffer, work + last, wlen - last);
+    }
+
+    // remove the added leading/trailing space and copy back to text safely
+    // buffer may still have leading space
+    char *start = buffer;
+    if (buffer[0] == ' ') start = buffer + 1;
+    // trim trailing space
+    size_t blen = strlen(start);
+    if (blen > 0 && start[blen-1] == ' ') ((char*)start)[blen-1] = '\0';
+
+    // copy back to text with safe limit
+    snprintf(text, 256, "%s", start);
     text[255] = '\0';
     trim(text);
 }
@@ -193,6 +272,7 @@ bool findlabel(const char *l) {
 }
 
 // Utility: addlabel (partial)
+void addsymbol(const char *s1, const char *s2); // dichiarazione spostata qui
 void addlabel(const char *l) {
     char up[256];
     int tpos, bup;
@@ -200,13 +280,51 @@ void addlabel(const char *l) {
     up[255] = '\0';
     for (int i = 0; up[i]; i++) up[i] = toupper(up[i]);
     if (findlabel(up)) abort_c("Label already defined!");
-    // Stampa di debug dettagliata
-    printf("[DEBUG] addlabel: %s codpos=%d startadr=%d (addr=%d)\n", up, codpos, startadr, codpos + startadr);
     strcpy(lab[labcnt], up);
     labpos[labcnt] = codpos;
     labbase[labcnt] = startadr; // store origin at definition time
     labcnt++;
-    // The nlab handling, extraction and doasm will be completed with subsequent migration functions
+    // Registrazione anche come simbolo
+    char val_str[32];
+    snprintf(val_str, 31, "%d", startadr + codpos);
+    addsymbol(up, val_str);
+
+    // Replicate Pascal behavior: if any nlab matches this label, reassemble them now
+    while (findnlabel(up)) {
+        // Save current state
+        int saved_codpos = codpos;
+        bool saved_mcase = mcase;
+        char saved_op[256], saved_params[256], saved_param1[256], saved_param2[256];
+        strcpy(saved_op, op);
+        strcpy(saved_params, params);
+        strcpy(saved_param1, param1);
+        strcpy(saved_param2, param2);
+
+        // Reposition code to the unresolved label position and reassemble
+        codpos = nlabpos[nlabp];
+        char tokbuf[512];
+        strncpy(tokbuf, nlabasm[nlabp], 511);
+        tokbuf[511] = '\0';
+        if (tokbuf[0] == '#') {
+            mcase = true;
+            // remove leading '#'
+            memmove(tokbuf, tokbuf + 1, strlen(tokbuf));
+        }
+        // extractop and doasm will use global op/params
+        extractop(tokbuf);
+        doasm(tokbuf);
+
+        // Restore state
+        codpos = saved_codpos;
+        mcase = saved_mcase;
+        strcpy(op, saved_op);
+        strcpy(params, saved_params);
+        strcpy(param1, saved_param1);
+        strcpy(param2, saved_param2);
+
+        // Remove the resolved nlab entry
+        delnlabel(nlabp);
+    }
 }
 
 // Utility: findsymbol
@@ -228,7 +346,7 @@ void addsymbol(const char *s1, const char *s2) {
     for (int k = 0; up[k]; k++) up[k] = toupper((unsigned char)up[k]);
     strncpy(sym[symcnt], up, 255); sym[symcnt][255] = '\0';
     strncpy(symval[symcnt], s2, 255); symval[symcnt][255] = '\0';
-    printf("SYMBOL: %s - %s\n", sym[symcnt], s2);
+    //printf("SYMBOL: %s - %s\n", sym[symcnt], s2);
     symcnt++;
 }
 
@@ -240,13 +358,13 @@ bool findop(const char *l) {
         if (strcmp(OPCODE[i], l) == 0) {
             opp = i;
             if (debug_enabled) {
-                write_debug("DEBUG: findop match: op='%s' index=%d\n", l, i);
+                write_debug("findop match: op='%s' index=%d\n", l, i);
             }
             return true;
         }
     }
     if (debug_enabled) {
-        write_debug("DEBUG: findop NO match: op='%s'\n", l);
+        write_debug("findop NO match: op='%s'\n", l);
     }
     return false;
 }
@@ -254,13 +372,13 @@ bool findop(const char *l) {
 // Utility: addcode
 void addcode(unsigned char b) {
     if (debug_enabled) {
-        write_debug("DEBUG: addcode b=%d codpos=%d\n", b, codpos);
+        write_debug("addcode b=%d codpos=%d\n", b, codpos);
     }
     int idx = codpos;
     code[idx] = (unsigned char)(b & 0xFF);
     codpos++;
     if (debug_enabled) {
-        write_debug("DEBUG: wrote code[%d]=%02X\n", idx, code[idx]);
+        write_debug("wrote code[%d]=%02X\n", idx, code[idx]);
     }
     if (codpos + startadr >= 65536) {
         abort_c("Code exceeds maximum memory!");
@@ -323,45 +441,77 @@ int calcadr() {
     int i = 0;
     char s[256], s2[256];
     bool lf = false;
-
-    // Replicate Pascal logic: scan params to find labels
-    while (i < strlen(params)) {
+    int len = strlen(params);
+    // Se il parametro è già numerico, non cercare label
+    char *endptr = NULL;
+    long num = strtol(params, &endptr, 0);
+    if (endptr != params && *endptr == '\0') {
+        // Parametro numerico valido
+        strcpy(param1, params);
+        param2[0] = '\0';
+        return (int)num;
+    }
+    // Altrimenti, cerca solo token interi separati da delimitatori
+    while (i < len) {
         // Skip hexadecimal numbers (0x...)
-        if (i < strlen(params) - 2 && params[i] == '0' && toupper(params[i+1]) == 'X') {
+        if (i < len - 2 && params[i] == '0' && (params[i+1] == 'x' || params[i+1] == 'X')) {
             i += 2;
-            while (i < strlen(params) && (isdigit(params[i]) || (toupper(params[i]) >= 'A' && toupper(params[i]) <= 'F'))) i++;
+            while (i < len && (isdigit(params[i]) || (toupper(params[i]) >= 'A' && toupper(params[i]) <= 'F'))) i++;
         }
         // Skip binary numbers (0b...)
-        else if (i < strlen(params) - 2 && params[i] == '0' && toupper(params[i+1]) == 'B') {
+        else if (i < len - 2 && params[i] == '0' && (params[i+1] == 'b' || params[i+1] == 'B')) {
             i += 2;
-            while (i < strlen(params) && (params[i] == '0' || params[i] == '1')) i++;
+            while (i < len && (params[i] == '0' || params[i] == '1')) i++;
         }
-        // Look for labels (starting with a letter or underscore)
+        // Extract token (label or symbol) solo se è un token intero e case-sensitive
         else if (isalpha(params[i]) || params[i] == '_') {
             int j = 0;
             s[0] = '\0';
-            // Extract the label name
-            while (i < strlen(params) && (isalnum(params[i]) || params[i] == '_')) {
-                s[j++] = toupper(params[i++]);
+            int start = i;
+            while (i < len && (isalnum(params[i]) || params[i] == '_')) {
+                s[j++] = params[i];
+                i++;
             }
             s[j] = '\0';
-
-            if (!findlabel(s)) {
-                addnlabel(s);
-                lf = true;
-            } else {
-                // Replace the label with its absolute value as Pascal does
-                snprintf(s2, 255, "%d", labbase[labp] + labpos[labp]);
-                replace_text(params, s, s2);
-                strcpy(param1, params);
-                param2[0] = '\0';
-                i = i - strlen(s) + strlen(s2);
+            // Verifica che il token sia delimitato (fine stringa o delimitatore)
+            if (i == len || params[i] == ' ' || params[i] == ',' || params[i] == ';' || params[i] == ')' || params[i] == '(') {
+                // Se il token non è un valore numerico, cerca label
+                char *endptr2 = NULL;
+                long num2 = strtol(s, &endptr2, 0);
+                if (!(endptr2 != s && *endptr2 == '\0')) {
+                    // Check if token is just a suffix of an existing defined label; if so, skip adding it as unresolved
+                    char up_s[256]; int ui=0;
+                    for (int ti=0; s[ti] && ui < 255; ti++) up_s[ui++] = toupper((unsigned char)s[ti]);
+                    up_s[ui] = '\0';
+                    bool is_suffix_of_defined = false;
+                    for (int li = 0; li < labcnt; li++) {
+                        if (strstr(lab[li], up_s) != NULL && strcmp(lab[li], up_s) != 0) {
+                            is_suffix_of_defined = true;
+                            break;
+                        }
+                    }
+                    if (!is_suffix_of_defined) {
+                        if (!findlabel(s)) {
+                            // Aggiungi label solo se non è numerica
+                            addnlabel(s);
+                            lf = true;
+                        } else {
+                            // Replace the label with il suo valore assoluto
+                            snprintf(s2, 255, "%d", labbase[labp] + labpos[labp]);
+                            replace_text(params, s, s2);
+                            strcpy(param1, params);
+                            param2[0] = '\0';
+                            i = start + strlen(s2);
+                        }
+                    } else {
+                        // skip this token because it's likely a fragment of a defined label
+                    }
+                }
             }
         } else {
             i++;
         }
     }
-
     // For CALL/JP, force param1 to be the resolved label value if present
     // This ensures the correct address is used in the encoding
     if (opp == 120 || opp == 121) {
@@ -373,8 +523,6 @@ int calcadr() {
             }
         }
     }
-
-    // Return the result as Pascal does
     if (lf) {
         return 0;  // unresolved label
     } else if (param2[0] == '\0') {
@@ -397,6 +545,23 @@ bool in_set(int value, const int *set, int size) {
 static int parse_number(const char **sp) {
     const char *s = *sp;
     while (*s == ' ' || *s == '\t') s++;
+    // LB(x) e HB(x) supporto
+    if (strncmp(s, "LB(", 3) == 0) {
+        s += 3;
+        int v = parse_expr(&s);
+        while (*s == ' ' || *s == '\t') s++;
+        if (*s == ')') s++;
+        *sp = s;
+        return v & 0xFF;
+    }
+    if (strncmp(s, "HB(", 3) == 0) {
+        s += 3;
+        int v = parse_expr(&s);
+        while (*s == ' ' || *s == '\t') s++;
+        if (*s == ')') s++;
+        *sp = s;
+        return (v >> 8) & 0xFF;
+    }
     // symbol check
     char tok[256]; int ti=0;
     if (isalpha((unsigned char)*s) || *s == '_') {
@@ -595,7 +760,7 @@ void doasm(const char *line) {
                 if (strlen(token) > 0) {
                     int val = mathparse(token, 0);
                     if (debug_enabled) {
-                        write_debug("DEBUG: .DB token='%s' val=%d\n", token, val);
+                        write_debug(".DB token='%s' val=%d\n", token, val);
                     }
                     addcode(val);
                 }
@@ -639,7 +804,7 @@ void doasm(const char *line) {
     // Extract operation and parameters ONLY if not a label or directive
     extractop(s);
     if (debug_enabled) {
-        write_debug("DEBUG: op='%s' param1='%s' param2='%s'\n", op, param1, param2);
+        write_debug("op='%s' param1='%s' param2='%s'\n", op, param1, param2);
     }
 
     // Clean param1 removing trailing commas
@@ -683,25 +848,25 @@ void doasm(const char *line) {
         // Relative jumps
         else if (in_set(opp, JR, 11)) {
             adr = calcadr();
-            write_debug("DEBUG: JR/JRPLUS codpos=%d startadr=%d adr=%d param1=%s\n", codpos, startadr, adr, param1);
+            write_debug("JR/JRPLUS codpos=%d startadr=%d adr=%d param1=%s\n", codpos, startadr, adr, param1);
             addcode(opp);
             if (adr >= 8192) {
                 if (in_set(opp, JRPLUS, 5)) {
-                    write_debug("DEBUG: JRPLUS offset used = %d\n", adr - codpos - startadr);
+                    write_debug("JRPLUS offset used = %d\n", adr - codpos - startadr);
                     addcode(adr - codpos - startadr);
                 } else {
-                    write_debug("DEBUG: JRMINUS offset used = %d\n", (codpos + startadr) - adr);
+                    write_debug("JRMINUS offset used = %d\n", (codpos + startadr) - adr);
                     addcode((codpos + startadr) - adr);
                 }
             } else if (adr > 0) {
-                write_debug("DEBUG: JR direct adr used = %d\n", adr);
+                write_debug("JR direct adr used = %d\n", adr);
                 addcode(adr);
             } else {
-                write_debug("DEBUG: JR placeholder 0 (label unresolved)\n");
+                write_debug("JR placeholder 0 (label unresolved)\n");
                 addcode(0);
             }
             if (debug_enabled && cline == 9) {
-                write_debug("DEBUG-SNAP: after JRM codpos=%d:\n", codpos);
+                write_debug("after JRM codpos=%d:\n", codpos);
                 for (int k = 0; k < codpos; k++) write_debug("%02X ", code[k]);
                 write_debug("\n");
             }
@@ -712,7 +877,36 @@ void doasm(const char *line) {
             if (NBARGU[opp] == 2) {
                 if (strlen(param1) > 0) {
                     int val = mathparse(param1, 0);
-                    if (val == 0 && strcmp(param1, "0") != 0) {
+                    // Accetta anche "0x00", "0b0", "00" come zero valido
+                    bool is_zero_valid = (val == 0) && (
+                        strcmp(param1, "0") == 0 ||
+                        strcasecmp(param1, "0x0") == 0 ||
+                        strcasecmp(param1, "0x00") == 0 ||
+                        strcasecmp(param1, "0b0") == 0 ||
+                        strcasecmp(param1, "00") == 0
+                    );
+                    // Accetta anche LB(...) e HB(...) con simboli non risolti
+                    bool is_lb_hb_unresolved = false;
+                    if (val == 0 && (strncmp(param1, "LB(", 3) == 0 || strncmp(param1, "HB(", 3) == 0)) {
+                        // Estrai il nome del simbolo tra parentesi
+                        const char *start = param1 + 3;
+                        const char *end = strchr(start, ')');
+                        if (end && end > start) {
+                            char symbol[256];
+                            size_t len = end - start;
+                            if (len < sizeof(symbol)) {
+                                strncpy(symbol, start, len);
+                                symbol[len] = '\0';
+                                // Rimuovi eventuali spazi
+                                trim(symbol);
+                                // Se il simbolo non è risolto, accetta senza warning
+                                if (!findsymbol(symbol)) {
+                                    is_lb_hb_unresolved = true;
+                                }
+                            }
+                        }
+                    }
+                    if (val == 0 && !is_zero_valid && !is_lb_hb_unresolved) {
                         printf("Warning: invalid parameter for %s: '%s' at line %d\n", op, param1, cline);
                         return;
                     }
@@ -869,10 +1063,136 @@ void doasm(const char *line) {
                 addcode(NOP);
             }
         }
-        else if (strcmp(op, "JMP") == 0) {
+        else if (strcmp(op, "RJMP") == 0) {
+            adr = calcadr();
+            if (adr >= 8192) {
+                if (abs(adr - startadr - codpos) < 255) {
+                    if (adr > startadr + codpos) addcode(44);
+                    else addcode(45);
+                    addcode(abs(adr - startadr - codpos));
+                } else {
+                    addcode(121); addcode(adr / 256); addcode(adr % 256); // Do absolute jump then
+                }
+            } else if ((adr >= 1) && (adr <= 255)) {
+                addcode(44); addcode(adr);
+            } else if ((adr <= -1) && (adr >= -255)) {
+                addcode(45); addcode(adr);
+            } else {
+                addcode(NOP); addcode(NOP);
+            }
+        }
+        else if (strcmp(op, "BRLO") == 0) {
             adr = calcadr();
             if (adr > 0) {
-                addcode(121);
+                addcode(opp);
+                addcode(adr / 256);
+                addcode(adr % 256);
+            } else {
+                addcode(NOP);
+                addcode(NOP);
+                addcode(NOP);
+            }
+        }
+        else if (strcmp(op, "BRHI") == 0) {
+            adr = calcadr();
+            if (adr > 0) {
+                addcode(opp);
+                addcode(adr / 256);
+                addcode(adr % 256);
+            } else {
+                addcode(NOP);
+                addcode(NOP);
+                addcode(NOP);
+            }
+        }
+        else if (strcmp(op, "BREQ") == 0) {
+            adr = calcadr();
+            if (adr > 0) {
+                addcode(opp);
+                addcode(adr / 256);
+                addcode(adr % 256);
+            } else {
+                addcode(NOP);
+                addcode(NOP);
+                addcode(NOP);
+            }
+        }
+        else if (strcmp(op, "BRNE") == 0) {
+            adr = calcadr();
+            if (adr > 0) {
+                addcode(opp);
+                addcode(adr / 256);
+                addcode(adr % 256);
+            } else {
+                addcode(NOP);
+                addcode(NOP);
+                addcode(NOP);
+            }
+        }
+        else if (strcmp(op, "BRLT") == 0) {
+            adr = calcadr();
+            if (adr > 0) {
+                addcode(opp);
+                addcode(adr / 256);
+                addcode(adr % 256);
+            } else {
+                addcode(NOP);
+                addcode(NOP);
+                addcode(NOP);
+            }
+        }
+        else if (strcmp(op, "BRGT") == 0) {
+            adr = calcadr();
+            if (adr > 0) {
+                addcode(opp);
+                addcode(adr / 256);
+                addcode(adr % 256);
+            } else {
+                addcode(NOP);
+                addcode(NOP);
+                addcode(NOP);
+            }
+        }
+        else if (strcmp(op, "BRSH") == 0) {
+            adr = calcadr();
+            if (adr > 0) {
+                addcode(opp);
+                addcode(adr / 256);
+                addcode(adr % 256);
+            } else {
+                addcode(NOP);
+                addcode(NOP);
+                addcode(NOP);
+            }
+        }
+        else if (strcmp(op, "BRCS") == 0) {
+            adr = calcadr();
+            if (adr > 0) {
+                addcode(opp);
+                addcode(adr / 256);
+                addcode(adr % 256);
+            } else {
+                addcode(NOP);
+                addcode(NOP);
+                addcode(NOP);
+            }
+        }
+        else if (strcmp(op, "BRIE") == 0) {
+            adr = calcadr();
+            if (adr > 0) {
+                addcode(opp);
+                addcode(adr / 256);
+                addcode(adr % 256);
+            } else {
+                addcode(NOP);
+                addcode(NOP);
+                addcode(NOP);
+            }
+        }
+        else if (strcmp(op, "BRAN") == 0) {
+            adr = calcadr();
+            if (adr > 0) {
+                addcode(opp);
                 addcode(adr / 256);
                 addcode(adr % 256);
             } else {
@@ -894,11 +1214,9 @@ void resolve_labels_and_write_bin(const char *output_filename) {
     int i, j;
     bool resolved;
 
-    printf("Resolving undefined labels...\n");
-
     if (debug_enabled) {
-        write_debug("DEBUG: nlabcnt=%d\n", nlabcnt);
-        for (i = 0; i < nlabcnt; i++) write_debug("DEBUG: nlab[%d]=%s nlabpos=%d nlabasm=%s\n", i, nlab[i], nlabpos[i], nlabasm[i]);
+        write_debug("nlabcnt=%d\n", nlabcnt);
+        for (i = 0; i < nlabcnt; i++) write_debug("nlab[%d]=%s nlabpos=%d nlabasm=%s\n", i, nlab[i], nlabpos[i], nlabasm[i]);
     }
 
     // Resolve undefined labels with multiple passes
@@ -922,25 +1240,35 @@ void resolve_labels_and_write_bin(const char *output_filename) {
 
                 // Reassemble the instruction now that the label is resolved
                 extractop(nlabasm[i]);
-
                 if (findop(op)) {
-                    // Replace placeholder NOP with the real instruction
+                    // Rivaluta parametri con mathparse ora che la label è risolta
+                    int val1 = 0, val2 = 0;
+                    if (strlen(param1) > 0) val1 = mathparse(param1, 0);
+                    if (strlen(param2) > 0) val2 = mathparse(param2, 0);
+                    // Aggiorna il codice in base al tipo di istruzione
+                    if (NBARGU[opp] == 2) {
+                        code[nlabpos[i]] = opp;
+                        code[nlabpos[i]+1] = val1;
+                    } else if (NBARGU[opp] == 3) {
+                        code[nlabpos[i]] = opp;
+                        code[nlabpos[i]+1] = (val1 >> 8) & 0xFF;
+                        code[nlabpos[i]+2] = val1 & 0xFF;
+                    } else if (NBARGU[opp] == 4) {
+                        code[nlabpos[i]] = opp;
+                        code[nlabpos[i]+1] = val1;
+                        code[nlabpos[i]+2] = val2;
+                    }
+                    // Gestione jump/call come già presente
                     if (in_set(opp, JR, 11)) {
                         int dest = labpos[labp];
                         int offset = dest - (nlabpos[i] + 1);
-                        write_debug("RESOLVE: nlab=%s nlabpos=%d dest=%d current=%d offset=%d\n", nlab[i], nlabpos[i], dest, nlabpos[i] + 1, offset);
-                        write_debug("RESOLVE: before write code[%d]=%02X code[%d]=%02X\n", nlabpos[i], code[nlabpos[i]], nlabpos[i]+1, code[nlabpos[i]+1]);
                         code[nlabpos[i]] = opp;
                         code[nlabpos[i] + 1] = offset & 0xFF;
-                        write_debug("RESOLVE: after write code[%d]=%02X code[%d]=%02X\n", nlabpos[i], code[nlabpos[i]], nlabpos[i]+1, code[nlabpos[i]+1]);
                     } else if (opp == 120 || opp == 121 || opp == 16 || (opp >= 124 && opp <= 127)) {
                         int dest = labpos[labp] + labbase[labp];
-                        // RIMUOVO la correzione -4 per CALL/JMP, come fa la versione Pascal
-                        write_debug("RESOLVE: before write code[%d]=%02X code[%d]=%02X code[%d]=%02X\n", nlabpos[i], code[nlabpos[i]], nlabpos[i]+1, code[nlabpos[i]+1], nlabpos[i]+2, code[nlabpos[i]+2]);
                         code[nlabpos[i]] = opp;
                         code[nlabpos[i] + 1] = (dest / 256) & 0xFF;
                         code[nlabpos[i] + 2] = dest & 0xFF;
-                        write_debug("RESOLVE: after write code[%d]=%02X code[%d]=%02X code[%d]=%02X\n", nlabpos[i], code[nlabpos[i]], nlabpos[i]+1, code[nlabpos[i]+1], nlabpos[i]+2, code[nlabpos[i]+2]);
                     }
                 }
 
@@ -952,7 +1280,7 @@ void resolve_labels_and_write_bin(const char *output_filename) {
                 strcpy(param1, saved_param1);
                 strcpy(param2, saved_param2);
 
-                printf("Resolved label: %s -> %d\n", nlab[i], labpos[labp] + startadr);
+                write_debug("Resolved label: %s -> %d\n", nlab[i], labpos[labp] + startadr);
 
                 // Remove the unresolved label from the list
                 delnlabel(i);
