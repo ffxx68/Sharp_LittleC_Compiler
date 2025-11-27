@@ -22,9 +22,8 @@ This document collects the analysis and the refactor plan to make the `lcc` comp
 
 ---
 
-## Build and Test Scripts
+## Test Scripts
 
-- **build.bat**: Script per la compilazione automatica di lcc.exe nella directory Source/lcc usando FPC.
 - **test.bat**: Script per testare la toolchain lcpp + lcc su un sorgente di test (es. test_C/bounce/main.c), preprocessando e compilando il file, con output in test_C/bounce/tmp.asm.
 
 ---
@@ -103,11 +102,13 @@ Each item is designed to be small and verifiable.
 Phase 0 — Preparation (0.5 day)
 - [x] Task 0.1: create a git branch for the refactor.
 - [x] Task 0.2: run baseline build (compile `Source/lcc`) and save the output.
+- [x] Task 0.3: generate and save reference ASM (copy original `tmp.asm` -> `Source/lcc/reference_bounce.asm`) — used as regression reference for future tests.
 
 Phase 1 — Extract `Lexer` (2 days)
-- [ ] Task 1.1: create `Lexer.pas` that re-exports the public functions from `scanner.pas` (GetToken, GetName...).
-- [ ] Task 1.2: replace direct uses in the `parser` with `Lexer` (use wrappers to keep compatibility).
-- [ ] Verification: build OK, run tokenization test on a demo file.
+- [x] Task 1.1: create `Lexer.pas` that re-exports the public functions from `scanner.pas` (GetToken, GetName...).
+- [x] Task 1.2: replace direct uses in the `parser` with `Lexer` (use wrappers to keep compatibility).  
+  - Done: updated `parser.pas` to call `Lexer.Get*` wrappers where needed and verified by running the `bounce` demo; generated `tmp.asm` matches `reference_bounce.asm` (NO_DIFF).
+- [x] Verification: build OK, run tokenization test on a demo file (generated `test_C\bounce\tmp.asm` matches `reference_bounce.asm`).
 
 Phase 2 — Extract `SymbolTable` and `Semantic` (3 days)
 - [ ] Task 2.1: create `SymbolTable.pas` and move VarList/ProcList, Find/Add/Alloc.
@@ -216,3 +217,5 @@ end.
 ---
 
 File created automatically: `Source/lcc/refactor_roadmap.md`.
+
+---

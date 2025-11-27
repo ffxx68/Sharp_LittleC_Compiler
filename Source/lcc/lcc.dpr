@@ -6,13 +6,15 @@ program lcc;
 {$ENDIF}
 
 {$APPTYPE CONSOLE}
-uses Input, Output, Errors, Scanner, parser, sysutils;
+uses
+  SysUtils, Input, Output, Errors, Scanner, Parser, CodeGen, CalcUnit, Lexer;
 
 begin
         outfile := true;
         writeln;
-        writeln('lcc v1.1 - littleC Compiler for Hitachi SC61860 CPU');
+        writeln('lcc v2.1 - littleC Compiler for Hitachi SC61860 CPU');
         writeln('(c) Simon Lehmayr 2004');
+        writeln('(c) Fabio Fumi - refactored - 2025');
         if paramcount = 2 then
         begin
                 if not fileexists(ParamStr(1)) then exit;
@@ -26,4 +28,3 @@ begin
                 writeln('    output file must be the assembler file to create');
         end;
 end.
-

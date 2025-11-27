@@ -8,7 +8,7 @@ unit Parser;
 
 {--------------------------------------------------------------}
 interface
-uses Input, Scanner, Errors, CodeGen, Output, sysutils, calcunit, math;
+uses Input, Scanner, Lexer, Errors, CodeGen, Output, sysutils, calcunit, math;
 
 procedure FirstScan(filen: string);
 procedure SecondScan(filen: string);
@@ -846,9 +846,9 @@ begin
                        writln( #9'LIDP'#9+'0x'+inttohex(adr,4)+#9'; Store float var '+name )
                     else
                        writln( #9'LIDP'#9+name+#9'; store var '+name );
-                    writln( #9'LP 0x'+IntToHex(FloatXReg,2)+' ; temp float reg' );
-                    writln( #9'LII 7');
-                    writln( #9'EXWD ; (DP) <-> (FloatXReg), 8 bytes' );
+                    writeln( #9'LP 0x'+IntToHex(FloatXReg,2)+' ; temp float reg' );
+                    writeln( #9'LII 7');
+                    writeln( #9'EXWD ; (DP) <-> (FloatXReg), 8 bytes' );
                 end;
             end ;
         end else
@@ -888,7 +888,7 @@ begin
                         writln( #9'LIB'#9'0');
                         writln( #9'ADB');
                         writln( #9'POP'); dec(pushcnt);
-                        writln( #9'IYS');
+                        writeln( #9'IYS');
                 end;
             end else if (typ='word') then
             begin
@@ -928,9 +928,9 @@ begin
                         end;
                         writln( #9'EXAM');
                         writln( #9'POP'); dec(pushcnt);
-                        writln( #9'LIB'#9'0');
-                        writln( #9'ADB');
-                        writln( #9'POP'); dec(pushcnt);
+                        writeln( #9'LIB'#9'0');
+                        writeln( #9'ADB');
+                        writeln( #9'POP'); dec(pushcnt);
                         writln( #9'EXAB');
                         writln( #9'POP'); dec(pushcnt);
                         writln( #9'IYS');
@@ -1134,9 +1134,9 @@ begin
                        writln( #9'LIDP'#9+'0x'+inttohex(adr,4)+#9'; Load variable '+name)
                     else
                        writln( #9'LIDP'#9+name+'+1'#9'; Load variable '+name);
-                    writln(#9'LP'#9'0x'+inttohex(FloatXReg,2)+' ; to temporary store' );
-                    writln(#9'LII 07');
-                    writln(#9'MVWD ; (DP) -> (P), I+1 times' );
+                    writeln( #9'LP'#9'0x'+inttohex(FloatXReg,2)+' ; to temporary store' );
+                    writeln( #9'LII 07');
+                    writeln( #9'MVWD ; (DP) -> (P), I+1 times' );
                 end;
             end;
         end else
@@ -1172,12 +1172,64 @@ begin
                         writln( #9'POP'); dec(pushcnt);
                         writln( #9'LIB'#9'0');
                         writln( #9'ADB');
-                        writln( #9'IXL'); // X -> DP; DP+1 -> DP, X; (DP) -> A
+                        writln( #9'POP'); dec(pushcnt);
+                        writln( #9'EXAB');
+                        writln( #9'POP'); dec(pushcnt);
+                        writln( #9'IYS');
+                        writln( #9'EXAB');
+                        writln( #9'IYS');
+                end;
+            end else if (typ='word') then
+            begin
+                if not xr then
+                begin
+                        writln( #9'RC');
+                        writln( #9'SL');
+                        writln( #9'LII'#9+inttostr(adr)+#9'; Load array element from '+name);
+                        writln( #9'LP'#9'0');
+                        writln( #9'ADM');
+                        writln( #9'EXAM');
+                        writln( #9'STP');
+                        writln( #9'INCP');
+                        writln( #9'POP'); dec(pushcnt);
+                        writln( #9'EXAM');
+                        writln( #9'DECP');
+                        writln( #9'POP'); dec(pushcnt);
+                        writln( #9'EXAM');
+                end else
+                begin
+                        writln( #9'RC');
+                        writln( #9'SL');
+                        writln( #9'PUSH'#9#9'; Load array element from '+name); inc(pushcnt);
+                        writln( #9'LP'#9'7'#9'; HB of address');
+                        if adr <> -1 then
+                        begin
+                                writln( #9'LIA'#9'HB('+inttostr(adr)+'-1)');
+                                writln( #9'EXAM');
+                                writln( #9'LP'#9'6'#9'; LB');
+                                writln( #9'LIA'#9'LB('+inttostr(adr)+'-1)');
+                        end else
+                        begin
+                                writln( #9'LIA'#9'HB('+name+'-1)');
+                                writln( #9'EXAM');
+                                writln( #9'LP'#9'6'#9'; LB');
+                                writln( #9'LIA'#9'LB('+name+'-1)');
+                        end;
+                        writln( #9'EXAM');
+                        writln( #9'POP'); dec(pushcnt);
+                        writeln( #9'LIB'#9'0');
+                        writeln( #9'ADB');
+                        writeln( #9'POP'); dec(pushcnt);
+                        writln( #9'EXAB');
+                        writln( #9'POP'); dec(pushcnt);
+                        writln( #9'IYS');
+                        writln( #9'EXAB');
+                        writln( #9'IYS');
                 end;
             end else if (typ='float') then
             begin
-                Error ( 'Float array loading not supported yet ' );
-            end;
+                 Error ( 'Float array loading not supported yet ' );
+            end ;
         end;
 end;
 
@@ -1323,13 +1375,13 @@ begin
   else if IsDigit(Look) then
   begin
     if optype = floatp then
-        LoadConstant(GetFloat)
+        LoadConstant(Lexer.GetFloat)
     else
-        LoadConstant(GetNumber);
+        LoadConstant(Lexer.GetNumber);
   end
   else if IsAlpha(Look)then
   begin
-                s := GetName;
+                s := Lexer.GetName;
                 if Look = '[' then
                 begin
                         Rd(Look, Tok); tok := trim(tok);
@@ -1535,9 +1587,9 @@ begin
         while IsAddop(Look) do  begin
 		case Look of
 			'+': Add;
-			'-': Subtract;
-			'|': _Or;
-                        '~': _Xor;
+			'-' : Subtract;
+			'|' : _Or;
+                        '~' : _Xor;
 			SR:  ShiftR;
 			SL:  ShiftL;
                 end;
@@ -1565,7 +1617,7 @@ begin
                 delete(tok, 1, 1); tok := trim(tok);
         end;
         Rd(Look, Tok); tok := trim(tok);
-        Name := GetName;
+        Name := Lexer.GetName;
         if findvar(name) then
         begin
             if p = REF then
@@ -1599,7 +1651,7 @@ begin
                         if findvar(name)
                         and ((varlist[varfound].typ = 'char') or (varlist[varfound].typ = 'byte')) then
                         begin
-                                if look = '+' then writln(#9'; '+name+'++') else writln(#9'; '+name+'--');
+                                if look = '+' then writln(#9'; '+name+'++') else writeln(#9'; '+name+'--');
                                 if ( not(varlist[varfound].Local)
                                 and ( varlist[varfound].address<12 )
                                 and ( varlist[varfound].address>=0 ) ) then
@@ -1617,7 +1669,7 @@ begin
                                 else
                                 begin
                                         Loadvariable(name);
-                                        if Look = '+' then writln(#9'INCA') else writln(#9'DECA');
+                                        if Look = '+' then writln(#9'INCA') else writeln(#9'DECA');
                                         storevariable(name);
                                 end;
                                 exit;
@@ -1699,7 +1751,7 @@ begin
                                                 writln(#9'POP'); dec(pushcnt);
                                                 writln(#9'IYS'#9#9'; Store content LB *'+s);
                                                 writln(#9'EXAB');
-                                                writln(#9'IYS'#9#9'; Store content HB *'+s);
+                                                writeln(#9'IYS'#9#9'; Store content HB *'+s);
                                         end;
                         end else
                         begin
@@ -1707,16 +1759,16 @@ begin
                                         writln(#9'STP'#9#9'; Set P');
                                         if varlist[varfound].pnttyp <> 'word' then
                                         begin
-                                                writln(#9'POP'); dec(pushcnt);
-                                                writln(#9'EXAM'#9#9'; Store content *'+s);
+                                                writeln(#9'POP'); dec(pushcnt);
+                                                writeln(#9'EXAM'#9#9'; Store content *'+s);
                                         end else
                                         begin
-                                                writln(#9'POP'); dec(pushcnt);
-                                                writln(#9'EXAB');
-                                                writln(#9'POP'); dec(pushcnt);
-                                                writln(#9'EXAM'#9#9'; Store content LB *'+s);
-                                                writln(#9'EXAB');
-                                                writln(#9'EXAM'#9#9'; Store content HB *'+s);
+                                                writeln(#9'POP'); dec(pushcnt);
+                                                writeln(#9'EXAB');
+                                                writeln(#9'POP'); dec(pushcnt);
+                                                writeln(#9'EXAM'#9#9'; Store content LB *'+s);
+                                                writeln(#9'EXAB');
+                                                writeln(#9'EXAM'#9#9'; Store content HB *'+s);
                                         end;
                         end;
                 end;
@@ -1844,7 +1896,8 @@ begin
         writln(#9'CASE');
         iselse := false;
         repeat
-                getToken(MODESTR, dummy);
+                
+                Lexer.GetToken(MODESTR, dummy);
                 temp := extrcust(tok, ':'); tok:=trim(tok);
                 if tok <> '' then
                 begin
@@ -1894,7 +1947,8 @@ begin
 
         if copy(dummy, 1, 4) = 'else' then
         begin
-                getToken(MODESTR, dummy); delete(tok, 1, 4); tok:=trim(tok);
+                
+                Lexer.GetToken(MODESTR, dummy); delete(tok, 1, 4); tok:=trim(tok);
                 if tok <> '' then
                 begin
                         dummy := tok + ';}' + dummy;
@@ -1932,8 +1986,8 @@ begin
         delete(tok, 1, 6); tok := trim(tok);
         if findvar(tok) or findproc(tok) then
                 error(tok+': This label name is already used!');
-        writln('');
-        writln( '  '+tok+':'#9'; User label');
+        writeln('');
+        writeln( '  '+tok+':'#9'; User label');
 end;
 {-------------------------------------------------------------}
 
@@ -2049,12 +2103,12 @@ begin
         L2 := NewLabel;
         ExitLabel := L2;
         PostLabel(L1);
-        getToken(MODESTR, dummy);
+        Lexer.GetToken(MODESTR, dummy);
         BoolExpression;
         BranchAbsFalse(L2); // potentially large jump
         if trim(dummy)[1] <> ')' then
         begin
-                getToken(MODESTR, dummy);
+                Lexer.GetToken(MODESTR, dummy);
                 if tok[length(tok)] = ')' then
                 begin
                         delete(tok, length(tok), 1);
@@ -2071,7 +2125,7 @@ begin
                 end;
         end else
         begin
-                getToken(MODESTR, dummy);
+                Lexer.GetToken(MODESTR, dummy);
                 if tok <> ')' then
                 begin
                         delete(tok, 1, 1); tok := trim(tok);
@@ -2126,7 +2180,7 @@ begin
                 inc(level);
         end;
         Block;
-        getToken(MODESTR, dummy);
+        Lexer.GetToken(MODESTR, dummy);
         delete(Tok, 1, 7); delete(Tok, length(Tok), 1);
         BoolExpression;
         BranchFalse(L2);
@@ -2388,8 +2442,8 @@ procedure Block;
 var Name, name2: string;
 begin
     repeat
-
-        getToken(MODESTR, dummy);
+        
+        Lexer.GetToken(MODESTR, dummy);
         // The following doesn't allow var names starting with a type name
         // e.g. 'byteX' is confused with 'byte' !
         // Try using GetName(), or ExtrWord() instead?
@@ -2504,7 +2558,7 @@ var Name, name2, t, temp, s, rettyp: string;
 begin
         assignfile(f, filen);
         reset(f);
-        GetToken(MODEFILE, dummy);
+        Lexer.GetToken(MODEFILE, dummy);
         while tok <> '' do
         begin
 
@@ -2600,7 +2654,7 @@ begin
                     delete(t, length(t), 1);
                     AddProc(Name, trim(t), temp, i, hasret, isword, rettyp);
             end;
-	    GetToken(MODEFILE, dummy);
+	    Lexer.GetToken(MODEFILE, dummy);
         end;
 
         printvarlist;
@@ -2828,7 +2882,6 @@ begin
         closefile(f2);
         closefile(f);
 
-
         // Replace PUSH LIB... POP to LIB...
         assignfile(f, 'temp2.asm');
         reset(f);
@@ -2945,7 +2998,7 @@ begin
         // Replace n-- code to DECA
         assignfile(f, 'temp.asm');
         reset(f);
-        assignfile(f2, filen);
+        assignfile(f2, 'temp2.asm');
         rewrite(f2);
         i := 0;
 
@@ -2984,6 +3037,7 @@ begin
                                                 writeln(f2, name); if name<> '' then inc(i);
                                                 writeln(f2, typ); if typ<> '' then inc(i);
                                                 writeln(f2, s2); if s2<> '' then inc(i);
+                                                writeln(f2, s3); if s3<> '' then inc(i);
                                                 writeln(f2, s); if s<> '' then inc(i);
                                         end;
                                 end else
@@ -3021,6 +3075,3 @@ begin
         ProcCount := 0;
         VarPos := 8;   // initial variable allocation point
 end.
-
-
-
