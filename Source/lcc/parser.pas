@@ -1,4 +1,4 @@
-//{$MODE DELPHI}
+﻿//{$MODE DELPHI}
 {--------------------------------------------------------------}
 unit Parser;
 
@@ -8,7 +8,7 @@ unit Parser;
 
 {--------------------------------------------------------------}
 interface
-uses Input, Scanner, Lexer, Errors, CodeGen, Output, sysutils, calcunit, math;
+uses Input, Scanner, Lexer, Errors, CodeGen, Output, sysutils, calcunit, math, SymbolTable;
 
 procedure FirstScan(filen: string);
 procedure SecondScan(filen: string);
@@ -346,44 +346,6 @@ begin
         writeln;
 end;
 
-
-{--------------------------------------------------------------}
-{ Test if variable is at address }
-
-function IsVarAtAdr(adr, size: integer): boolean;
-var i: integer;
-begin
-        result := false;
-        VarFound := -1;
-        if adr = -1 then exit;
-{        for i:=adr to adr+size-1 do
-                if memimg[i] <> -1 then
-                begin
-                        IsVarAtAdr := true;
-                        VarFound := i;
-                        break;
-                end;
-}
-        for i := 0 to VarCount - 1 do
-            begin
-              // check whether two ranges [x1:x2] and [y1:y2] overlap
-              //
-              // The only time the ranges DON'T overlap is when
-              // the end of one range is before the beginning of the other.
-              //
-              // So (in C syntax), we want    !(x2 < y1 || x1 > y2)
-              // which is equivalent to        x2 >= y1 && x1 <= y2
-              if ( (adr + size >= VarList[i].address)
-              and  (adr < VarList[i].address + VarList[i].size) ) then
-              begin
-                      result := true;
-                      VarFound := i;
-                      break;
-              end;
-            end;
-end;
-
-
 {--------------------------------------------------------------}
 { Allocate Variable Declaration }
 
@@ -395,7 +357,7 @@ begin
                 if at then
                 begin
                         result := adr;
-                        if IsVarAtAdr(result, size) then
+                        if SymbolTable.IsVarAtAdr(result, size) then
                            Error('Overlapping with '+VarList[VarFound].varname+'!');
                         { begin
                                 if VarList[VarFound].at then
@@ -405,7 +367,7 @@ begin
                                 end;
                                 VarList[VarFound].address := VarPos;
                                 inc(VarPos, VarList[VarFound].size);
-                                if size = 2 then if IsVarAtAdr(result
+                                if size = 2 then if SymbolTable.IsVarAtAdr(result
                                    //+1
                                    , size) then
                                 begin
@@ -423,7 +385,7 @@ begin
                 end else
                 begin
                      // look for first free position
-                     while IsVarAtAdr(VarPos, size) do
+                     while SymbolTable.IsVarAtAdr(VarPos, size) do
                           inc(VarPos);//, VarList[VarFound].size);
                      result := VarPos;
                      inc(VarPos, size);
@@ -2154,7 +2116,7 @@ procedure DoSave;
 var name: string;
 begin
         delete(tok, 1, 5);
-        name := getname;
+        name := Lexer.GetName;
         storevariable(name);
 end;
 
@@ -2172,7 +2134,7 @@ begin
         writln( #9'; Do..while');
         writln('');
         PostLabel(L1);
-//        GetToken(MODESTR, dummy);
+//        Lexer.GetToken(MODESTR, dummy);
         extrword(tok); tok := trim(tok);
         if tok <> '' then
         begin
@@ -2446,7 +2408,7 @@ begin
         Lexer.GetToken(MODESTR, dummy);
         // The following doesn't allow var names starting with a type name
         // e.g. 'byteX' is confused with 'byte' !
-        // Try using GetName(), or ExtrWord() instead?
+        // Try using Lexer.GetName(), or ExtrWord() instead?
         name := copy(tok, 1, 5);
         if ((trim(name) = 'byte' )
              or (trim(name) = 'char')
@@ -3075,3 +3037,4 @@ begin
         ProcCount := 0;
         VarPos := 8;   // initial variable allocation point
 end.
+
