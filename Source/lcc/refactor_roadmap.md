@@ -9,9 +9,23 @@ This document collects the analysis and the refactor plan to make the `lcc` comp
 ---
 
 ## Initial checklist (to complete)
-- [ ] Create a git branch `refactor/modular-lcc` (recommended).
-- [ ] Run a baseline build (compile `Source/lcc`) and save the output/log.
-- [ ] Create this roadmap file (this file).
+- [x] Create a git branch `refactor_modular` (recommended).
+- [x] Run a baseline build (compile `Source/lcc`) and save the output/log.
+- [x] Create this roadmap file (this file).
+
+---
+
+## Build environment notes
+- Lazarus is installed in: `C:\Users\F.Fumi\lazarus\`
+- The compiler is: `$(Lazarusdir)\fpc\3.2.2\bin\i386-win32\fpc.exe`
+- Baseline build log: `Source/lcc/baseline_build.log`
+
+---
+
+## Build and Test Scripts
+
+- **build.bat**: Script per la compilazione automatica di lcc.exe nella directory Source/lcc usando FPC.
+- **test.bat**: Script per testare la toolchain lcpp + lcc su un sorgente di test (es. test_C/bounce/main.c), preprocessando e compilando il file, con output in test_C/bounce/tmp.asm.
 
 ---
 
@@ -87,38 +101,38 @@ For each component I list responsibilities, minimal API, dependencies and priori
 Each item is designed to be small and verifiable.
 
 Phase 0 — Preparation (0.5 day)
-- Task 0.1: create a git branch for the refactor.
-- Task 0.2: run baseline build (compile `Source/lcc`) and save the output.
+- [x] Task 0.1: create a git branch for the refactor.
+- [x] Task 0.2: run baseline build (compile `Source/lcc`) and save the output.
 
 Phase 1 — Extract `Lexer` (2 days)
-- Task 1.1: create `Lexer.pas` that re-exports the public functions from `scanner.pas` (GetToken, GetName...).
-- Task 1.2: replace direct uses in the `parser` with `Lexer` (use wrappers to keep compatibility).
-- Verification: build OK, run tokenization test on a demo file.
+- [ ] Task 1.1: create `Lexer.pas` that re-exports the public functions from `scanner.pas` (GetToken, GetName...).
+- [ ] Task 1.2: replace direct uses in the `parser` with `Lexer` (use wrappers to keep compatibility).
+- [ ] Verification: build OK, run tokenization test on a demo file.
 
 Phase 2 — Extract `SymbolTable` and `Semantic` (3 days)
-- Task 2.1: create `SymbolTable.pas` and move VarList/ProcList, Find/Add/Alloc.
-- Task 2.2: create `Semantic.pas` for vardecl/repadr/checks.
-- Verification: `FirstScan` produces var/proc tables identical to the baseline.
+- [ ] Task 2.1: create `SymbolTable.pas` and move VarList/ProcList, Find/Add/Alloc.
+- [ ] Task 2.2: create `Semantic.pas` for vardecl/repadr/checks.
+- [ ] Verification: `FirstScan` produces var/proc tables identical to the baseline.
 
 Phase 3 — Refactor `CodeGen` + `Output` (3 days)
-- Task 3.1: add `EmitInst` in CodeGen and use `Output.Emit` instead of direct `writeln`.
-- Task 3.2: consolidate `addlib` and `libtext` handling into `CodeGen` -> `Output`.
-- Verification: `SecondScan` generates functional asm; build OK.
+- [ ] Task 3.1: add `EmitInst` in CodeGen and use `Output.Emit` instead of direct `writeln`.
+- [ ] Task 3.2: consolidate `addlib` and `libtext` handling into `CodeGen` -> `Output`.
+- [ ] Verification: `SecondScan` generates functional asm; build OK.
 
 Phase 4 — Reduce Parser: separate syntax from emission (4-6 days)
-- Task 4.1: replace inline asm generation with calls to `CodeGen.Emit*`.
-- Task 4.2: consider introducing an AST (optional) for complex expressions.
-- Verification: generated asm is semantically identical; tests on demos pass.
+- [ ] Task 4.1: replace inline asm generation with calls to `CodeGen.Emit*`.
+- [ ] Task 4.2: consider introducing an AST (optional) for complex expressions.
+- [ ] Verification: generated asm is semantically identical; tests on demos pass.
 
 Phase 5 — Backend and optimizations (2-3 days)
-- Task 5.1: extract optimization logic (temp -> temp2 passes) into `Backend.pas`.
-- Task 5.2: create tests for optimizations (input with known pattern => expected output).
-- Verification: optimizations preserve equivalence and do not introduce regressions.
+- [ ] Task 5.1: extract optimization logic (temp -> temp2 passes) into `Backend.pas`.
+- [ ] Task 5.2: create tests for optimizations (input with known pattern => expected output).
+- [ ] Verification: optimizations preserve equivalence and do not introduce regressions.
 
 Phase 6 — Hardening, cleanup, docs and tests (2 days)
-- Task 6.1: remove duplicates (`parser` vs `parser_new`) after verification and consolidation.
-- Task 6.2: update README, add small scripts/CI for automated tests.
-- Verification: build + smoke tests green.
+- [ ] Task 6.1: remove duplicates (`parser` vs `parser_new`) after verification and consolidation.
+- [ ] Task 6.2: update README, add small scripts/CI for automated tests.
+- [ ] Verification: build + smoke tests green.
 
 Estimated total: ~14-18 working days.
 
