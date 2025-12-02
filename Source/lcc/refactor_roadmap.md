@@ -111,13 +111,20 @@ Phase 1 — Extract `Lexer` (2 days)
 - [x] Verification: build OK, run tokenization test on a demo file (generated `test_C\bounce\tmp.asm` matches `reference_bounce.asm`).
 
 Phase 2 — Extract `SymbolTable` and `Semantic` (3 days)
-- [>] Task 2.1: create `SymbolTable.pas` and move VarList/ProcList, Find/Add/Alloc. (IN PROGRESS)
+- [x] Task 2.1: create `SymbolTable.pas` and move VarList/ProcList, Find/Add/Alloc. (COMPLETED)
   - [x] Created initial `Source/lcc/SymbolTable.pas` (minimal stub) and then a fuller implementation with Var/Proc API (FindVar, AddVar, AllocVar, GetVar/GetProc accessors).
   - [x] Added overloaded compatibility API `IsVarAtAdr(adr,size; out foundIdx)` plus a two-arg wrapper for backwards compatibility.
   - [x] Replaced caller sites in `Source/lcc/parser.pas` for variable-address queries to use `SymbolTable.IsVarAtAdr` (incremental, targeted replacements only — kept backup of original file).
   - [x] Added `Source/lcc/symboltest.pas` and verified it compiles (`SYMBOLTEST_OK`).
   - [x] Ran full demo test (build + lcpp + lcc) for `test_C/bounce` — result: `NO_DIFF` (no regression on generated asm).
-  - [ ] Remaining: migrate all direct uses of `VarList`/`ProcList` in `parser.pas` into `SymbolTable` accessors and remove duplicated declarations from `parser.pas` (do this in small, verifiable steps).
+  - [x] Migrated `FindVar` and `FindProc` to use `SymbolTable` API (wrapper functions).
+  - [x] Added synchronization in `AddVar` and `AddProc` to keep `SymbolTable` in sync with local arrays.
+  - [x] Created conversion functions `VarEntryToTVarInfo` and `ProcEntryToTProcInfo` for type compatibility.
+  - [x] Migrated read accesses to `VarList[i]`/`ProcList[i]` to use `GetVarInfo(i)`/`GetProcInfo(i)` in print functions and initialization loops.
+  - [x] Migrated `VarList[VarFound]`/`ProcList[ProcFound]` accesses to use `GetVarInfo(varfound)`/`GetProcInfo(procfound)`.
+  - [x] Fixed `with` statement ambiguity issues by removing them where field names conflicted with local variables.
+  - [x] Verified all changes with `test.bat` — result: `NO_DIFF` (no regression).
+  - Note: Local arrays `VarList`, `ProcList`, `VarCount`, `ProcCount` still exist in `parser.pas` for write operations during parsing. These will be fully removed in a future refactor phase.
 - [ ] Task 2.2: create `Semantic.pas` for vardecl/repadr/checks.
 - [ ] Verification: `FirstScan` produces var/proc tables identical to the baseline.
 

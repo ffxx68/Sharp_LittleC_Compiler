@@ -124,7 +124,48 @@ begin
   Result := chr ( c + trunc ( e mod 10 ) ) + Result;
 end;
 
+// Conversion helpers for SymbolTable sync
+function VarEntryToTVarInfo(const ve: VarEntry): TVarInfo;
+begin
+  Result.VarName := ve.VarName;
+  Result.Xram := ve.Xram;
+  Result.At := ve.At;
+  Result.Arr := ve.Arr;
+  Result.Local := ve.Local;
+  Result.Pointer := ve.Pointer;
+  Result.Address := ve.address;
+  Result.LocProc := ve.locproc;
+  Result.Size := ve.size;
+  Result.InitN := ve.initn;
+  Result.InitF := ve.initf;
+  Result.Typ := ve.Typ;
+  Result.PntTyp := ve.PntTyp;
+  Result.Inits := ve.inits;
+end;
 
+function ProcEntryToTProcInfo(const pe: ProcEntry): TProcInfo;
+var i: integer;
+begin
+  Result.ProcName := pe.ProcName;
+  Result.ProcCode := pe.ProcCode;
+  Result.HasReturn := pe.hasreturn;
+  Result.ReturnIsWord := pe.ReturnIsWord;
+  Result.ReturnType := pe.ReturnType;
+  Result.Params := pe.Params;
+  Result.ParCnt := pe.ParCnt;
+  for i := 0 to 20 do
+  begin
+    Result.ParName[i] := pe.ParName[i];
+    Result.ParTyp[i] := pe.ParTyp[i];
+  end;
+  Result.LocCnt := pe.LocCnt;
+  for i := 0 to 20 do
+  begin
+    Result.LocName[i] := pe.LocName[i];
+    Result.LocTyp[i] := pe.LocTyp[i];
+  end;
+  Result.IsCalled := pe.IsCalled;
+end;
 
 function mathparse(s: string; w: integer): Float;
 var i, p, k: integer;
@@ -252,25 +293,25 @@ begin
         writeln;
         writeln('VARIABLES DECLARED:');
         writeln;
-        for i:=0 to varcount-1 do
+        for i:=0 to SymbolTable.GetVarCount-1 do
         begin
-                name := Varlist[i].varname;
-                typ := varlist[i].typ;
-                xr := varlist[i].xram;
-                arr := varlist[i].arr;
-                adr := varlist[i].address;
-                size := varlist[i].size;
-                initn := varlist[i].initn;
-                initf := varlist[i].initf;
-                inits := varlist[i].inits;
-                if varlist[i].pointer then s:='*' else s:='';
-                loc := varlist[i].local;
-                lproc := varlist[i].locproc;
+                name := SymbolTable.GetVarInfo(i).varname;
+                typ := SymbolTable.GetVarInfo(i).typ;
+                xr := SymbolTable.GetVarInfo(i).xram;
+                arr := SymbolTable.GetVarInfo(i).arr;
+                adr := SymbolTable.GetVarInfo(i).address;
+                size := SymbolTable.GetVarInfo(i).size;
+                initn := SymbolTable.GetVarInfo(i).initn;
+                initf := SymbolTable.GetVarInfo(i).initf;
+                inits := SymbolTable.GetVarInfo(i).inits;
+                if SymbolTable.GetVarInfo(i).pointer then s:='*' else s:='';
+                loc := SymbolTable.GetVarInfo(i).local;
+                lproc := SymbolTable.GetVarInfo(i).locproc;
 
                 write('VAR ',i+1,': ');
                 write(s+name,', TYP: ',typ,', ADR: ',adr,', XRAM: ');
                 if xr then write('yes, LOCAL: ') else write('no, LOCAL: ');
-                if loc then s := ProcList[lproc].ProcName;
+                if loc then s := SymbolTable.GetProcInfo(lproc).ProcName;
                 if loc then write('yes, FUNC: '+s+', SIZE: ') else write('no, SIZE: ');
                 write(size);
                 if initn <> -1 then
@@ -332,16 +373,16 @@ begin
         writeln;
         writeln('PROCEDURES DECLARED:');
         writeln;
-        for i:=0 to proccount-1 do
+        for i:=0 to SymbolTable.GetProcCount-1 do
         begin
                 write('PROC ',i+1,': ');
-                write(Proclist[i].procname);//,', CODE: ',proclist[i].proccode);
-                if Proclist[i].hasreturn then
+                write(SymbolTable.GetProcInfo(i).procname);//,', CODE: ',proclist[i].proccode);
+                if SymbolTable.GetProcInfo(i).hasreturn then
                 begin
-                  write(', RETURNS: ', Proclist[i].returntype);
-                  {if Proclist[i].returnisword then write('word') else write('byte');}
+                  write(', RETURNS: ', SymbolTable.GetProcInfo(i).returntype);
+                  {if SymbolTable.GetProcInfo(i).returnisword then write('word') else write('byte');}
                 end;
-                if Proclist[i].parcnt > 0 then writeln(', PARAMS: ',Proclist[i].params) else writeln;
+                if SymbolTable.GetProcInfo(i).parcnt > 0 then writeln(', PARAMS: ',SymbolTable.GetProcInfo(i).params) else writeln;
         end;
         writeln;
 end;
@@ -357,8 +398,8 @@ begin
                 if at then
                 begin
                         result := adr;
-                        if SymbolTable.IsVarAtAdr(result, size) then
-                           Error('Overlapping with '+VarList[VarFound].varname+'!');
+                        if SymbolTable.IsVarAtAdr(result, size, VarFound) then
+                           Error('Overlapping with '+SymbolTable.GetVarInfo(VarFound).varname+'!');
                         { begin
                                 if VarList[VarFound].at then
                                 begin
@@ -604,6 +645,8 @@ begin
         writeln(VarList[VarCount].address);
 }
 
+        // Sync with SymbolTable
+        SymbolTable.AddVar(VarEntryToTVarInfo(VarList[VarCount]));
         inc(VarCount);
 
 end;
@@ -613,17 +656,8 @@ end;
 { Find Procedure Declaration }
 
 function FindProc(t: string): boolean;
-var i: integer;
 begin
-        result := false;
-        for i := 0 to ProcCount - 1 do
-        if lowercase(ProcList[i].ProcName) = lowercase(t) then
-        begin
-              //writeln('Proc found: ' + t);
-              result := true;
-              ProcFound := i;
-              exit;
-        end;
+        result := SymbolTable.FindProc(t, ProcFound);
 end;
 
 
@@ -644,6 +678,8 @@ begin
                 ProcList[ProcCount].ReturnType := rt;
                 ProcList[ProcCount].ReturnIsWord := wd;
                 ProcList[ProcCount].IsCalled := false;
+                // Sync with SymbolTable
+                SymbolTable.AddProc(ProcEntryToTProcInfo(ProcList[ProcCount]));
                 inc(ProcCount);
                 //writeln('Proc add: NAME: <' + s + '>');
         end else
@@ -682,11 +718,11 @@ begin
 
         if not FindVar(Name) then error('Variable not defined: '+name);
 
-        typ := varlist[varfound].typ;
-        adr := varlist[varfound].address;
-        loc := varlist[varfound].local;
-        arr := varlist[varfound].arr;
-        xr := varlist[varfound].xram;
+        typ := SymbolTable.GetVarInfo(varfound).typ;
+        adr := SymbolTable.GetVarInfo(varfound).address;
+        loc := SymbolTable.GetVarInfo(varfound).local;
+        arr := SymbolTable.GetVarInfo(varfound).arr;
+        xr := SymbolTable.GetVarInfo(varfound).xram;
 
         if not arr then
         begin
@@ -1977,14 +2013,14 @@ begin
         if tok <> '' then
         begin
                 Rd(Look, tok); tok := trim(tok);
-                //isword := proclist[currproc].returnisword;
-                if ( proclist[currproc].returntype = 'byte' )
-                or ( proclist[currproc].returntype = 'char' ) then optype := byte
-                else if proclist[currproc].returntype = 'word' then optype := word
-                else if proclist[currproc].returntype = 'float' then optype := floatp;
+                //isword := SymbolTable.GetProcInfo(currproc).returnisword;
+                if ( SymbolTable.GetProcInfo(currproc).returntype = 'byte' )
+                or ( SymbolTable.GetProcInfo(currproc).returntype = 'char' ) then optype := byte
+                else if SymbolTable.GetProcInfo(currproc).returntype = 'word' then optype := word
+                else if SymbolTable.GetProcInfo(currproc).returntype = 'float' then optype := floatp;
                 Expression;
         end;
-        writln( #9'RTN'#9#9'; end of ' + proclist[currproc].procname);
+        writln( #9'RTN'#9#9'; end of ' + SymbolTable.GetProcInfo(currproc).procname);
         writln('');
 end;
 {-------------------------------------------------------------}
@@ -2160,6 +2196,7 @@ end;
 procedure ProcCall;
 var i, c, a, aa: integer;
     name: string;
+    proc: TProcInfo;
 begin
         if tok = '' then exit;
         name := extrword(tok);
@@ -2169,44 +2206,45 @@ begin
         Rd(Look, Tok); tok := trim(tok);
         if findproc(name) then
         begin
+                proc := SymbolTable.GetProcInfo(procfound);
                 proclist[procfound].IsCalled := true;
 
                 // calculating and pushing parameters on stack
-                if proclist[procfound].parcnt > 0 then
+                if proc.parcnt > 0 then
                 begin
                         //delete(s, 1, 1); s := trim(s);
                         writln( #9'; pushing parameters on stack...');
                         c := 0;
                         repeat
                                 Rd(Look, Tok); tok := trim(tok);// + ',';
-                                {if findvar(ProcList[ProcFound].parname[c]) then
+                                {if findvar(proc.parname[c]) then
                                 begin
                                     varlist[varfound].address := a;
                                 end else
                                     error('Parameter error!');}
-                                if ( ProcList[ProcFound].partyp[c] = 'char' )
-                                   or ( ProcList[ProcFound].partyp[c] = 'byte') then
+                                if ( proc.partyp[c] = 'char' )
+                                   or ( proc.partyp[c] = 'byte') then
                                 begin
                                     isword := false; inc(a);
                                     optype := byte;
-                                end else if ProcList[ProcFound].partyp[c] = 'word' then
+                                end else if proc.partyp[c] = 'word' then
                                 begin
                                     isword := true; inc(a, 2);
                                     optype := word;
-                                end else if ProcList[ProcFound].partyp[c] = 'float' then
+                                end else if proc.partyp[c] = 'float' then
                                 begin
                                     isword := false; inc(a, 8);
                                     optype := floatp;
                                 end;
                                 Expression;
-                                writln( #9'; '+ProcList[ProcFound].parname[c]+' ('+ProcList[ProcFound].partyp[c]+')'  );
+                                writln( #9'; '+proc.parname[c]+' ('+proc.partyp[c]+')'  );
                                 Push;
                                 inc(c);
-                                if c > ProcList[ProcFound].ParCnt then
-                                    error('Too many parameters for '+ProcList[ProcFound].ProcName);
+                                if c > proc.ParCnt then
+                                    error('Too many parameters for '+proc.ProcName);
                         until (Look <> ',');
-                        if c <> ProcList[ProcFound].ParCnt then
-                                error('Wrong number of parameters for '+ProcList[ProcFound].ProcName);
+                        if c <> proc.ParCnt then
+                                error('Wrong number of parameters for '+proc.ProcName);
 {
                         l := extrblock(s);
                         l := trim(l) + ',';
@@ -2233,34 +2271,34 @@ begin
                 end;
 
                 // allocating locals too on stack
-                if proclist[procfound].loccnt > 0 then
+                if proc.loccnt > 0 then
                 begin
                     writln( ' ' );
                     writln( #9'; reserving stack (R recalc)...');
                     aa := 0;
-                    for c := 0 to proclist[procfound].loccnt - 1 do
+                    for c := 0 to proc.loccnt - 1 do
                     begin
-                            if ((ProcList[ProcFound].loctyp[c] = 'char') or
-                                (ProcList[ProcFound].loctyp[c] = 'byte')) then
+                            if ((proc.loctyp[c] = 'char') or
+                                (proc.loctyp[c] = 'byte')) then
                             begin
                                 isword := false;
                                 optype := byte;
                                 inc(a);
                                 inc(aa);
-                            end else if ProcList[ProcFound].loctyp[c] = 'word' then
+                            end else if proc.loctyp[c] = 'word' then
                             begin
                                 isword := true;
                                 optype := word;
                                 inc(a, 2);
                                 inc(aa, 2);
-                            end else if ProcList[ProcFound].loctyp[c] = 'float' then
+                            end else if proc.loctyp[c] = 'float' then
                             begin
                                 isword := false;
                                 optype := floatp;
                                 inc(a, 8);
                                 inc(aa, 8);
                             end;
-                            writln( #9'; '+ProcList[ProcFound].locname[c]+' ('+ProcList[ProcFound].loctyp[c]+')'  );
+                            writln( #9'; '+proc.locname[c]+' ('+proc.loctyp[c]+')'  );
                             // Push         // see optimization below
 
                             {if findvar(ProcList[ProcFound].locname[c]) then
@@ -2292,9 +2330,9 @@ begin
                 begin
                     writln( ' ' );
                     writln( #9'; restore stack pointer');
-                    if ( proclist[procfound].returntype = 'float' ) then
+                    if ( proc.returntype = 'float' ) then
                        Error ( 'Float return handling not implemented!');
-                    if ( proclist[procfound].returnisword ) then
+                    if ( proc.returnisword ) then
                     begin
                             writln( #9'LP'#9'0');
                             writln( #9'EXAM');
@@ -2303,7 +2341,7 @@ begin
                             writln( #9'STR');
                             writln( #9'EXAM');
                     end else
-                    if proclist[procfound].hasreturn then
+                    if proc.hasreturn then
                     begin
                             writln( #9'EXAB');
                             writln( #9'LDR');
@@ -2679,17 +2717,17 @@ begin
         end;
 
         { Variables' initializations }
-        for i := 0 to VarCount - 1 do
+        for i := 0 to SymbolTable.GetVarCount - 1 do
         begin
-                adr := VarList[i].address;
-                size := VarList[i].size;
-                name := VarList[i].VarName;
-                value := VarList[i].initn;
-                fval := VarList[i].initf;
-                typ := VarList[i].typ;
-                at := VarList[i].at;
-                arr := VarList[i].arr;
-                if VarList[i].xram then
+                adr := SymbolTable.GetVarInfo(i).address;
+                size := SymbolTable.GetVarInfo(i).size;
+                name := SymbolTable.GetVarInfo(i).VarName;
+                value := SymbolTable.GetVarInfo(i).initn;
+                fval := SymbolTable.GetVarInfo(i).initf;
+                typ := SymbolTable.GetVarInfo(i).typ;
+                at := SymbolTable.GetVarInfo(i).at;
+                arr := SymbolTable.GetVarInfo(i).arr;
+                if SymbolTable.GetVarInfo(i).xram then
                 begin // xram variables
                         if at then
                         begin
@@ -2697,16 +2735,16 @@ begin
                               if not arr then
                                   varxram(value, adr, size, name)
                               else
-                                  varxarr(VarList[i].inits, adr, size, name, typ);
+                                  varxarr(SymbolTable.GetVarInfo(i).inits, adr, size, name, typ);
                           end else
                           begin // with an init value
                                 // for float, inits is allocated anyway
                               if not arr then
                                  if not (  typ = 'float' ) then varcode(value, adr, size, name)
-                                 else varfcode(VarList[i].inits, name)
+                                 else varfcode(SymbolTable.GetVarInfo(i).inits, name)
                               else
-                                 if not (  typ = 'float' ) then varcarr(VarList[i].inits, adr, size, name, typ)
-                                 else varfarr(VarList[i].inits, size, name);
+                                 if not (  typ = 'float' ) then varcarr(SymbolTable.GetVarInfo(i).inits, adr, size, name, typ)
+                                 else varfarr(SymbolTable.GetVarInfo(i).inits, size, name);
                           end;
                 end else
                 begin // register variables
@@ -2716,7 +2754,7 @@ begin
                                     varreg(value, adr, size, name)
                             else
                             begin
-                                    varrarr(VarList[i].inits, adr, size, name, typ);
+                                    varrarr(SymbolTable.GetVarInfo(i).inits, adr, size, name, typ);
                             end;
                         end;
                 end;
