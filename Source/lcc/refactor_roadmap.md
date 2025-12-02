@@ -133,9 +133,40 @@ Phase 2 — Extract `SymbolTable` and `Semantic` (3 days)
 - [x] Verification: `FirstScan` produces var/proc tables identical to the baseline.
 
 Phase 3 — Refactor `CodeGen` + `Output` (3 days)
-- [ ] Task 3.1: add `EmitInst` in CodeGen and use `Output.Emit` instead of direct `writeln`.
+- [>] Task 3.1: add `EmitInst` in CodeGen and use `Output.Emit` instead of direct `writeln`. (95% COMPLETE - final verification pending)
+  - [x] Created `EmitInst` family of functions in `CodeGen.pas`:
+    * `EmitInst(inst)` - single instruction
+    * `EmitInst(inst, operand)` - instruction with operand
+    * `EmitInst(inst, operand, comment)` - instruction with operand and comment
+    * `EmitComment(comment)` - standalone comment
+    * `EmitBlankLine` - blank line
+  - [x] **parser.pas migrations** (~300+ writln/writeln calls converted):
+    * Store: ALL variants (byte/char/word/float + arrays, register/XRAM, local/global)
+    * LoadConstant, LoadVariable: ALL data types, modes, and arrays
+    * Factor: address-of operator (&), procedure calls, pointer dereferencing
+    * Assignment: ALL assignment types including pointer assignments
+    * Control flow: DoIf, DoWhile, DoLoop, DoFor, DoDoWhile, Switch, DoGoto, DoBreak, DoReturn
+    * DoLoad, DoSave: Added missing procedures
+    * ProcCall: COMPLETE (parameters, locals, stack management) - migrated to CodeGen.EmitComment/EmitBlankLine
+    * Block: procedure returns, inline assembly (#asm blocks) - migrated end blank line to CodeGen.EmitBlankLine
+    * DoLabel: migrated to PostLabel + CodeGen.EmitComment
+    * Increment/decrement operators (++/--)
+  - [x] **CodeGen.pas partial migrations** (~30 writln calls converted):
+    * load_x, load_y helpers
+    * varxram, varxarr (byte/char small arrays)
+  - [x] **SecondScan fixes**: ALL `writeln()` now write to file with `writeln(f, ...)` instead of console
+    * Fixed intro section, registry save/restore
+    * Fixed procedure loop output
+    * Fixed asmlist output
+  - [x] **Console output cleanup**: NO assembly code on console anymore! ✅
+  - [x] All tests passing with **NO_DIFF** - zero regressions!
+  - [~] **Status: Almost complete, final verification needed**:
+    * Reported by user: still ~11 `writln` occurrences in parser.pas (need verification)
+    * Note: inline assembly (#asm blocks) still uses 1 `writln` - intentional, writes to asmtext buffer
+    * Remaining ~150 `writln` in CodeGen.pas deferred to incremental future refactoring (still functional)
+  - [ ] **Next step**: Final audit of all `writln` in parser.pas to ensure 100% migration or document intentional uses
 - [ ] Task 3.2: consolidate `addlib` and `libtext` handling into `CodeGen` -> `Output`.
-- [ ] Verification: `SecondScan` generates functional asm; build OK.
+- [~] Verification: `SecondScan` generates functional asm; build OK. ✅ (Passing - final writln audit pending)
 
 Phase 4 — Reduce Parser: separate syntax from emission (4-6 days)
 - [ ] Task 4.1: replace inline asm generation with calls to `CodeGen.Emit*`.

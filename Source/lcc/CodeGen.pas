@@ -11,6 +11,12 @@ interface
 
 uses Output, SysUtils;
 
+// Core instruction emission
+procedure EmitInst(const inst: string); overload;
+procedure EmitInst(const inst, operand: string); overload;
+procedure EmitInst(const inst, operand, comment: string); overload;
+procedure EmitComment(const comment: string);
+procedure EmitBlankLine;
 
 function NewLabel: string;
 procedure PostLabel(L: string);
@@ -93,6 +99,34 @@ const   { Math }
 implementation
 
 {--------------------------------------------------------------}
+{ Core Instruction Emission }
+
+procedure EmitInst(const inst: string);
+begin
+  WritLn(#9 + inst);
+end;
+
+procedure EmitInst(const inst, operand: string);
+begin
+  WritLn(#9 + inst + #9 + operand);
+end;
+
+procedure EmitInst(const inst, operand, comment: string);
+begin
+  WritLn(#9 + inst + #9 + operand + #9 + '; ' + comment);
+end;
+
+procedure EmitComment(const comment: string);
+begin
+  WritLn(#9 + '; ' + comment);
+end;
+
+procedure EmitBlankLine;
+begin
+  WritLn('');
+end;
+
+{--------------------------------------------------------------}
 { Generate a Unique Label }
 
 function NewLabel: string;
@@ -156,34 +190,34 @@ end;
 
 procedure varxram(Value, adr, size: integer; nm: string);
 begin
-  writln(#9'LIDP'#9 + IntToStr(adr) + #9'; Variable ' + nm + ' = ' + IntToStr(Value));
+  EmitInst('LIDP', IntToStr(adr), 'Variable ' + nm + ' = ' + IntToStr(Value));
   if size = 1 then
   begin
                 {if value = 0 then
-                        writln( #9'RA')
+                        EmitInst('RA')
                 else           }
-    writln(#9'LIA'#9 + IntToStr(Value));
-    writln(#9'STD');
+    EmitInst('LIA', IntToStr(Value));
+    EmitInst('STD');
   end
   else if size = 2 then
   begin
                 {if value mod 256 = 0 then
-                        writln( #9'RA')
+                        EmitInst('RA')
                 else     }
-    writln(#9'LIA'#9'LB(' + IntToStr(Value) + ')');
+    EmitInst('LIA', 'LB(' + IntToStr(Value) + ')');
 
-    writln(#9'STD');
+    EmitInst('STD');
     if adr div 256 = (adr + 1) div 256 then
-      writln(#9'LIDL'#9'LB(' + IntToStr(adr + 1) + ')')
+      EmitInst('LIDL', 'LB(' + IntToStr(adr + 1) + ')')
     else
-      writln(#9'LIDP'#9 + IntToStr(adr + 1));
+      EmitInst('LIDP', IntToStr(adr + 1));
 
     if Value mod 256 <> Value div 256 then
                 {if value div 256 = 0 then
-                        writln( #9'RA')
+                        EmitInst('RA')
                 else      }
-      writln(#9'LIA'#9'HB(' + IntToStr(Value) + ')');
-    writln(#9'STD');
+      EmitInst('LIA', 'HB(' + IntToStr(Value) + ')');
+    EmitInst('STD');
   end
   else if size = 8 then
     writln(' ; varxram - Unsupported float');
@@ -225,21 +259,21 @@ begin
   if ((typ = 'byte') or (typ = 'char')) and (size <= 5) then
   begin
     // Set up address and write 1st byte
-    writln(#9'LIDP'#9 + IntToStr(adr) + #9'; Variable ' + nm + ' = (' + s + ')');
+    EmitInst('LIDP', IntToStr(adr), 'Variable ' + nm + ' = (' + s + ')');
     v := Ord(Value[1]);
         { if v = 0 then
-                writln( #9'RA')
+                EmitInst('RA')
         else  }
-    writln(#9'LIA'#9 + IntToStr(v));
-    writln(#9'STD');
+    EmitInst('LIA', IntToStr(v));
+    EmitInst('STD');
 
     c := v;
     if size > 1 then for i := 2 to size do
       begin
         if (adr + i - 2) div 256 = (adr + i - 1) div 256 then
-          writln(#9'LIDL'#9'LB(' + IntToStr(adr + i - 1) + ')')
+          EmitInst('LIDL', 'LB(' + IntToStr(adr + i - 1) + ')')
         else
-          writln(#9'LIDP'#9 + IntToStr(adr + i - 1));
+          EmitInst('LIDP', IntToStr(adr + i - 1));
 
         if i <= length(Value) then
           v := Ord(Value[i])
@@ -249,22 +283,22 @@ begin
         if v <> c then
         begin
                         {if v = 0 then
-                                writln( #9'RA')
+                                EmitInst('RA')
                         else         }
-          writln(#9'LIA'#9 + IntToStr(v));
-          writln(#9'STD');
+          EmitInst('LIA', IntToStr(v));
+          EmitInst('STD');
         end
         else
-          writln(#9'STD');
+          EmitInst('STD');
         c := v;
       end;
   end
   else if ((typ = 'byte') or (typ = 'char')) then
   begin
-    writln(#9'; Variable ' + nm + ' = (' + s + ')');
+    EmitComment('Variable ' + nm + ' = (' + s + ')');
     load_x(nm + '-1');
     load_y(IntToStr(adr - 1));
-    writln(#9'LII'#9 + IntToStr(size) + #9'; Load I as counter');
+    EmitInst('LII', IntToStr(size), 'Load I as counter');
     writln(#9'IXL');
     writln(#9'IYS');
     writln(#9'DECI');

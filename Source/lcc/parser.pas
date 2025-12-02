@@ -735,26 +735,26 @@ begin
                     if not loc then
                     begin
                         if adr <= 63 then
-                            writln(#9'LP'#9+inttostr(adr)+#9'; Store result in '+name)
+                            CodeGen.EmitInst('LP', inttostr(adr), 'Store result in '+name)
                         else
-                            writln(#9'LIP'#9+inttostr(adr)+#9'; Store result in '+name);
-                        writln(#9'EXAM');
+                            CodeGen.EmitInst('LIP', inttostr(adr), 'Store result in '+name);
+                        CodeGen.EmitInst('EXAM');
                     end else
                     begin // Local char or byte
-                        writln(#9'EXAB'); // temp save A (value to store) to B
-                        writln(#9'LDR');  // get stack ptr R to A
-                        writln(#9'ADIA'#9+inttostr(adr+2+pushcnt)); // add relative address
-                        writln(#9'STP'); // move result to P (absolute address)
-                        writln(#9'EXAB'); // restore A
-                        writln(#9'EXAM'#9#9'; Store result in '+name); // store value to P location
+                        CodeGen.EmitInst('EXAB'); // temp save A (value to store) to B
+                        CodeGen.EmitInst('LDR');  // get stack ptr R to A
+                        CodeGen.EmitInst('ADIA', inttostr(adr+2+pushcnt)); // add relative address
+                        CodeGen.EmitInst('STP'); // move result to P (absolute address)
+                        CodeGen.EmitInst('EXAB'); // restore A
+                        CodeGen.EmitInst('EXAM', '', 'Store result in '+name); // store value to P location
                     end;
                 end else
                 begin
                         if adr <> -1 then
-                                writln( #9'LIDP'#9+inttostr(adr)+#9'; Store result in '+name)
+                                CodeGen.EmitInst('LIDP', inttostr(adr), 'Store result in '+name)
                         else
-                                writln( #9'LIDP'#9+name+#9'; Store result in '+name);
-                        writln( #9'STD')
+                                CodeGen.EmitInst('LIDP', name, 'Store result in '+name);
+                        CodeGen.EmitInst('STD');
                 end ;
             end else if (typ='word') then
             begin
@@ -763,40 +763,40 @@ begin
                     if not loc then
                     begin
                         if adr < 64 then
-                                writln( #9'LP'#9+inttostr(adr)+#9'; Store 16bit variable '+name)
+                                CodeGen.EmitInst('LP', inttostr(adr), 'Store 16bit variable '+name)
                         else
-                                writln( #9'LIP'#9+inttostr(adr)+#9'; Store 16bit variable '+name);
-                        writln( #9'EXAM'#9#9'; LB');
-                        writln( #9'EXAB');
-                        writln( #9'INCP'#9#9'; HB');
-                        writln( #9'EXAM');
+                                CodeGen.EmitInst('LIP', inttostr(adr), 'Store 16bit variable '+name);
+                        CodeGen.EmitInst('EXAM', '', 'LB');
+                        CodeGen.EmitInst('EXAB');
+                        CodeGen.EmitInst('INCP', '', 'HB');
+                        CodeGen.EmitInst('EXAM');
                     end else
                     begin // Local word
-                        writln(#9'PUSH'); inc(pushcnt); // temp save A
-                        writln(#9'LDR');  // we overwrite A here !!!
-                        writln(#9'ADIA'#9+inttostr(adr+2+pushcnt)); //adr + size + pushcnt
-                        writln(#9'STP');
-                        writln(#9'POP'); dec(pushcnt); // restore A
-                        writln(#9'EXAM'#9'; LB - Store result in '+name);
-                        writln(#9'EXAB');
-                        writln(#9'DECP');
-                        writln(#9'EXAM'#9'; HB');
+                        CodeGen.EmitInst('PUSH'); inc(pushcnt); // temp save A
+                        CodeGen.EmitInst('LDR');  // we overwrite A here !!!
+                        CodeGen.EmitInst('ADIA', inttostr(adr+2+pushcnt)); //adr + size + pushcnt
+                        CodeGen.EmitInst('STP');
+                        CodeGen.EmitInst('POP'); dec(pushcnt); // restore A
+                        CodeGen.EmitInst('EXAM', '', 'LB - Store result in '+name);
+                        CodeGen.EmitInst('EXAB');
+                        CodeGen.EmitInst('DECP');
+                        CodeGen.EmitInst('EXAM', '', 'HB');
                     end;
                 end else
                 begin
                         if adr <> -1 then
-                                writln( #9'LIDP'#9+inttostr(adr)+#9'; Store 16bit variable '+name)
+                                CodeGen.EmitInst('LIDP', inttostr(adr), 'Store 16bit variable '+name)
                         else
-                                writln( #9'LIDP'#9+name+#9'; Store 16bit variable '+name);
-                        writln( #9'STD'#9#9'; LB');
-                        writln( #9'EXAB');
+                                CodeGen.EmitInst('LIDP', name, 'Store 16bit variable '+name);
+                        CodeGen.EmitInst('STD', '', 'LB');
+                        CodeGen.EmitInst('EXAB');
                         if (adr <> -1) and ((adr + 1) div 256 = adr div 256) then
-                                writln( #9'LIDL'#9'LB('+inttostr(adr)+'+1)')
+                                CodeGen.EmitInst('LIDL', 'LB('+inttostr(adr)+'+1)')
                         else if adr <> -1 then
-                                writln( #9'LIDP'#9+inttostr(adr)+'+1')
+                                CodeGen.EmitInst('LIDP', inttostr(adr)+'+1')
                         else
-                                writln( #9'LIDP'#9+name+'+1'); // PASM doesn't parse "name + 1" !!!
-                        writln( #9'STD'#9#9'; HB');
+                                CodeGen.EmitInst('LIDP', name+'+1'); // PASM doesn't parse "name + 1" !!!
+                        CodeGen.EmitInst('STD', '', 'HB');
                 end;
             end else if (typ='float') then
             begin // value is in temporary storage point 'FloatXReg'
@@ -805,48 +805,48 @@ begin
                     if loc then
                     begin
                         // a local variable is reverse-orderd in stack
-                        writln('');
-                        writln(#9'; Store FloatXReg onto local-float variable, reversed');
+                        CodeGen.EmitBlankLine;
+                        CodeGen.EmitComment('Store FloatXReg onto local-float variable, reversed');
                         // to:
-                        writln(#9'LDR'); // R -> A
-                        writln(#9'EXAB'); // save R in B first
-                        writln(#9'LDR'); // R -> A
-                        writln(#9'ADIA'#9+inttostr(adr+2+pushcnt+2)+#9'; to: '+name+' end + 2');
-                        writln(#9'STR'); // now R points to the local variable start addr
+                        CodeGen.EmitInst('LDR'); // R -> A
+                        CodeGen.EmitInst('EXAB'); // save R in B first
+                        CodeGen.EmitInst('LDR'); // R -> A
+                        CodeGen.EmitInst('ADIA', inttostr(adr+2+pushcnt+2), 'to: '+name+' end + 2');
+                        CodeGen.EmitInst('STR'); // now R points to the local variable start addr
                         // from:
-                        writln(#9'LIP 0x'+IntToHex(FloatXReg,2)+#9'; from: primary float reg addr' );
+                        CodeGen.EmitInst('LIP', '0x'+IntToHex(FloatXReg,2), 'from: primary float reg addr');
                         // loop 8 times
-                        writln(#9'LIJ 8');
+                        CodeGen.EmitInst('LIJ', '8');
                         lb := NewLabel;
                         PostLabel(lb);
                         // move using LDM+PUSH
-                        writln(#9'LDM'); // (P) -> A
-                        writln(#9'PUSH'); inc(pushcnt);
-                        writln(#9'INCP');
-                        writln(#9'DECJ');
-                        writln(#9'JRNZM '+lb);
-                        writln(#9'EXAB'); // restore R
-                        writln(#9'STR'); // A -> R
+                        CodeGen.EmitInst('LDM'); // (P) -> A
+                        CodeGen.EmitInst('PUSH'); inc(pushcnt);
+                        CodeGen.EmitInst('INCP');
+                        CodeGen.EmitInst('DECJ');
+                        CodeGen.EmitInst('JRNZM', lb);
+                        CodeGen.EmitInst('EXAB'); // restore R
+                        CodeGen.EmitInst('STR'); // A -> R
                     end else
                     begin // not local
                         if adr < 64 then
-                             writln( #9'LP'#9'0x'+IntToHex(adr,2)+#9'; store float var '+name )
+                             CodeGen.EmitInst('LP', '0x'+IntToHex(adr,2), 'store float var '+name)
                         else
-                             writln( #9'LIP'#9'0x'+IntToHex(adr,2)+#9'; store float var '+name );
+                             CodeGen.EmitInst('LIP', '0x'+IntToHex(adr,2), 'store float var '+name);
                         // store value to variable
-                        writln( #9'LIQ 0x'+IntToHex(FloatXReg,2)+#9'; from temp float reg' );
-                        writln( #9'LII 7');
-                        writln( #9'MVW ; (FloatXReg) -> (P), 8 bytes');
+                        CodeGen.EmitInst('LIQ', '0x'+IntToHex(FloatXReg,2), 'from temp float reg');
+                        CodeGen.EmitInst('LII', '7');
+                        CodeGen.EmitInst('MVW', '', '(FloatXReg) -> (P), 8 bytes');
                     end;
                 end else
                 begin // destination: xram or code space
                     if adr <> -1 then
-                       writln( #9'LIDP'#9+'0x'+inttohex(adr,4)+#9'; Store float var '+name )
+                       CodeGen.EmitInst('LIDP', '0x'+inttohex(adr,4), 'Store float var '+name)
                     else
-                       writln( #9'LIDP'#9+name+#9'; store var '+name );
-                    writeln( #9'LP 0x'+IntToHex(FloatXReg,2)+' ; temp float reg' );
-                    writeln( #9'LII 7');
-                    writeln( #9'EXWD ; (DP) <-> (FloatXReg), 8 bytes' );
+                       CodeGen.EmitInst('LIDP', name, 'store var '+name);
+                    CodeGen.EmitInst('LP', '0x'+IntToHex(FloatXReg,2), 'temp float reg');
+                    CodeGen.EmitInst('LII', '7');
+                    CodeGen.EmitInst('EXWD', '', '(DP) <-> (FloatXReg), 8 bytes');
                 end;
             end ;
         end else
@@ -857,83 +857,83 @@ begin
             begin
                 if not xr then
                 begin
-                        writln( #9'LIB'#9+inttostr(adr)+#9'; Store array element from '+name);
-                        writln( #9'LP'#9'3');
-                        writln( #9'ADM');
-                        writln( #9'EXAB');
-                        writln( #9'STP');
-                        writln( #9'POP'); dec(pushcnt);
-                        writln( #9'EXAM');
+                        CodeGen.EmitInst('LIB', inttostr(adr), 'Store array element from '+name);
+                        CodeGen.EmitInst('LP', '3');
+                        CodeGen.EmitInst('ADM');
+                        CodeGen.EmitInst('EXAB');
+                        CodeGen.EmitInst('STP');
+                        CodeGen.EmitInst('POP'); dec(pushcnt);
+                        CodeGen.EmitInst('EXAM');
                 end else
                 begin
-                        writln( #9'PUSH'#9#9'; Store array element from '+name); inc(pushcnt);
-                        writln( #9'LP'#9'7'#9'; HB of address');
+                        CodeGen.EmitInst('PUSH', '', 'Store array element from '+name); inc(pushcnt);
+                        CodeGen.EmitInst('LP', '7', 'HB of address');
                         if adr <> -1 then
                         begin
-                                writln( #9'LIA'#9'HB('+inttostr(adr)+'-1)');
-                                writln( #9'EXAM');
-                                writln( #9'LP'#9'6'#9'; LB');
-                                writln( #9'LIA'#9'LB('+inttostr(adr)+'-1)');
+                                CodeGen.EmitInst('LIA', 'HB('+inttostr(adr)+'-1)');
+                                CodeGen.EmitInst('EXAM');
+                                CodeGen.EmitInst('LP', '6', 'LB');
+                                CodeGen.EmitInst('LIA', 'LB('+inttostr(adr)+'-1)');
                         end else
                         begin
-                                writln( #9'LIA'#9'HB('+name+'-1)');
-                                writln( #9'EXAM');
-                                writln( #9'LP'#9'6'#9'; LB');
-                                writln( #9'LIA'#9'LB('+name+'-1)');
+                                CodeGen.EmitInst('LIA', 'HB('+name+'-1)');
+                                CodeGen.EmitInst('EXAM');
+                                CodeGen.EmitInst('LP', '6', 'LB');
+                                CodeGen.EmitInst('LIA', 'LB('+name+'-1)');
                         end;
-                        writln( #9'EXAM');
-                        writln( #9'POP'); dec(pushcnt);
-                        writln( #9'LIB'#9'0');
-                        writln( #9'ADB');
-                        writln( #9'POP'); dec(pushcnt);
-                        writeln( #9'IYS');
+                        CodeGen.EmitInst('EXAM');
+                        CodeGen.EmitInst('POP'); dec(pushcnt);
+                        CodeGen.EmitInst('LIB', '0');
+                        CodeGen.EmitInst('ADB');
+                        CodeGen.EmitInst('POP'); dec(pushcnt);
+                        CodeGen.EmitInst('IYS');
                 end;
             end else if (typ='word') then
             begin
                 if not xr then
                 begin
-                        writln( #9'RC');
-                        writln( #9'SL');
-                        writln( #9'LII'#9+inttostr(adr)+#9'; Store array element from '+name);
-                        writln( #9'LP'#9'0');
-                        writln( #9'ADM');
-                        writln( #9'EXAM');
-                        writln( #9'STP');
-                        writln( #9'INCP');
-                        writln( #9'POP'); dec(pushcnt);
-                        writln( #9'EXAM');
-                        writln( #9'DECP');
-                        writln( #9'POP'); dec(pushcnt);
-                        writln( #9'EXAM');
+                        CodeGen.EmitInst('RC');
+                        CodeGen.EmitInst('SL');
+                        CodeGen.EmitInst('LII', inttostr(adr), 'Store array element from '+name);
+                        CodeGen.EmitInst('LP', '0');
+                        CodeGen.EmitInst('ADM');
+                        CodeGen.EmitInst('EXAM');
+                        CodeGen.EmitInst('STP');
+                        CodeGen.EmitInst('INCP');
+                        CodeGen.EmitInst('POP'); dec(pushcnt);
+                        CodeGen.EmitInst('EXAM');
+                        CodeGen.EmitInst('DECP');
+                        CodeGen.EmitInst('POP'); dec(pushcnt);
+                        CodeGen.EmitInst('EXAM');
                 end else
                 begin
-                        writln( #9'RC');
-                        writln( #9'SL');
-                        writln( #9'PUSH'#9#9'; Store array element from '+name); inc(pushcnt);
-                        writln( #9'LP'#9'7'#9'; HB of address');
+                        CodeGen.EmitInst('RC');
+                        CodeGen.EmitInst('SL');
+                        CodeGen.EmitInst('PUSH', '', 'Store array element from '+name); inc(pushcnt);
+                        CodeGen.EmitInst('LP', '7', 'HB of address');
                         if adr <> -1 then
                         begin
-                                writln( #9'LIA'#9'HB('+inttostr(adr)+'-1)');
-                                writln( #9'EXAM');
-                                writln( #9'LP'#9'6'#9'; LB');
-                                writln( #9'LIA'#9'LB('+inttostr(adr)+'-1)');
+                                CodeGen.EmitInst('LIA', 'HB('+inttostr(adr)+'-1)');
+                                CodeGen.EmitInst('EXAM');
+                                CodeGen.EmitInst('LP', '6', 'LB');
+                                CodeGen.EmitInst('LIA', 'LB('+inttostr(adr)+'-1)');
                         end else
                         begin
-                                writln( #9'LIA'#9'HB('+name+'-1)');
-                                writln( #9'EXAM');
-                                writln( #9'LP'#9'6'#9'; LB');
-                                writln( #9'LIA'#9'LB('+name+'-1)');
+                                CodeGen.EmitInst('LIA', 'HB('+name+'-1)');
+                                CodeGen.EmitInst('EXAM');
+                                CodeGen.EmitInst('LP', '6', 'LB');
+                                CodeGen.EmitInst('LIA', 'LB('+name+'-1)');
                         end;
-                        writln( #9'EXAM');
-                        writln( #9'POP'); dec(pushcnt);
-                        writeln( #9'LIB'#9'0');
-                        writeln( #9'ADB');
-                        writeln( #9'POP'); dec(pushcnt);
-                        writln( #9'EXAB');
-                        writln( #9'POP'); dec(pushcnt);
-                        writln( #9'IYS');
-                        writln( #9'EXAB');
-                        writln( #9'IYS');
+                        CodeGen.EmitInst('EXAM');
+                        CodeGen.EmitInst('POP'); dec(pushcnt);
+                        CodeGen.EmitInst('LIB', '0');
+                        CodeGen.EmitInst('ADB');
+                        CodeGen.EmitInst('POP'); dec(pushcnt);
+                        CodeGen.EmitInst('EXAB');
+                        CodeGen.EmitInst('POP'); dec(pushcnt);
+                        CodeGen.EmitInst('IYS');
+                        CodeGen.EmitInst('EXAB');
+                        CodeGen.EmitInst('IYS');
                 end;
             end else if (typ='float') then
             begin
@@ -961,29 +961,29 @@ begin
           s := SharpBCD ( f );
           lb := 'C_'+NewLabel;
           varfcode ( s, lb );
-          writln( #9'LIDP'#9+lb+' ; Load floating-point constant: '+n );
-          writln( #9'LP'#9'0x'+IntToHex(FloatXReg,2)+' ; temporary store point' );
-          writln( #9'LII 07');
-          writln( #9'MVWD' );
+          CodeGen.EmitInst('LIDP', lb, 'Load floating-point constant: '+n);
+          CodeGen.EmitInst('LP', '0x'+IntToHex(FloatXReg,2), 'temporary store point');
+          CodeGen.EmitInst('LII', '07');
+          CodeGen.EmitInst('MVWD');
         end else
         begin
-          writln( #9'LIA 00');
-          writln( #9'LP'#9'0x'+IntToHex(FloatXReg,2)+' ; temporary store point' );
-          writln( #9'LII 07');
-          writln( #9'FILM' );
+          CodeGen.EmitInst('LIA', '00');
+          CodeGen.EmitInst('LP', '0x'+IntToHex(FloatXReg,2), 'temporary store point');
+          CodeGen.EmitInst('LII', '07');
+          CodeGen.EmitInst('FILM');
         end;
     end else
     if optype = word then
     begin
-        writln( #9'LIA'#9'LB('+n+')'#9'; Load word constant LB');
-        writln( #9'LIB'#9'HB('+n+')'#9'; Load word constant HB');
+        CodeGen.EmitInst('LIA', 'LB('+n+')', 'Load word constant LB');
+        CodeGen.EmitInst('LIB', 'HB('+n+')', 'Load word constant HB');
     end else
     begin
         val(n, i, c);
 	{ if (c = 0) and (i = 0) then
-                writln( #9'RA'#9#9'; Load 0')
+                CodeGen.EmitInst('RA', '', 'Load 0')
         else      }
-                writln( #9'LIA'#9+n+#9'; Load byte constant '+n);
+                CodeGen.EmitInst('LIA', n, 'Load byte constant '+n);
     end;
 end;
 
@@ -1015,33 +1015,33 @@ begin
                     if not loc then
                     begin
                         if adr < 64 then
-                                writln( #9'LP'#9+inttostr(adr)+#9'; Load variable '+name)
+                                CodeGen.EmitInst('LP', inttostr(adr), 'Load variable '+name)
                         else
-                                writln( #9'LIP'#9+inttostr(adr)+#9'; Load variable '+name);
-                        writln( #9'LDM');
+                                CodeGen.EmitInst('LIP', inttostr(adr), 'Load variable '+name);
+                        CodeGen.EmitInst('LDM');
                     end else
                     begin // Local char or byte
-                        writln(#9'LDR');
-                        writln(#9'ADIA'#9+inttostr(adr+2+pushcnt));
-                        writln(#9'STP');
-                        writln(#9'LDM'#9#9'; Load variable '+name);
+                        CodeGen.EmitInst('LDR');
+                        CodeGen.EmitInst('ADIA', inttostr(adr+2+pushcnt));
+                        CodeGen.EmitInst('STP');
+                        CodeGen.EmitInst('LDM', '', 'Load variable '+name);
                     end;
                 end else
                 begin
                     if loc then
                        Error ( 'Xram Local loading Unsupported' );
                     if adr <> -1 then
-                            writln( #9'LIDP'#9+inttostr(adr)+#9'; Load variable '+name)
+                            CodeGen.EmitInst('LIDP', inttostr(adr), 'Load variable '+name)
                     else
-                            writln( #9'LIDP'#9+name+#9'; Load variable '+name);
-                    writln( #9'LDD');
+                            CodeGen.EmitInst('LIDP', name, 'Load variable '+name);
+                    CodeGen.EmitInst('LDD');
                 end;
                 if optype = floatp then
                    // TO DO -casting ?
                    Error ( 'Unsupported load float to byte' );
                 if optype = word then
                    // cast byte to word
-                   writln( #9'LIB'#9'0');
+                   CodeGen.EmitInst('LIB', '0');
             end else if (typ='word') then
             begin
                 if optype = floatp then
@@ -1052,40 +1052,40 @@ begin
                     if not loc then
                     begin
                         if adr < 64 then
-                                writln( #9'LP'#9+inttostr(adr+1)+#9'; Load 16bit variable '+name)
+                                CodeGen.EmitInst('LP', inttostr(adr+1), 'Load 16bit variable '+name)
                         else
-                                writln( #9'LIP'#9+inttostr(adr+1)+#9'; Load 16bit variable '+name);
-                        writln(#9'LDM'#9#9'; HB');
-                        writln(#9'EXAB');
-                        writln(#9'DECP'#9#9'; LB');
-                        writln(#9'LDM');
+                                CodeGen.EmitInst('LIP', inttostr(adr+1), 'Load 16bit variable '+name);
+                        CodeGen.EmitInst('LDM', '', 'HB');
+                        CodeGen.EmitInst('EXAB');
+                        CodeGen.EmitInst('DECP', '', 'LB');
+                        CodeGen.EmitInst('LDM');
                     end else
                     begin // Local word
-                        writln(#9'LDR');
-                        writln(#9'ADIA'#9+inttostr(adr+1+pushcnt));
-                        writln(#9'STP');
-                        writln(#9'LDM'#9'; HB - Load variable '+name);
-                        writln(#9'EXAB');
-                        writln(#9'INCP');
-                        writln(#9'LDM'#9'; LB');
+                        CodeGen.EmitInst('LDR');
+                        CodeGen.EmitInst('ADIA', inttostr(adr+1+pushcnt));
+                        CodeGen.EmitInst('STP');
+                        CodeGen.EmitInst('LDM', '', 'HB - Load variable '+name);
+                        CodeGen.EmitInst('EXAB');
+                        CodeGen.EmitInst('INCP');
+                        CodeGen.EmitInst('LDM', '', 'LB');
                     end;
                 end else
                 begin
                     if loc then
                        Error ( 'Unsupported Xram local load' );
                     if adr <> -1 then
-                            writln( #9'LIDP'#9+inttostr(adr+1)+#9'; Load 16bit variable '+name)
+                            CodeGen.EmitInst('LIDP', inttostr(adr+1), 'Load 16bit variable '+name)
                     else
-                            writln( #9'LIDP'#9+name+'+1'#9'; Load 16bit variable '+name);
-                    writln( #9'LDD'#9#9'; HB');
-                    writln( #9'EXAB');
+                            CodeGen.EmitInst('LIDP', name+'+1', 'Load 16bit variable '+name);
+                    CodeGen.EmitInst('LDD', '', 'HB');
+                    CodeGen.EmitInst('EXAB');
                     if (adr <> -1) and ((adr + 1) div 256 = adr div 256) then
-                            writln( #9'LIDL'#9'LB('+inttostr(adr)+')')
+                            CodeGen.EmitInst('LIDL', 'LB('+inttostr(adr)+')')
                     else if adr <> -1 then
-                            writln( #9'LIDP'#9+inttostr(adr))
+                            CodeGen.EmitInst('LIDP', inttostr(adr))
                     else
-                            writln( #9'LIDP'#9+name);
-                    writln( #9'LDD'#9#9'; LB');
+                            CodeGen.EmitInst('LIDP', name);
+                    CodeGen.EmitInst('LDD', '', 'LB');
                 end;
             end else if (typ='float') then
             begin
@@ -1095,46 +1095,46 @@ begin
                 begin
                     if not loc then
                     begin
-                        writln(#9'LIQ 0x'+IntToHex(adr,2)+#9'; from here');
-                        writln(#9'LP'#9'0x'+IntToHex(FloatXReg,2)+#9'; to temporary store' );
-                        writln(#9'LII 7');
-                        writln(#9'MVW ; (Q) -> (FloatXReg), 8 bytes');
+                        CodeGen.EmitInst('LIQ', '0x'+IntToHex(adr,2), 'from here');
+                        CodeGen.EmitInst('LP', '0x'+IntToHex(FloatXReg,2), 'to temporary store');
+                        CodeGen.EmitInst('LII', '7');
+                        CodeGen.EmitInst('MVW', '', '(Q) -> (FloatXReg), 8 bytes');
                     end
                     else begin
                         // a local variable is reverse-ordered on stack
-                        writln(#9'');
-                        writln(#9'; Load local-float var into FloatXReg, reversed');
-                        writln(#9'LDR');  // R -> A
-                        writln(#9'EXAB'); // save R in B, first
+                        CodeGen.EmitBlankLine;
+                        CodeGen.EmitComment('Load local-float var into FloatXReg, reversed');
+                        CodeGen.EmitInst('LDR');  // R -> A
+                        CodeGen.EmitInst('EXAB'); // save R in B, first
                         // from:
-                        writln(#9'LDR'); // R -> A
-                        writln(#9'ADIA'#9+inttostr(adr+pushcnt+2-7)+#9'; from: '+name+' offset');
-                        writln(#9'STR'); // now R points to the local variable start addr
+                        CodeGen.EmitInst('LDR'); // R -> A
+                        CodeGen.EmitInst('ADIA', inttostr(adr+pushcnt+2-7), 'from: '+name+' offset');
+                        CodeGen.EmitInst('STR'); // now R points to the local variable start addr
                         // to:
-                        writln(#9'LIP 0x'+IntToHex(FloatXReg+7,2)+#9'; to: primary float reg end addr' );
+                        CodeGen.EmitInst('LIP', '0x'+IntToHex(FloatXReg+7,2), 'to: primary float reg end addr');
                         // loop 8 times
-                        writln(#9'LIJ 8'#9'; move 8 bytes');
+                        CodeGen.EmitInst('LIJ', '8', 'move 8 bytes');
                         lb := NewLabel;
                         PostLabel(lb);
                         // move using POP+EXAM
-                        writln(#9'POP'); dec(pushcnt);
-                        writln(#9'EXAM'); // A <-> (P), I times (1)
-                        writln(#9'DECP');
-                        writln(#9'DECJ');
-                        writln(#9'JRNZM '+lb);
-                        writln(#9'EXAB'); // restore R
-                        writln(#9'STR'); // A -> R
+                        CodeGen.EmitInst('POP'); dec(pushcnt);
+                        CodeGen.EmitInst('EXAM'); // A <-> (P), I times (1)
+                        CodeGen.EmitInst('DECP');
+                        CodeGen.EmitInst('DECJ');
+                        CodeGen.EmitInst('JRNZM', lb);
+                        CodeGen.EmitInst('EXAB'); // restore R
+                        CodeGen.EmitInst('STR'); // A -> R
                     end;
                 end else begin
                     if loc then
                        Error ( 'Unsupported Xram Local loading' );
                     if adr <> -1 then
-                       writln( #9'LIDP'#9+'0x'+inttohex(adr,4)+#9'; Load variable '+name)
+                       CodeGen.EmitInst('LIDP', '0x'+inttohex(adr,4), 'Load variable '+name)
                     else
-                       writln( #9'LIDP'#9+name+'+1'#9'; Load variable '+name);
-                    writeln( #9'LP'#9'0x'+inttohex(FloatXReg,2)+' ; to temporary store' );
-                    writeln( #9'LII 07');
-                    writeln( #9'MVWD ; (DP) -> (P), I+1 times' );
+                       CodeGen.EmitInst('LIDP', name+'+1', 'Load variable '+name);
+                    CodeGen.EmitInst('LP', '0x'+inttohex(FloatXReg,2), 'to temporary store');
+                    CodeGen.EmitInst('LII', '07');
+                    CodeGen.EmitInst('MVWD', '', '(DP) -> (P), I+1 times');
                 end;
             end;
         end else
@@ -1143,86 +1143,86 @@ begin
             begin
                 if not xr then
                 begin
-                        writln( #9'LIB'#9+inttostr(adr)+#9'; Load array element from '+name);
-                        writln( #9'LP'#9'3');
-                        writln( #9'ADM');
-                        writln( #9'EXAB');
-                        writln( #9'STP');
-                        writln( #9'LDM');
+                        CodeGen.EmitInst('LIB', inttostr(adr), 'Load array element from '+name);
+                        CodeGen.EmitInst('LP', '3');
+                        CodeGen.EmitInst('ADM');
+                        CodeGen.EmitInst('EXAB');
+                        CodeGen.EmitInst('STP');
+                        CodeGen.EmitInst('LDM');
                 end else
                 begin
-                        writln( #9'PUSH'#9#9'; Load array element from '+name); inc(pushcnt);
-                        writln( #9'LP'#9'5'#9'; HB of address');
+                        CodeGen.EmitInst('PUSH', '', 'Load array element from '+name); inc(pushcnt);
+                        CodeGen.EmitInst('LP', '5', 'HB of address');
                         if adr <> -1 then
                         begin
-                                writln( #9'LIA'#9'HB('+inttostr(adr)+'-1)');
-                                writln( #9'EXAM');
-                                writln( #9'LP'#9'4'#9'; LB');
-                                writln( #9'LIA'#9'LB('+inttostr(adr)+'-1)');
+                                CodeGen.EmitInst('LIA', 'HB('+inttostr(adr)+'-1)');
+                                CodeGen.EmitInst('EXAM');
+                                CodeGen.EmitInst('LP', '4', 'LB');
+                                CodeGen.EmitInst('LIA', 'LB('+inttostr(adr)+'-1)');
                         end else
                         begin
-                                writln( #9'LIA'#9'HB('+name+'-1)');
-                                writln( #9'EXAM');
-                                writln( #9'LP'#9'4'#9'; LB');
-                                writln( #9'LIA'#9'LB('+name+'-1)');
+                                CodeGen.EmitInst('LIA', 'HB('+name+'-1)');
+                                CodeGen.EmitInst('EXAM');
+                                CodeGen.EmitInst('LP', '4', 'LB');
+                                CodeGen.EmitInst('LIA', 'LB('+name+'-1)');
                         end;
-                        writln( #9'EXAM');
-                        writln( #9'POP'); dec(pushcnt);
-                        writln( #9'LIB'#9'0');
-                        writln( #9'ADB');
-                        writln( #9'POP'); dec(pushcnt);
-                        writln( #9'EXAB');
-                        writln( #9'POP'); dec(pushcnt);
-                        writln( #9'IYS');
-                        writln( #9'EXAB');
-                        writln( #9'IYS');
+                        CodeGen.EmitInst('EXAM');
+                        CodeGen.EmitInst('POP'); dec(pushcnt);
+                        CodeGen.EmitInst('LIB', '0');
+                        CodeGen.EmitInst('ADB');
+                        CodeGen.EmitInst('POP'); dec(pushcnt);
+                        CodeGen.EmitInst('EXAB');
+                        CodeGen.EmitInst('POP'); dec(pushcnt);
+                        CodeGen.EmitInst('IYS');
+                        CodeGen.EmitInst('EXAB');
+                        CodeGen.EmitInst('IYS');
                 end;
             end else if (typ='word') then
             begin
                 if not xr then
                 begin
-                        writln( #9'RC');
-                        writln( #9'SL');
-                        writln( #9'LII'#9+inttostr(adr)+#9'; Load array element from '+name);
-                        writln( #9'LP'#9'0');
-                        writln( #9'ADM');
-                        writln( #9'EXAM');
-                        writln( #9'STP');
-                        writln( #9'INCP');
-                        writln( #9'POP'); dec(pushcnt);
-                        writln( #9'EXAM');
-                        writln( #9'DECP');
-                        writln( #9'POP'); dec(pushcnt);
-                        writln( #9'EXAM');
+                        CodeGen.EmitInst('RC');
+                        CodeGen.EmitInst('SL');
+                        CodeGen.EmitInst('LII', inttostr(adr), 'Load array element from '+name);
+                        CodeGen.EmitInst('LP', '0');
+                        CodeGen.EmitInst('ADM');
+                        CodeGen.EmitInst('EXAM');
+                        CodeGen.EmitInst('STP');
+                        CodeGen.EmitInst('INCP');
+                        CodeGen.EmitInst('POP'); dec(pushcnt);
+                        CodeGen.EmitInst('EXAM');
+                        CodeGen.EmitInst('DECP');
+                        CodeGen.EmitInst('POP'); dec(pushcnt);
+                        CodeGen.EmitInst('EXAM');
                 end else
                 begin
-                        writln( #9'RC');
-                        writln( #9'SL');
-                        writln( #9'PUSH'#9#9'; Load array element from '+name); inc(pushcnt);
-                        writln( #9'LP'#9'7'#9'; HB of address');
+                        CodeGen.EmitInst('RC');
+                        CodeGen.EmitInst('SL');
+                        CodeGen.EmitInst('PUSH', '', 'Load array element from '+name); inc(pushcnt);
+                        CodeGen.EmitInst('LP', '7', 'HB of address');
                         if adr <> -1 then
                         begin
-                                writln( #9'LIA'#9'HB('+inttostr(adr)+'-1)');
-                                writln( #9'EXAM');
-                                writln( #9'LP'#9'6'#9'; LB');
-                                writln( #9'LIA'#9'LB('+inttostr(adr)+'-1)');
+                                CodeGen.EmitInst('LIA', 'HB('+inttostr(adr)+'-1)');
+                                CodeGen.EmitInst('EXAM');
+                                CodeGen.EmitInst('LP', '6', 'LB');
+                                CodeGen.EmitInst('LIA', 'LB('+inttostr(adr)+'-1)');
                         end else
                         begin
-                                writln( #9'LIA'#9'HB('+name+'-1)');
-                                writln( #9'EXAM');
-                                writln( #9'LP'#9'6'#9'; LB');
-                                writln( #9'LIA'#9'LB('+name+'-1)');
+                                CodeGen.EmitInst('LIA', 'HB('+name+'-1)');
+                                CodeGen.EmitInst('EXAM');
+                                CodeGen.EmitInst('LP', '6', 'LB');
+                                CodeGen.EmitInst('LIA', 'LB('+name+'-1)');
                         end;
-                        writln( #9'EXAM');
-                        writln( #9'POP'); dec(pushcnt);
-                        writeln( #9'LIB'#9'0');
-                        writeln( #9'ADB');
-                        writeln( #9'POP'); dec(pushcnt);
-                        writln( #9'EXAB');
-                        writln( #9'POP'); dec(pushcnt);
-                        writln( #9'IYS');
-                        writln( #9'EXAB');
-                        writln( #9'IYS');
+                        CodeGen.EmitInst('EXAM');
+                        CodeGen.EmitInst('POP'); dec(pushcnt);
+                        CodeGen.EmitInst('LIB', '0');
+                        CodeGen.EmitInst('ADB');
+                        CodeGen.EmitInst('POP'); dec(pushcnt);
+                        CodeGen.EmitInst('EXAB');
+                        CodeGen.EmitInst('POP'); dec(pushcnt);
+                        CodeGen.EmitInst('IYS');
+                        CodeGen.EmitInst('EXAB');
+                        CodeGen.EmitInst('IYS');
                 end;
             end else if (typ='float') then
             begin
@@ -1395,36 +1395,36 @@ begin
                                         error('This var ('+s+') is not a pointer!');
                                 if varlist[varfound].xram then
                                 begin
-                                        writln(#9'LP'#9'4'#9'; XL');
-                                        writln(#9'EXAM');
-                                        writln(#9'LP'#9'5'#9'; XH');
-                                        writln(#9'EXAB');
-                                        writln(#9'EXAM');
-                                        writln(#9'DX');
+                                        CodeGen.EmitInst('LP', '4', 'XL');
+                                        CodeGen.EmitInst('EXAM');
+                                        CodeGen.EmitInst('LP', '5', 'XH');
+                                        CodeGen.EmitInst('EXAB');
+                                        CodeGen.EmitInst('EXAM');
+                                        CodeGen.EmitInst('DX');
                                         if varlist[varfound].pnttyp <> 'word' then
                                         begin
-                                                writln(#9'IXL'#9#9'; Load content *'+s);
+                                                CodeGen.EmitInst('IXL', '', 'Load content *'+s);
                                         end else
                                         begin
-                                                writln(#9'IXL'#9#9'; Load content LB *'+s);
-                                                writln(#9'EXAB');
-                                                writln(#9'IXL'#9#9'; Load content HB *'+s);
-                                                writln(#9'EXAB');
+                                                CodeGen.EmitInst('IXL', '', 'Load content LB *'+s);
+                                                CodeGen.EmitInst('EXAB');
+                                                CodeGen.EmitInst('IXL', '', 'Load content HB *'+s);
+                                                CodeGen.EmitInst('EXAB');
                                         end;
                                 end else
                                 begin
                                         // LIP
-                                        writln(#9'STP'#9#9'; Set P');
+                                        CodeGen.EmitInst('STP', '', 'Set P');
                                         if varlist[varfound].pnttyp <> 'word' then
                                         begin
-                                                writln(#9'LDM'#9#9'; Load content *'+s);
+                                                CodeGen.EmitInst('LDM', '', 'Load content *'+s);
                                         end else
                                         begin
-                                                writln(#9'LDM'#9#9'; Load content LB *'+s);
-                                                writln(#9'EXAB');
-                                                writln(#9'INCP');
-                                                writln(#9'LDM'#9#9'; Load content HB *'+s);
-                                                writln(#9'EXAB');
+                                                CodeGen.EmitInst('LDM', '', 'Load content LB *'+s);
+                                                CodeGen.EmitInst('EXAB');
+                                                CodeGen.EmitInst('INCP');
+                                                CodeGen.EmitInst('LDM', '', 'Load content HB *'+s);
+                                                CodeGen.EmitInst('EXAB');
                                         end;
                                 end;
                         end else
@@ -1434,16 +1434,16 @@ begin
                                 begin
                                         if varlist[varfound].address = -1 then
                                         begin
-                                                writln(#9'LIA'#9'LB('+s+')'#9'; &'+s);
-                                                writln(#9'LIB'#9'HB('+s+')'#9'; &'+s);
+                                                CodeGen.EmitInst('LIA', 'LB('+s+')', '&'+s);
+                                                CodeGen.EmitInst('LIB', 'HB('+s+')', '&'+s);
                                         end else
                                         begin
-                                                writln(#9'LIA'#9'LB('+inttostr(varlist[varfound].address)+')'#9'; &'+s);
-                                                writln(#9'LIB'#9'HB('+inttostr(varlist[varfound].address)+')'#9'; &'+s);
+                                                CodeGen.EmitInst('LIA', 'LB('+inttostr(varlist[varfound].address)+')', '&'+s);
+                                                CodeGen.EmitInst('LIB', 'HB('+inttostr(varlist[varfound].address)+')', '&'+s);
                                         end;
                                 end else
                                 begin
-                                        writln(#9'LIA'#9+inttostr(varlist[varfound].address)+#9'; &'+s);
+                                        CodeGen.EmitInst('LIA', inttostr(varlist[varfound].address), '&'+s);
                                 end;
                         end else
                                 LoadVariable(s);
@@ -1480,7 +1480,7 @@ begin
                                 Push;
                             end;
                         end;
-                        writln( #9'CALL'#9+s+#9'; Procedure call');
+                        CodeGen.EmitInst('CALL', s, 'Procedure call');
                         Rd(Look, Tok); tok := trim(tok);
                 end;  }
 	end else
@@ -1567,9 +1567,9 @@ begin
         while i < length(Tok) do
         begin
                 if copy(Tok,i,2) = '<<' then
-                        begin writln ('; << ') ; delete(tok,i,1); tok[i]:=SL; end
+                        begin writeln ('; << ') ; delete(tok,i,1); tok[i]:=SL; end
                 else if copy(Tok,i,2) = '>>' then
-                        begin writln ('; >> ') ; delete(tok,i,1); tok[i]:=SR; end
+                        begin writeln ('; >> ') ; delete(tok,i,1); tok[i]:=SR; end
                 else if copy(Tok,i,2) = '++' then
                         begin delete(tok,i,1); tok[i]:=PP; end
                 else if copy(Tok,i,2) = '--' then
@@ -1649,25 +1649,25 @@ begin
                         if findvar(name)
                         and ((varlist[varfound].typ = 'char') or (varlist[varfound].typ = 'byte')) then
                         begin
-                                if look = '+' then writln(#9'; '+name+'++') else writeln(#9'; '+name+'--');
+                                if look = '+' then CodeGen.EmitComment(name+'++') else CodeGen.EmitComment(name+'--');
                                 if ( not(varlist[varfound].Local)
                                 and ( varlist[varfound].address<12 )
                                 and ( varlist[varfound].address>=0 ) ) then
                                 begin
                                   a := varlist[varfound].address;
-                                  if a = 0 then begin if Look='+' then writln(#9'INCI') else writln(#9'DECI'); end
-                                  else if a = 1 then begin if Look='+' then writln(#9'INCJ') else writln(#9'DECJ'); end
-                                  else if a = 2 then begin if Look='+' then writln(#9'INCA') else writln(#9'DECA'); end
-                                  else if a = 3 then begin if Look='+' then writln(#9'INCB') else writln(#9'DECB'); end
-                                  else if a = 8 then begin if Look='+' then writln(#9'INCK') else writln(#9'DECK'); end
-                                  else if a = 9 then begin if Look='+' then writln(#9'INCL') else writln(#9'DECL'); end
-                                  else if a = 10 then begin if Look='+' then writln(#9'INCM') else writln(#9'DECM'); end
-                                  else if a = 11 then begin if Look='+' then writln(#9'INCN') else writln(#9'DECN'); end
+                                  if a = 0 then begin if Look='+' then CodeGen.EmitInst('INCI') else CodeGen.EmitInst('DECI'); end
+                                  else if a = 1 then begin if Look='+' then CodeGen.EmitInst('INCJ') else CodeGen.EmitInst('DECJ'); end
+                                  else if a = 2 then begin if Look='+' then CodeGen.EmitInst('INCA') else CodeGen.EmitInst('DECA'); end
+                                  else if a = 3 then begin if Look='+' then CodeGen.EmitInst('INCB') else CodeGen.EmitInst('DECB'); end
+                                  else if a = 8 then begin if Look='+' then CodeGen.EmitInst('INCK') else CodeGen.EmitInst('DECK'); end
+                                  else if a = 9 then begin if Look='+' then CodeGen.EmitInst('INCL') else CodeGen.EmitInst('DECL'); end
+                                  else if a = 10 then begin if Look='+' then CodeGen.EmitInst('INCM') else CodeGen.EmitInst('DECM'); end
+                                  else if a = 11 then begin if Look='+' then CodeGen.EmitInst('INCN') else CodeGen.EmitInst('DECN'); end
                                 end
                                 else
                                 begin
                                         Loadvariable(name);
-                                        if Look = '+' then writln(#9'INCA') else writeln(#9'DECA');
+                                        if Look = '+' then CodeGen.EmitInst('INCA') else CodeGen.EmitInst('DECA');
                                         storevariable(name);
                                 end;
                                 exit;
@@ -1720,53 +1720,53 @@ begin
                 begin
                         if varlist[varfound].pnttyp <> 'word' then
                         begin
-                                writln(#9'PUSH'); inc(pushcnt);
+                                CodeGen.EmitInst('PUSH'); inc(pushcnt);
                         end else
                         begin
-                                writln(#9'PUSH'); inc(pushcnt);
-                                writln(#9'EXAB');
-                                writln(#9'PUSH'); inc(pushcnt);
+                                CodeGen.EmitInst('PUSH'); inc(pushcnt);
+                                CodeGen.EmitInst('EXAB');
+                                CodeGen.EmitInst('PUSH'); inc(pushcnt);
                         end;
                         LoadVariable(name);
                         if not varlist[varfound].Pointer then
                                         error('This var ('+name+') is not a pointer!');
                         if varlist[varfound].xram then
                         begin
-                                        writln(#9'LP'#9'6'#9'; YL');
-                                        writln(#9'EXAM');
-                                        writln(#9'LP'#9'7'#9'; YH');
-                                        writln(#9'EXAB');
-                                        writln(#9'EXAM');
-                                        writln(#9'DY');
+                                        CodeGen.EmitInst('LP', '6', 'YL');
+                                        CodeGen.EmitInst('EXAM');
+                                        CodeGen.EmitInst('LP', '7', 'YH');
+                                        CodeGen.EmitInst('EXAB');
+                                        CodeGen.EmitInst('EXAM');
+                                        CodeGen.EmitInst('DY');
                                         if varlist[varfound].pnttyp <> 'word' then
                                         begin
-                                                writln(#9'POP'); dec(pushcnt);
-                                                writln(#9'IYS'#9#9'; Store content *'+s);
+                                                CodeGen.EmitInst('POP'); dec(pushcnt);
+                                                CodeGen.EmitInst('IYS', '', 'Store content *'+s);
                                         end else
                                         begin
-                                                writln(#9'POP'); dec(pushcnt);
-                                                writln(#9'EXAB');
-                                                writln(#9'POP'); dec(pushcnt);
-                                                writln(#9'IYS'#9#9'; Store content LB *'+s);
-                                                writln(#9'EXAB');
-                                                writeln(#9'IYS'#9#9'; Store content HB *'+s);
+                                                CodeGen.EmitInst('POP'); dec(pushcnt);
+                                                CodeGen.EmitInst('EXAB');
+                                                CodeGen.EmitInst('POP'); dec(pushcnt);
+                                                CodeGen.EmitInst('IYS', '', 'Store content LB *'+s);
+                                                CodeGen.EmitInst('EXAB');
+                                                CodeGen.EmitInst('IYS', '', 'Store content HB *'+s);
                                         end;
                         end else
                         begin
                                         // LIP
-                                        writln(#9'STP'#9#9'; Set P');
+                                        CodeGen.EmitInst('STP', '', 'Set P');
                                         if varlist[varfound].pnttyp <> 'word' then
                                         begin
-                                                writeln(#9'POP'); dec(pushcnt);
-                                                writeln(#9'EXAM'#9#9'; Store content *'+s);
+                                                CodeGen.EmitInst('POP'); dec(pushcnt);
+                                                CodeGen.EmitInst('EXAM', '', 'Store content *'+s);
                                         end else
                                         begin
-                                                writeln(#9'POP'); dec(pushcnt);
-                                                writeln(#9'EXAB');
-                                                writeln(#9'POP'); dec(pushcnt);
-                                                writeln(#9'EXAM'#9#9'; Store content LB *'+s);
-                                                writeln(#9'EXAB');
-                                                writeln(#9'EXAM'#9#9'; Store content HB *'+s);
+                                                CodeGen.EmitInst('POP'); dec(pushcnt);
+                                                CodeGen.EmitInst('EXAB');
+                                                CodeGen.EmitInst('POP'); dec(pushcnt);
+                                                CodeGen.EmitInst('EXAM', '', 'Store content LB *'+s);
+                                                CodeGen.EmitInst('EXAB');
+                                                CodeGen.EmitInst('EXAM', '', 'Store content HB *'+s);
                                         end;
                         end;
                 end;
@@ -1888,10 +1888,10 @@ var L1, temp: string;
     iselse: boolean;
 begin
         delete(tok, 1, 7); tok := trim(tok);
-        writln(#9'; Switch');
+        CodeGen.EmitComment('Switch');
         Rd(Look, tok); tok:=trim(tok);
         Expression;
-        writln(#9'CASE');
+        CodeGen.EmitInst('CASE');
         iselse := false;
         repeat
                 
@@ -1907,18 +1907,18 @@ begin
                 if pos('else', tok) > 0 then
                         iselse := true;
                 L1 := NewLabel;
-                writln(#9 + tok + #9 + L1);
+                CodeGen.EmitInst(tok, L1);
                 outfile := false;
-                writln('  ' + L1 + ':');
+                PostLabel(L1);
                 block;
-                writln(#9 + 'RTN');
-                writln('');
+                CodeGen.EmitInst('RTN');
+                CodeGen.EmitBlankLine;
                 outfile := true;
         until trim(dummy)[1] = '}';
         if not iselse then
-                writln( #9'ELSE:'#9+'EOP');
-        writln(#9'ENDCASE');
-        writln(#9'; End switch');
+                CodeGen.EmitInst('ELSE:', 'EOP');
+        CodeGen.EmitInst('ENDCASE');
+        CodeGen.EmitComment('End switch');
 end;
 
 
@@ -1928,8 +1928,8 @@ end;
 procedure DoIf;
 var L1, L2: string;
 begin
-        writln( #9'; If block: Boolean expression');
-        writln('');
+        CodeGen.EmitComment('If block: Boolean expression');
+        CodeGen.EmitBlankLine;
         delete(Tok, 1, 4);
         BoolExpression;
         if tok <> '' then
@@ -1939,8 +1939,8 @@ begin
         end;
         L1 := NewLabel; L2 := L1;
         BranchAbsFalse(L1);   // potentially large jump
-        writln('');
-        writln( #9'; If expression = true');
+        CodeGen.EmitBlankLine;
+        CodeGen.EmitComment('If expression = true');
         Block;
 
         if copy(dummy, 1, 4) = 'else' then
@@ -1955,10 +1955,10 @@ begin
                 L2 := NewLabel;
                 BranchAbs(L2);   // potentially large jump
                 PostLabel(L1);
-                writln( #9'; If expression = false');
+                CodeGen.EmitComment('If expression = false');
                 Block;
         end;
-        writln( #9'; End of if');
+        CodeGen.EmitComment('End of if');
         PostLabel(L2);
 end;
 {-------------------------------------------------------------}
@@ -1970,8 +1970,8 @@ end;
 procedure DoGoto;
 begin
         delete(tok, 1, 5); tok := trim(tok);
-        writln( #9'RJMP'#9+tok+#9'; Goto');
-        writln('');
+        CodeGen.EmitInst('RJMP', tok, 'Goto');
+        CodeGen.EmitBlankLine;
 end;
 {-------------------------------------------------------------}
 
@@ -1984,8 +1984,9 @@ begin
         delete(tok, 1, 6); tok := trim(tok);
         if findvar(tok) or findproc(tok) then
                 error(tok+': This label name is already used!');
-        writeln('');
-        writeln( '  '+tok+':'#9'; User label');
+        CodeGen.EmitBlankLine;
+        PostLabel(tok);
+        CodeGen.EmitComment('User label');
 end;
 {-------------------------------------------------------------}
 
@@ -1996,10 +1997,10 @@ end;
 procedure DoBreak;
 begin
         if InnerLoop = 'loop' then
-                writln( #9'LEAVE'#9#9'; Break')
+                CodeGen.EmitInst('LEAVE', '', 'Break')
         else
-                writln( #9'RJMP'#9+ExitLabel+#9'; Break');
-        writln('');
+                CodeGen.EmitInst('RJMP', ExitLabel, 'Break');
+        CodeGen.EmitBlankLine;
 end;
 {-------------------------------------------------------------}
 
@@ -2020,8 +2021,8 @@ begin
                 else if SymbolTable.GetProcInfo(currproc).returntype = 'float' then optype := floatp;
                 Expression;
         end;
-        writln( #9'RTN'#9#9'; end of ' + SymbolTable.GetProcInfo(currproc).procname);
-        writln('');
+        CodeGen.EmitInst('RTN', '', 'end of ' + SymbolTable.GetProcInfo(currproc).procname);
+        CodeGen.EmitBlankLine;
 end;
 {-------------------------------------------------------------}
 
@@ -2036,10 +2037,10 @@ begin
         L1 := NewLabel;
         L2 := NewLabel;
         ExitLabel := L2;
-        writln( #9'; Loop');
-        writln('');
-        delete(tok, 1, 6); tok := trim(tok); //delete(tok, length(tok), 1);
-	      Rd(Look, Tok); tok := trim(tok);
+        CodeGen.EmitComment('Loop');
+        CodeGen.EmitBlankLine;
+        delete(tok, 1, 6); tok := trim(tok);
+        Rd(Look, Tok); tok := trim(tok);
         Expression;
         isword := false;
         Push; dec(pushcnt);
@@ -2050,9 +2051,9 @@ begin
                 inc(level);
         end;
         Block;
-        writln( #9'LOOP'#9+L1);
+        CodeGen.EmitInst('LOOP', L1);
         PostLabel(L2);
-        writln( #9'; End of loop');
+        CodeGen.EmitComment('End of loop');
 end;
 {-------------------------------------------------------------}
 
@@ -2067,22 +2068,22 @@ begin
         L1 := NewLabel;
         L2 := NewLabel;
         ExitLabel := L2;
-        writln( #9'; While');
-        writln('');
+        CodeGen.EmitComment('While');
+        CodeGen.EmitBlankLine;
         PostLabel(L1);
         delete(Tok, 1, 7); //delete(Tok, length(Tok), 1);
         BoolExpression;
         BranchAbsFalse(L2); // potentially large jump
-        writln( #9'; While expression = true');
+        CodeGen.EmitComment('While expression = true');
         if tok <> '' then
         begin
                 dummy := tok + ';}' + dummy;
                 inc(level);
         end;
         Block;
-        writln( #9'RJMP'#9+L1);
+        CodeGen.EmitInst('RJMP', L1);
         PostLabel(L2);
-        writln( #9'; End of while');
+        CodeGen.EmitComment('End of while');
 end;
 {-------------------------------------------------------------}
 
@@ -2095,7 +2096,7 @@ var L1, L2, temp: string;
 begin
         InnerLoop := 'for';
         delete(tok, 1, 5);
-        writln( #9'; For loop');
+        CodeGen.EmitComment('For loop');
         Assignment;
         L1 := NewLabel;
         L2 := NewLabel;
@@ -2133,12 +2134,15 @@ begin
         end;
 
         block;
-        writln( #9'RJMP'#9+L1);
+        CodeGen.EmitInst('RJMP', L1);
         PostLabel(L2);
-        writln( #9'; End of for');
+        CodeGen.EmitComment('End of for');
 end;
 {-------------------------------------------------------------}
 
+
+{-------------------------------------------------------------}
+{ Load Statement }
 
 procedure DoLoad;
 begin
@@ -2146,7 +2150,11 @@ begin
         rd(look, tok);
         expression;
 end;
+{-------------------------------------------------------------}
 
+
+{-------------------------------------------------------------}
+{ Save Statement }
 
 procedure DoSave;
 var name: string;
@@ -2155,6 +2163,7 @@ begin
         name := Lexer.GetName;
         storevariable(name);
 end;
+{-------------------------------------------------------------}
 
 
 {-------------------------------------------------------------}
@@ -2167,8 +2176,8 @@ begin
         L1 := NewLabel;
         L2 := NewLabel;
         ExitLabel := L2;
-        writln( #9'; Do..while');
-        writln('');
+        CodeGen.EmitComment('Do..while');
+        CodeGen.EmitBlankLine;
         PostLabel(L1);
 //        Lexer.GetToken(MODESTR, dummy);
         extrword(tok); tok := trim(tok);
@@ -2182,10 +2191,10 @@ begin
         delete(Tok, 1, 7); delete(Tok, length(Tok), 1);
         BoolExpression;
         BranchFalse(L2);
-        writln( #9'; While expression = true');
-        writln( #9'RJMP'#9+L1);
+        CodeGen.EmitComment('While expression = true');
+        CodeGen.EmitInst('RJMP', L1);
         PostLabel(L2);
-        writln( #9'; End of do..while');
+        CodeGen.EmitComment('End of do..while');
 end;
 {-------------------------------------------------------------}
 
@@ -2237,7 +2246,7 @@ begin
                                     optype := floatp;
                                 end;
                                 Expression;
-                                writln( #9'; '+proc.parname[c]+' ('+proc.partyp[c]+')'  );
+                                CodeGen.EmitComment(proc.parname[c]+' ('+proc.partyp[c]+')');
                                 Push;
                                 inc(c);
                                 if c > proc.ParCnt then
@@ -2298,7 +2307,7 @@ begin
                                 inc(a, 8);
                                 inc(aa, 8);
                             end;
-                            writln( #9'; '+proc.locname[c]+' ('+proc.loctyp[c]+')'  );
+                            CodeGen.EmitComment(proc.locname[c]+' ('+proc.loctyp[c]+')');
                             // Push         // see optimization below
 
                             {if findvar(ProcList[ProcFound].locname[c]) then
@@ -2310,54 +2319,54 @@ begin
                      // allocating room on stack pointer... either via 'push', or R decrement
                      if aa < 8 then
                        for c := 1 to aa do
-                          begin writln( #9'PUSH'); inc(pushcnt); end
+                          begin CodeGen.EmitInst('PUSH'); inc(pushcnt); end
                      else
                         begin
-                          writln( #9'LP'#9'0');
-                          writln( #9'EXAM');
-                          writln( #9'LDR');
-                          writln( #9'SBIA'#9+inttostr(aa)); inc(pushcnt, aa);
-                          writln( #9'STR');
-                          writln( #9'EXAM');
+                          CodeGen.EmitInst('LP', '0');
+                          CodeGen.EmitInst('EXAM');
+                          CodeGen.EmitInst('LDR');
+                          CodeGen.EmitInst('SBIA', inttostr(aa)); inc(pushcnt, aa);
+                          CodeGen.EmitInst('STR');
+                          CodeGen.EmitInst('EXAM');
                         end;
                 end;
 
                 // call the routine
-                writln( ' ' );
-                writln( #9'CALL'#9+name);
+                CodeGen.EmitBlankLine;
+                CodeGen.EmitInst('CALL', name);
 
                 if a > 0 then
                 begin
-                    writln( ' ' );
-                    writln( #9'; restore stack pointer');
+                    CodeGen.EmitBlankLine;
+                    CodeGen.EmitComment('restore stack pointer');
                     if ( proc.returntype = 'float' ) then
                        Error ( 'Float return handling not implemented!');
                     if ( proc.returnisword ) then
                     begin
-                            writln( #9'LP'#9'0');
-                            writln( #9'EXAM');
-                            writln( #9'LDR');
-                            writln( #9'ADIA'#9+inttostr(a)); dec(pushcnt, a);
-                            writln( #9'STR');
-                            writln( #9'EXAM');
+                            CodeGen.EmitInst('LP', '0');
+                            CodeGen.EmitInst('EXAM');
+                            CodeGen.EmitInst('LDR');
+                            CodeGen.EmitInst('ADIA', inttostr(a)); dec(pushcnt, a);
+                            CodeGen.EmitInst('STR');
+                            CodeGen.EmitInst('EXAM');
                     end else
                     if proc.hasreturn then
                     begin
-                            writln( #9'EXAB');
-                            writln( #9'LDR');
-                            writln( #9'ADIA'#9+inttostr(a)); dec(pushcnt, a);
-                            writln( #9'STR');
-                            writln( #9'EXAB');
+                            CodeGen.EmitInst('EXAB');
+                            CodeGen.EmitInst('LDR');
+                            CodeGen.EmitInst('ADIA', inttostr(a)); dec(pushcnt, a);
+                            CodeGen.EmitInst('STR');
+                            CodeGen.EmitInst('EXAB');
                     end else
                     begin  // no return value (we can overwrite A)
                         if a < 4 then  // optimize for size
                             for i := 1 to a do
-                                begin writln( #9'POP'); dec(pushcnt); end
+                                begin CodeGen.EmitInst('POP'); dec(pushcnt); end
                         else
                         begin
-                            writln( #9'LDR');
-                            writln( #9'ADIA'#9+inttostr(a)); dec(pushcnt, a);
-                            writln( #9'STR');
+                            CodeGen.EmitInst('LDR');
+                            CodeGen.EmitInst('ADIA', inttostr(a)); dec(pushcnt, a);
+                            CodeGen.EmitInst('STR');
                         end;
                     end;
                 end;
@@ -2455,7 +2464,7 @@ begin
                 tok := ExtrCust(dummy, #13);
                 while copy(trim(tok), 1, 7) <> '#endasm' do
                 begin
-                        writln( #9+tok);
+                        writln(#9+tok);  // Keep writln for inline assembly
                         tok := ExtrCust(dummy, #13);
                 end;
           end
@@ -2465,7 +2474,7 @@ begin
                 ProcCall
           else
                 Assignment;
-          writln('');
+          CodeGen.EmitBlankLine;
         end;
         dummy := trim(dummy);
     until (trim(dummy) = '') or (trim(dummy)[1] = '}');
@@ -2647,37 +2656,37 @@ begin
         rewrite(f);
 
         { Write Intro }
-        writln( '; pasm file - assemble with pasm!');
-        writln( '; Compiled with lcc v1.1');
-        writln('');
-        writln( '.ORG'#9+org);
-        writln('');
+        writeln(f, '; pasm file - assemble with pasm!');
+        writeln(f, '; Compiled with lcc v1.1');
+        writeln(f, '');
+        writeln(f, '.ORG'#9+org);
+        writeln(f, '');
 
         { Registry save point }
         if not nosave then
         begin
-          writln(#9'LP'#9'0');
-          writln(#9'LIDP'#9'SREG');
-          writln(#9'LII'#9'11');
-          writln(#9'EXWD');
+          writeln(f, #9'LP'#9'0');
+          writeln(f, #9'LIDP'#9'SREG');
+          writeln(f, #9'LII'#9'11');
+          writeln(f, #9'EXWD');
         end;
 
         { -mandatory- "main" entry point }
-        writln('');
-        writln(#9'CALL'#9'main');
+        writeln(f, '');
+        writeln(f, #9'CALL'#9'main');
 
         { Registry restore and return to BASIC }
         if not nosave then
         begin
-          writln('');
-          writln(#9'LP'#9'0');
-          writln(#9'LIDP'#9'SREG');
-          writln(#9'LII'#9'11');
-          writln(#9'MVWD');
-          writln(#9'RTN');
-          writln('');
-          writln('SREG:'#9'.DW 0, 0, 0, 0, 0, 0');
-          writln('');
+          writeln(f, '');
+          writeln(f, #9'LP'#9'0');
+          writeln(f, #9'LIDP'#9'SREG');
+          writeln(f, #9'LII'#9'11');
+          writeln(f, #9'MVWD');
+          writeln(f, #9'RTN');
+          writeln(f, '');
+          writeln(f, 'SREG:'#9'.DW 0, 0, 0, 0, 0, 0');
+          writeln(f, '');
         end;
 
         { Variables' initializations }
@@ -2731,22 +2740,22 @@ begin
                 if proclist[i].procname = 'main' then
                 begin
                         mainfound := true;
-                        writln('');
-                        //writln(#9'CALL'#9'MAIN');
+                        writeln('');
+                        //writeln(#9'CALL'#9'MAIN');
                         if not nosave then
                         begin
                           tok := 'main ()';
                           ProcCall;
-                          writln(#9'LP'#9'0');
-                          writln(#9'LIDP'#9'SREG');
-                          writln(#9'LII'#9'11');
-                          writln(#9'MVWD');
-                          writln(#9'RTN');
-                          writln('');
-                          writln('SREG:'#9'.DW 0, 0, 0, 0, 0, 0');
+                          writeln(#9'LP'#9'0');
+                          writeln(#9'LIDP'#9'SREG');
+                          writeln(#9'LII'#9'11');
+                          writeln(#9'MVWD');
+                          writeln(#9'RTN');
+                          writeln('');
+                          writeln('SREG:'#9'.DW 0, 0, 0, 0, 0, 0');
                         end;
-                        writln('');
-                        writln( 'MAIN:');
+                        writeln('');
+                        writeln( 'MAIN:');
                         dummy := proclist[i].proccode;
                         currproc := i;
                         Level := 1;
@@ -2755,8 +2764,8 @@ begin
                         if pushcnt <> 0 then
                                 writeln(proclist[i].procname+': Possible Stack corruption!');
                         removelocvars('main');
-                        writln( ' EOP:'#9'RTN');
-                        writln('');
+                        writeln( ' EOP:'#9'RTN');
+                        writeln('');
                         break;
                 end;
         }
@@ -2767,21 +2776,21 @@ begin
                    if true // proclist[i].iscalled
                    then
                    begin
-                        writln('');
-                        writln( proclist[i].procname+':'#9'; Procedure');
+                        writeln(f, '');
+                        writeln(f, proclist[i].procname+':'#9'; Procedure');
                         dummy := proclist[i].proccode;
                         Level := 1;
                         currproc := i;
                         pushcnt := 0; firstp := true;
                         block;
                         if pushcnt <> 0 then
-                           writeln(proclist[i].procname+': Possible Stack corruption!');
+                           writeln(f, proclist[i].procname+': Possible Stack corruption!');
                         removelocvars(proclist[i].procname);
                         if proclist[i].procname = 'main' then
-                           writln( #9'RTN'#9'; end of main');
-                        writln('');
+                           writeln(f, #9'RTN'#9'; end of main');
+                        writeln(f, '');
                    end else
-                        writln('; Skipping procedure '+ proclist[i].procname +' (never used)');
+                        writeln(f, '; Skipping procedure '+ proclist[i].procname +' (never used)');
 
                    if proclist[i].procname = 'main' then
                       mainfound := true;
@@ -2792,8 +2801,8 @@ begin
 
         if (asmcnt > 0) then
                 for i := 0 to asmcnt - 1 do
-                        writln( asmlist[i]);
-        close(f);
+                        writeln(f, asmlist[i]);
+        closefile(f);
 
 
 
@@ -2946,11 +2955,11 @@ begin
                                         writeln(f2, typ);
                                         writeln(f2, s);
                                 end;
-                        end else
-                        begin
-                                writeln(f2, name);
-                                writeln(f2, s);
-                        end;
+                end else
+                begin
+                        writeln(f2, name);
+                        writeln(f2, s);
+                end;
                 end else
                 begin
                         writeln(f2, s);
@@ -3029,7 +3038,6 @@ begin
         writeln('Complete: ',i,' assembler lines were produced!');
 end;
 {--------------------------------------------------------------}
-
 
 
 begin
