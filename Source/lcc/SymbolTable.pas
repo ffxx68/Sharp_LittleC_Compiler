@@ -55,6 +55,7 @@ function AllocVar(xr, at: Boolean; size, adr: Integer): Integer;
 function IsVarAtAdr(adr, size: Integer): Boolean; overload;
 function IsVarAtAdr(adr, size: Integer; out foundIdx: Integer): Boolean; overload;
 procedure RemoveLocalVars(procIndex: Integer);
+procedure SetVarAddress(idx: Integer; newAddress: Integer);
 
 // Proc API
 function GetProcCount: Integer;
@@ -164,6 +165,13 @@ begin
     end else
       Inc(i);
   end;
+end;
+
+procedure SetVarAddress(idx: Integer; newAddress: Integer);
+begin
+  if (idx < 0) or (idx >= VarCount) then
+    raise Exception.Create('SetVarAddress: index out of range');
+  VarList[idx].Address := newAddress;
 end;
 
 // Proc API implementations

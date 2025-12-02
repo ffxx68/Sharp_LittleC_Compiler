@@ -8,7 +8,7 @@ unit Parser;
 
 {--------------------------------------------------------------}
 interface
-uses Input, Scanner, Lexer, Errors, CodeGen, Output, sysutils, calcunit, math, SymbolTable;
+uses Input, Scanner, Lexer, Errors, CodeGen, Output, sysutils, calcunit, math, SymbolTable, Semantic;
 
 procedure FirstScan(filen: string);
 procedure SecondScan(filen: string);
@@ -2372,67 +2372,31 @@ end;
 { set offsets for local variables }
 
 procedure repadr;
-var i, lc, pc, m, a: integer;
+var i, idx: integer;
     name: string;
+    proc: TProcInfo;
 begin
-        lc := ProcList[currproc].loccnt;
-        pc := ProcList[currproc].parcnt;
-        if (lc = 0) and (pc = 0) then exit;
-        if lc > 0 then
-                name := ProcList[currproc].locname[lc - 1]
-        else
-                name := ProcList[currproc].parname[pc - 1];
-        if not Findvar(name) then error('Var '+name+' not declared!');
-        if not VarList[VarFound].local then error('Var '+name+' not local!');
+        // Delegate to Semantic.RepAdr which updates SymbolTable
+        Semantic.RepAdr(currproc);
 
-        // sum up local space needed
-        m := 0; // counting return address location
-        if pc > 0 then for i := 0 to pc - 1 do
-                if ProcList[currproc].partyp[i] = 'float' then inc(m, 8)
-                else if ProcList[currproc].partyp[i] = 'word' then inc(m, 2)
-                else if ((ProcList[currproc].partyp[i] = 'byte') or
-                         (ProcList[currproc].partyp[i] = 'char')) then inc(m)
-                else Error ('Invalid parameter type <' + ProcList[currproc].partyp[i] + '> in '
-                      + ProcList[currproc].ProcName );
-        if lc > 0 then for i := 0 to lc - 1 do
-                if ProcList[currproc].loctyp[i] = 'float' then inc(m, 8)
-                else if ProcList[currproc].loctyp[i] = 'word' then inc(m, 2)
-                else if ((ProcList[currproc].loctyp[i] = 'byte') or
-                         (ProcList[currproc].loctyp[i] = 'char')) then inc(m)
-                else Error ('Invalid local var type <' + ProcList[currproc].partyp[i] + '> in '
-                     + ProcList[currproc].ProcName );
+        // Sync back to local VarList for compatibility during transition
+        proc := SymbolTable.GetProcInfo(currproc);
 
-        // calc each local relative address (offset), starting from the end
-        a := 1;
-        if pc > 0 then for i := 0 to pc - 1 do
-        begin
-                name := ProcList[currproc].parname[i];
-                if not Findvar(name) then error('Var '+name+' not declared!');
-                if not VarList[VarFound].local then error('Var '+name+' not local!');
-                VarList[VarFound].address := m - a;
-                writeln('LOCAL ',ProcList[currproc].procname,' PARAM: ', name,
-                               '(',ProcList[currproc].partyp[i],')',
-                               ': ', VarList[VarFound].address );
-                if ProcList[currproc].partyp[i] = 'float' then inc(a, 8)
-                else if ProcList[currproc].partyp[i] = 'word' then inc(a, 2)
-                else if ((ProcList[currproc].partyp[i] = 'byte') or
-                         (ProcList[currproc].partyp[i] = 'char')) then inc(a);
-        end;
-        if lc > 0 then for i := 0 to lc - 1 do
-        begin
-                name := ProcList[currproc].locname[i];
-                if not Findvar(name) then error('Var '+name+' not declared!');
-                if not VarList[VarFound].local then error('Var '+name+' not local!');
-                VarList[VarFound].address := m - a;
-                writeln('LOCAL ',ProcList[currproc].procname,' VAR: ', name,
-                               '(',ProcList[currproc].loctyp[i],')',
-                               ': ', VarList[VarFound].address );
-                if ProcList[currproc].loctyp[i] = 'float' then inc(a, 8)
-                else if ProcList[currproc].loctyp[i] = 'word' then inc(a, 2)
-                else if ((ProcList[currproc].loctyp[i] = 'byte') or
-                         (ProcList[currproc].loctyp[i] = 'char')) then inc(a);
+        if proc.parcnt > 0 then
+          for i := 0 to proc.parcnt - 1 do
+          begin
+                  name := proc.parname[i];
+                  if FindVar(name) then
+                          VarList[VarFound].address := SymbolTable.GetVarInfo(VarFound).address;
+          end;
 
-        end;
+        if proc.loccnt > 0 then
+          for i := 0 to proc.loccnt - 1 do
+          begin
+                  name := proc.locname[i];
+                  if FindVar(name) then
+                          VarList[VarFound].address := SymbolTable.GetVarInfo(VarFound).address;
+          end;
 end;
 
 {--------------------------------------------------------------}

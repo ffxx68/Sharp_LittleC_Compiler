@@ -122,11 +122,15 @@ Phase 2 — Extract `SymbolTable` and `Semantic` (3 days)
   - [x] Created conversion functions `VarEntryToTVarInfo` and `ProcEntryToTProcInfo` for type compatibility.
   - [x] Migrated read accesses to `VarList[i]`/`ProcList[i]` to use `GetVarInfo(i)`/`GetProcInfo(i)` in print functions and initialization loops.
   - [x] Migrated `VarList[VarFound]`/`ProcList[ProcFound]` accesses to use `GetVarInfo(varfound)`/`GetProcInfo(procfound)`.
-  - [x] Fixed `with` statement ambiguity issues by removing them where field names conflicted with local variables.
   - [x] Verified all changes with `test.bat` — result: `NO_DIFF` (no regression).
   - Note: Local arrays `VarList`, `ProcList`, `VarCount`, `ProcCount` still exist in `parser.pas` for write operations during parsing. These will be fully removed in a future refactor phase.
-- [ ] Task 2.2: create `Semantic.pas` for vardecl/repadr/checks.
-- [ ] Verification: `FirstScan` produces var/proc tables identical to the baseline.
+- [x] Task 2.2: create `Semantic.pas` for vardecl/repadr/checks. (COMPLETED)
+  - [x] Created `Source/lcc/Semantic.pas` with `VarDecl` and `RepAdr` functions.
+  - [x] Added `SetVarAddress(idx, newAddress)` to `SymbolTable.pas` API for updating variable addresses.
+  - [x] Migrated `RepAdr` function to use `SymbolTable` API (`GetProcInfo`, `FindVar`, `SetVarAddress`).
+  - [x] Updated `parser.pas` to delegate to `Semantic.RepAdr` and sync back to local arrays for compatibility.
+  - [x] Verified with `test.bat` — result: `NO_DIFF` (no regression).
+- [x] Verification: `FirstScan` produces var/proc tables identical to the baseline.
 
 Phase 3 — Refactor `CodeGen` + `Output` (3 days)
 - [ ] Task 3.1: add `EmitInst` in CodeGen and use `Output.Emit` instead of direct `writeln`.
