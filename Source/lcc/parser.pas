@@ -2222,7 +2222,7 @@ begin
                 if proc.parcnt > 0 then
                 begin
                         //delete(s, 1, 1); s := trim(s);
-                        writln( #9'; pushing parameters on stack...');
+                        CodeGen.EmitComment('pushing parameters on stack...');
                         c := 0;
                         repeat
                                 Rd(Look, Tok); tok := trim(tok);// + ',';
@@ -2282,8 +2282,8 @@ begin
                 // allocating locals too on stack
                 if proc.loccnt > 0 then
                 begin
-                    writln( ' ' );
-                    writln( #9'; reserving stack (R recalc)...');
+                    CodeGen.EmitBlankLine;
+                    CodeGen.EmitComment('reserving stack (R recalc)...');
                     aa := 0;
                     for c := 0 to proc.loccnt - 1 do
                     begin

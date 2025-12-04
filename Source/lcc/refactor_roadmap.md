@@ -160,13 +160,12 @@ Phase 3 — Refactor `CodeGen` + `Output` (3 days)
     * Fixed asmlist output
   - [x] **Console output cleanup**: NO assembly code on console anymore! ✅
   - [x] All tests passing with **NO_DIFF** - zero regressions!
-  - [~] **Status: Almost complete, final verification needed**:
-    * Reported by user: still ~11 `writln` occurrences in parser.pas (need verification)
-    * Note: inline assembly (#asm blocks) still uses 1 `writln` - intentional, writes to asmtext buffer
+  - [x] **Status: COMPLETE**:
+    * All `writln` in parser.pas migrated to CodeGen API
+    * Only 1 intentional `writln` remains in parser.pas (line ~2467): inline assembly (#asm blocks) - writes directly to asmtext buffer
     * Remaining ~150 `writln` in CodeGen.pas deferred to incremental future refactoring (still functional)
-  - [ ] **Next step**: Final audit of all `writln` in parser.pas to ensure 100% migration or document intentional uses
 - [ ] Task 3.2: consolidate `addlib` and `libtext` handling into `CodeGen` -> `Output`.
-- [~] Verification: `SecondScan` generates functional asm; build OK. ✅ (Passing - final writln audit pending)
+- [x] Verification: `SecondScan` generates functional asm; build OK. ✅
 
 Phase 4 — Reduce Parser: separate syntax from emission (4-6 days)
 - [ ] Task 4.1: replace inline asm generation with calls to `CodeGen.Emit*`.
