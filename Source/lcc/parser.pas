@@ -67,9 +67,8 @@ function SharpBCD(x: Float): String;
 var
   m: Float ;
   i, e, c: integer;
-  d: string;
 begin
-
+  Result := '';
   if x=0.0 then begin
       for i := 1 to 8 do Result := Result + chr(0);
       exit;
@@ -186,6 +185,7 @@ begin
 end;
 
 begin
+        k := 0;
         if pos('''', s) > 0 then
         begin
                 i := 1;
@@ -287,7 +287,6 @@ end;
 procedure printvarlist;
 var i, j, c, initn, adr, size, lproc: integer;
     s, name, typ, inits: string;
-    initf: Float;
     xr, arr, loc: boolean;
 begin
         writeln;
@@ -302,7 +301,6 @@ begin
                 adr := SymbolTable.GetVarInfo(i).address;
                 size := SymbolTable.GetVarInfo(i).size;
                 initn := SymbolTable.GetVarInfo(i).initn;
-                initf := SymbolTable.GetVarInfo(i).initf;
                 inits := SymbolTable.GetVarInfo(i).inits;
                 if SymbolTable.GetVarInfo(i).pointer then s:='*' else s:='';
                 loc := SymbolTable.GetVarInfo(i).local;
@@ -391,7 +389,6 @@ end;
 { Allocate Variable Declaration }
 
 function AllocVar(xr, at: boolean; size, adr: integer): integer;
-var s: string;
 begin
         if not xr then
         begin
@@ -458,7 +455,7 @@ end;
 { Add Variable Declaration }
 
 procedure AddVar(t, typ: string; xr, pnt, loc: boolean);
-var s, litem, bcd: string;
+var s, litem: string;
     temp, arsize: integer;
     b: char;
 begin
@@ -731,73 +728,21 @@ begin
 //                if isword then
 //                        writln(#9'EXAB'#9#9'; Store only HB in byte var!');
                 if not xr then
-                begin
                     if not loc then
-                    begin
-                        if adr <= 63 then
-                            CodeGen.EmitInst('LP', inttostr(adr), 'Store result in '+name)
-                        else
-                            CodeGen.EmitInst('LIP', inttostr(adr), 'Store result in '+name);
-                        CodeGen.EmitInst('EXAM');
-                    end else
-                    begin // Local char or byte
-                        CodeGen.EmitInst('EXAB'); // temp save A (value to store) to B
-                        CodeGen.EmitInst('LDR');  // get stack ptr R to A
-                        CodeGen.EmitInst('ADIA', inttostr(adr+2+pushcnt)); // add relative address
-                        CodeGen.EmitInst('STP'); // move result to P (absolute address)
-                        CodeGen.EmitInst('EXAB'); // restore A
-                        CodeGen.EmitInst('EXAM', '', 'Store result in '+name); // store value to P location
-                    end;
-                end else
-                begin
-                        if adr <> -1 then
-                                CodeGen.EmitInst('LIDP', inttostr(adr), 'Store result in '+name)
-                        else
-                                CodeGen.EmitInst('LIDP', name, 'Store result in '+name);
-                        CodeGen.EmitInst('STD');
-                end ;
+                        CodeGen.StoreByteToReg(adr, name)
+                    else // Local char or byte
+                        CodeGen.StoreByteToLocal(adr, name)
+                else
+                    CodeGen.StoreByteToXram(adr, name);
             end else if (typ='word') then
             begin
                 if not xr then
-                begin
                     if not loc then
-                    begin
-                        if adr < 64 then
-                                CodeGen.EmitInst('LP', inttostr(adr), 'Store 16bit variable '+name)
-                        else
-                                CodeGen.EmitInst('LIP', inttostr(adr), 'Store 16bit variable '+name);
-                        CodeGen.EmitInst('EXAM', '', 'LB');
-                        CodeGen.EmitInst('EXAB');
-                        CodeGen.EmitInst('INCP', '', 'HB');
-                        CodeGen.EmitInst('EXAM');
-                    end else
-                    begin // Local word
-                        CodeGen.EmitInst('PUSH'); inc(pushcnt); // temp save A
-                        CodeGen.EmitInst('LDR');  // we overwrite A here !!!
-                        CodeGen.EmitInst('ADIA', inttostr(adr+2+pushcnt)); //adr + size + pushcnt
-                        CodeGen.EmitInst('STP');
-                        CodeGen.EmitInst('POP'); dec(pushcnt); // restore A
-                        CodeGen.EmitInst('EXAM', '', 'LB - Store result in '+name);
-                        CodeGen.EmitInst('EXAB');
-                        CodeGen.EmitInst('DECP');
-                        CodeGen.EmitInst('EXAM', '', 'HB');
-                    end;
-                end else
-                begin
-                        if adr <> -1 then
-                                CodeGen.EmitInst('LIDP', inttostr(adr), 'Store 16bit variable '+name)
-                        else
-                                CodeGen.EmitInst('LIDP', name, 'Store 16bit variable '+name);
-                        CodeGen.EmitInst('STD', '', 'LB');
-                        CodeGen.EmitInst('EXAB');
-                        if (adr <> -1) and ((adr + 1) div 256 = adr div 256) then
-                                CodeGen.EmitInst('LIDL', 'LB('+inttostr(adr)+'+1)')
-                        else if adr <> -1 then
-                                CodeGen.EmitInst('LIDP', inttostr(adr)+'+1')
-                        else
-                                CodeGen.EmitInst('LIDP', name+'+1'); // PASM doesn't parse "name + 1" !!!
-                        CodeGen.EmitInst('STD', '', 'HB');
-                end;
+                        CodeGen.StoreWordToReg(adr, name)
+                    else // Local word
+                        CodeGen.StoreWordToLocal(adr, name)
+                else
+                    CodeGen.StoreWordToXram(adr, name);
             end else if (typ='float') then
             begin // value is in temporary storage point 'FloatXReg'
                 if not xr then
@@ -948,7 +893,6 @@ end;
 { Load the Primary Register with a Constant }
 
 procedure LoadConstant(n: string);
-var i, c: integer;
 var s, lb: string;
 var f: float;
 begin
@@ -979,7 +923,6 @@ begin
         CodeGen.EmitInst('LIB', 'HB('+n+')', 'Load word constant HB');
     end else
     begin
-        val(n, i, c);
 	{ if (c = 0) and (i = 0) then
                 CodeGen.EmitInst('RA', '', 'Load 0')
         else      }
@@ -1011,30 +954,14 @@ begin
             if (typ='char') or (typ='byte') then
             begin
                 if not xr then
-                begin
                     if not loc then
-                    begin
-                        if adr < 64 then
-                                CodeGen.EmitInst('LP', inttostr(adr), 'Load variable '+name)
-                        else
-                                CodeGen.EmitInst('LIP', inttostr(adr), 'Load variable '+name);
-                        CodeGen.EmitInst('LDM');
-                    end else
-                    begin // Local char or byte
-                        CodeGen.EmitInst('LDR');
-                        CodeGen.EmitInst('ADIA', inttostr(adr+2+pushcnt));
-                        CodeGen.EmitInst('STP');
-                        CodeGen.EmitInst('LDM', '', 'Load variable '+name);
-                    end;
-                end else
-                begin
+                        CodeGen.LoadByteFromReg(adr, name)
+                    else // Local char or byte
+                        CodeGen.LoadByteFromLocal(adr, name)
+                else begin
                     if loc then
                        Error ( 'Xram Local loading Unsupported' );
-                    if adr <> -1 then
-                            CodeGen.EmitInst('LIDP', inttostr(adr), 'Load variable '+name)
-                    else
-                            CodeGen.EmitInst('LIDP', name, 'Load variable '+name);
-                    CodeGen.EmitInst('LDD');
+                    CodeGen.LoadByteFromXram(adr, name);
                 end;
                 if optype = floatp then
                    // TO DO -casting ?
@@ -1048,44 +975,14 @@ begin
                    // TO DO - casting ?
                    Error ( 'Unsupported load float to word' );
                 if not xr then
-                begin
                     if not loc then
-                    begin
-                        if adr < 64 then
-                                CodeGen.EmitInst('LP', inttostr(adr+1), 'Load 16bit variable '+name)
-                        else
-                                CodeGen.EmitInst('LIP', inttostr(adr+1), 'Load 16bit variable '+name);
-                        CodeGen.EmitInst('LDM', '', 'HB');
-                        CodeGen.EmitInst('EXAB');
-                        CodeGen.EmitInst('DECP', '', 'LB');
-                        CodeGen.EmitInst('LDM');
-                    end else
-                    begin // Local word
-                        CodeGen.EmitInst('LDR');
-                        CodeGen.EmitInst('ADIA', inttostr(adr+1+pushcnt));
-                        CodeGen.EmitInst('STP');
-                        CodeGen.EmitInst('LDM', '', 'HB - Load variable '+name);
-                        CodeGen.EmitInst('EXAB');
-                        CodeGen.EmitInst('INCP');
-                        CodeGen.EmitInst('LDM', '', 'LB');
-                    end;
-                end else
-                begin
+                        CodeGen.LoadWordFromReg(adr, name)
+                    else // Local word
+                        CodeGen.LoadWordFromLocal(adr, name)
+                else begin
                     if loc then
                        Error ( 'Unsupported Xram local load' );
-                    if adr <> -1 then
-                            CodeGen.EmitInst('LIDP', inttostr(adr+1), 'Load 16bit variable '+name)
-                    else
-                            CodeGen.EmitInst('LIDP', name+'+1', 'Load 16bit variable '+name);
-                    CodeGen.EmitInst('LDD', '', 'HB');
-                    CodeGen.EmitInst('EXAB');
-                    if (adr <> -1) and ((adr + 1) div 256 = adr div 256) then
-                            CodeGen.EmitInst('LIDL', 'LB('+inttostr(adr)+')')
-                    else if adr <> -1 then
-                            CodeGen.EmitInst('LIDP', inttostr(adr))
-                    else
-                            CodeGen.EmitInst('LIDP', name);
-                    CodeGen.EmitInst('LDD', '', 'LB');
+                    CodeGen.LoadWordFromXram(adr, name);
                 end;
             end else if (typ='float') then
             begin
@@ -2381,7 +2278,7 @@ end;
 { set offsets for local variables }
 
 procedure repadr;
-var i, idx: integer;
+var i: integer;
     name: string;
     proc: TProcInfo;
 begin
@@ -2412,7 +2309,7 @@ end;
 { Parse and Translate a Block }
 
 procedure Block;
-var Name, name2: string;
+var Name: string;
 begin
     repeat
         
@@ -2648,7 +2545,6 @@ procedure SecondScan(filen: string);
 var name, typ, s, s2, s3: string;
     at, arr: boolean;
     i, adr, size, value: integer;
-    fval: float;
     f2: textfile;
 begin
         md := MODESTR;
@@ -2696,7 +2592,6 @@ begin
                 size := SymbolTable.GetVarInfo(i).size;
                 name := SymbolTable.GetVarInfo(i).VarName;
                 value := SymbolTable.GetVarInfo(i).initn;
-                fval := SymbolTable.GetVarInfo(i).initf;
                 typ := SymbolTable.GetVarInfo(i).typ;
                 at := SymbolTable.GetVarInfo(i).at;
                 arr := SymbolTable.GetVarInfo(i).arr;
@@ -2797,12 +2692,13 @@ begin
             end;
 
         if not(mainfound) then
-           Error ( '<main> procedure missing!' );
-
-        if (asmcnt > 0) then
-                for i := 0 to asmcnt - 1 do
-                        writeln(f, asmlist[i]);
-        closefile(f);
+           Error ( '<main> procedure missing!' )
+        else begin
+          if (asmcnt > 0) then
+                  for i := 0 to asmcnt - 1 do
+                          writeln(f, asmlist[i]);
+          closefile(f);
+        end;
 
 
 
@@ -2824,7 +2720,7 @@ begin
         assignfile(f, 'temp.asm');
         rewrite(f);
         writeln(f, asmtext);
-        writeln(f, libtext);
+        writeln(f, GetLibText);
         closefile(f);
 
         // Replace LIA... EXAB to LIB

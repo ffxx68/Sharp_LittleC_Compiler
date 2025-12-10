@@ -18,12 +18,42 @@ procedure EmitInst(const inst, operand, comment: string); overload;
 procedure EmitComment(const comment: string);
 procedure EmitBlankLine;
 
+// Label management
 function NewLabel: string;
 procedure PostLabel(L: string);
-procedure CompGreater;
-procedure CompSmaller;
+
+// Register load helpers
+procedure load_x(s: string);
+procedure load_y(s: string);
+
+// High-level store functions (Task 4.1.1)
+procedure StoreByteToReg(adr: integer; const name: string);
+procedure StoreWordToReg(adr: integer; const name: string);
+
+// High-level store functions for local variables (Task 4.1.2)
+procedure StoreByteToLocal(adr: integer; const name: string);
+procedure StoreWordToLocal(adr: integer; const name: string);
+
+// High-level store functions for XRAM variables (Task 4.1.3)
+procedure StoreByteToXram(adr: integer; const name: string);
+procedure StoreWordToXram(adr: integer; const name: string);
+
+// High-level load functions for global variables in registers (Task 4.1.4)
+procedure LoadByteFromReg(adr: integer; const name: string);
+procedure LoadWordFromReg(adr: integer; const name: string);
+
+// High-level load functions for local variables (Task 4.1.5)
+procedure LoadByteFromLocal(adr: integer; const name: string);
+procedure LoadWordFromLocal(adr: integer; const name: string);
+
+// High-level load functions for XRAM variables (Task 4.1.6)
+procedure LoadByteFromXram(adr: integer; const name: string);
+procedure LoadWordFromXram(adr: integer; const name: string);
+
 procedure CompSmOrEq;
 procedure CompGrOrEq;
+procedure CompGreater;
+procedure CompSmaller;
 procedure CompEqual;
 procedure CompNotEqual;
 procedure BranchAbs(L: string);
@@ -137,7 +167,6 @@ begin
    Inc(LCount);
 end;
 
-
 {--------------------------------------------------------------}
 { Post a Label To Output }
 
@@ -145,6 +174,9 @@ procedure PostLabel(L: string);
 begin
    WritLn('  '+L+':');
 end;
+
+{--------------------------------------------------------------}
+{ Load X register pair with address }
 
 procedure load_x(s: string);
 begin
@@ -154,6 +186,160 @@ begin
   writln(#9'LP'#9'5'#9'; Load XH');
   writln(#9'LIA'#9'HB(' + s + ')');
   writln(#9'EXAM');
+end;
+
+{--------------------------------------------------------------}
+{ High-level Store functions (Task 4.1.1) }
+
+procedure StoreByteToReg(adr: integer; const name: string);
+begin
+  if adr <= 63 then
+    EmitInst('LP', IntToStr(adr), 'Store result in ' + name)
+  else
+    EmitInst('LIP', IntToStr(adr), 'Store result in ' + name);
+  EmitInst('EXAM');
+end;
+
+procedure StoreWordToReg(adr: integer; const name: string);
+begin
+  if adr < 64 then
+    EmitInst('LP', IntToStr(adr), 'Store 16bit variable ' + name)
+  else
+    EmitInst('LIP', IntToStr(adr), 'Store 16bit variable ' + name);
+  EmitInst('EXAM', '', 'LB');
+  EmitInst('EXAB');
+  EmitInst('INCP', '', 'HB');
+  EmitInst('EXAM');
+end;
+
+{--------------------------------------------------------------}
+{ High-level Store functions for local variables (Task 4.1.2) }
+
+procedure StoreByteToLocal(adr: integer; const name: string);
+begin
+  EmitInst('EXAB');  // temp save A (value to store) to B
+  EmitInst('LDR');   // get stack ptr R to A
+  EmitInst('ADIA', IntToStr(adr + 2 + pushcnt));  // add relative address
+  EmitInst('STP');   // move result to P (absolute address)
+  EmitInst('EXAB');  // restore A
+  EmitInst('EXAM', '', 'Store result in ' + name);  // store value to P location
+end;
+
+procedure StoreWordToLocal(adr: integer; const name: string);
+begin
+  EmitInst('PUSH'); Inc(pushcnt);  // temp save A
+  EmitInst('LDR');   // we overwrite A here
+  EmitInst('ADIA', IntToStr(adr + 2 + pushcnt));  // adr + size + pushcnt
+  EmitInst('STP');
+  EmitInst('POP'); Dec(pushcnt);   // restore A
+  EmitInst('EXAM', '', 'LB - Store result in ' + name);
+  EmitInst('EXAB');
+  EmitInst('DECP');
+  EmitInst('EXAM', '', 'HB');
+end;
+
+{--------------------------------------------------------------}
+{ High-level Store functions for XRAM variables (Task 4.1.3) }
+
+procedure StoreByteToXram(adr: integer; const name: string);
+begin
+  if adr <> -1 then
+    EmitInst('LIDP', IntToStr(adr), 'Store result in ' + name)
+  else
+    EmitInst('LIDP', name, 'Store result in ' + name);
+  EmitInst('STD');
+end;
+
+procedure StoreWordToXram(adr: integer; const name: string);
+begin
+  if adr <> -1 then
+    EmitInst('LIDP', IntToStr(adr), 'Store 16bit variable ' + name)
+  else
+    EmitInst('LIDP', name, 'Store 16bit variable ' + name);
+  EmitInst('STD', '', 'LB');
+  EmitInst('EXAB');
+  if (adr <> -1) and ((adr + 1) div 256 = adr div 256) then
+    EmitInst('LIDL', 'LB(' + IntToStr(adr) + '+1)')
+  else if adr <> -1 then
+    EmitInst('LIDP', IntToStr(adr) + '+1')
+  else
+    EmitInst('LIDP', name + '+1');  // PASM doesn't parse "name + 1"
+  EmitInst('STD', '', 'HB');
+end;
+
+{--------------------------------------------------------------}
+{ High-level Load functions for global variables in registers (Task 4.1.4) }
+
+procedure LoadByteFromReg(adr: integer; const name: string);
+begin
+  if adr < 64 then
+    EmitInst('LP', IntToStr(adr), 'Load variable ' + name)
+  else
+    EmitInst('LIP', IntToStr(adr), 'Load variable ' + name);
+  EmitInst('LDM');
+end;
+
+procedure LoadWordFromReg(adr: integer; const name: string);
+begin
+  if adr < 64 then
+    EmitInst('LP', IntToStr(adr + 1), 'Load 16bit variable ' + name)
+  else
+    EmitInst('LIP', IntToStr(adr + 1), 'Load 16bit variable ' + name);
+  EmitInst('LDM', '', 'HB');
+  EmitInst('EXAB');
+  EmitInst('DECP', '', 'LB');
+  EmitInst('LDM');
+end;
+
+{--------------------------------------------------------------}
+{ High-level Load functions for local variables (Task 4.1.5) }
+
+procedure LoadByteFromLocal(adr: integer; const name: string);
+begin
+  EmitInst('LDR');
+  EmitInst('ADIA', IntToStr(adr + 2 + pushcnt));
+  EmitInst('STP');
+  EmitInst('LDM', '', 'Load variable ' + name);
+end;
+
+procedure LoadWordFromLocal(adr: integer; const name: string);
+begin
+  EmitInst('LDR');
+  EmitInst('ADIA', IntToStr(adr + 1 + pushcnt));
+  EmitInst('STP');
+  EmitInst('LDM', '', 'HB - Load variable ' + name);
+  EmitInst('EXAB');
+  EmitInst('INCP');
+  EmitInst('LDM', '', 'LB');
+end;
+
+{--------------------------------------------------------------}
+{ High-level Load functions for XRAM variables (Task 4.1.6) }
+
+procedure LoadByteFromXram(adr: integer; const name: string);
+begin
+  if adr <> -1 then
+    EmitInst('LIDP', IntToStr(adr), 'Load variable ' + name)
+  else
+    EmitInst('LIDP', name, 'Load variable ' + name);
+  EmitInst('LDD');
+end;
+
+procedure LoadWordFromXram(adr: integer; const name: string);
+begin
+  if adr <> -1 then
+    EmitInst('LIDP', IntToStr(adr + 1), 'Load 16bit variable ' + name)
+  else
+    EmitInst('LIDP', name + '+1', 'Load 16bit variable ' + name);
+  EmitInst('LDD', '', 'HB');
+  EmitInst('EXAB');
+  if (adr <> -1) and ((adr + 1) div 256 = adr div 256) then
+    EmitInst('LIDL', 'LB(' + IntToStr(adr) + ')')
+  else if adr <> -1 then
+    EmitInst('LIDP', IntToStr(adr))
+  else
+    EmitInst('LIDP', name);
+  EmitInst('LDD', '', 'LB');
 end;
 
 
@@ -174,13 +360,13 @@ end;
 procedure addlib(lib: integer);
 begin
   if libcnt = 0 then
-    libtext := libtext + '; LIB Code'#13#10;
+    AddLibText('; LIB Code'#13#10);
   Inc(libcnt);
 
   if (libins[lib] = False) then
   begin
     libins[lib] := True;
-    libtext := libtext + '.include ' + libname[lib] + '.lib'#13#10;
+    AddLibText('.include ' + libname[lib] + '.lib'#13#10);
   end;
 end;
 
@@ -340,9 +526,6 @@ end;
 { Generates init code for a var in code space }
 
 procedure varcode(Value, adr, size: integer; nm: string);
-var
-  i: integer;
-  s: string;
 begin
   if Value = -1 then Value := 0;
   addasm(nm + ':'#9'; Variable ' + nm + ' = ' + IntToStr(Value));
@@ -1096,7 +1279,7 @@ end;
 { Push Primary to Stack }
 
 procedure Push;
-var i: integer; lb: String;
+var lb: String;
 begin
   if optype = word then
   begin
@@ -1137,7 +1320,6 @@ end;
 { Add TOS to Primary }
 
 procedure PopAdd;
-var i: integer;
 begin
   if optype = word then
   begin

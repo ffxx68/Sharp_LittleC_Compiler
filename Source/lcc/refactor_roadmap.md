@@ -133,7 +133,7 @@ Phase 2 — Extract `SymbolTable` and `Semantic` (3 days)
 - [x] Verification: `FirstScan` produces var/proc tables identical to the baseline.
 
 Phase 3 — Refactor `CodeGen` + `Output` (3 days)
-- [>] Task 3.1: add `EmitInst` in CodeGen and use `Output.Emit` instead of direct `writeln`. (95% COMPLETE - final verification pending)
+- [x] Task 3.1: add `EmitInst` in CodeGen and use `Output.Emit` instead of direct `writeln`. (COMPLETE)
   - [x] Created `EmitInst` family of functions in `CodeGen.pas`:
     * `EmitInst(inst)` - single instruction
     * `EmitInst(inst, operand)` - instruction with operand
@@ -164,11 +164,118 @@ Phase 3 — Refactor `CodeGen` + `Output` (3 days)
     * All `writln` in parser.pas migrated to CodeGen API
     * Only 1 intentional `writln` remains in parser.pas (line ~2467): inline assembly (#asm blocks) - writes directly to asmtext buffer
     * Remaining ~150 `writln` in CodeGen.pas deferred to incremental future refactoring (still functional)
-- [ ] Task 3.2: consolidate `addlib` and `libtext` handling into `CodeGen` -> `Output`.
+- [x] Task 3.2: consolidate `addlib` and `libtext` handling into `CodeGen` -> `Output`. (COMPLETE)
+  - [x] Created library text management API in `Output.pas`:
+    * `AddLibText(s: string)` - appends text to libtext buffer
+    * `GetLibText(): string` - returns libtext content
+    * `ClearLibText()` - clears libtext buffer
+  - [x] Modified `CodeGen.pas` `addlib()` to use `AddLibText()` instead of direct `libtext :=` assignment
+  - [x] Modified `parser.pas` `SecondScan` to use `GetLibText()` instead of direct `libtext` access
+  - [x] Fixed UTF-8 BOM issue in parser.pas that was introduced during editing
+  - [x] Verified with `test.bat` — result: **NO_DIFF** (no regression)
 - [x] Verification: `SecondScan` generates functional asm; build OK. ✅
+- [x] **Phase 3 COMPLETE** ✅
 
 Phase 4 — Reduce Parser: separate syntax from emission (4-6 days)
-- [ ] Task 4.1: replace inline asm generation with calls to `CodeGen.Emit*`.
+- [ ] Task 4.1: Create high-level CodeGen functions to replace repetitive EmitInst blocks in parser.pas (~341 calls)
+
+  **Step 4.1.1 — Store functions for global variables in registers** ✅
+  Create in `CodeGen.pas`:
+  - [x] `StoreByteToReg(adr: integer; name: string)` — LP/LIP (adr<64?) + EXAM
+  - [x] `StoreWordToReg(adr: integer; name: string)` — LP/LIP + EXAM + EXAB + INCP + EXAM
+  - [x] Update `StoreVariable` in parser.pas to use these functions
+  - [x] Verify: `test.bat` → NO_DIFF
+  - [x] Also added: `NewLabel`, `PostLabel`, `load_x`, `CompGreater`, `CompSmaller` to CodeGen interface
+
+  **Step 4.1.2 — Store functions for local variables (stack-based)** ✅
+  Create in `CodeGen.pas`:
+  - [x] `StoreByteToLocal(adr, pushcnt: integer; name: string)` — EXAB + LDR + ADIA(adr+2+pushcnt) + STP + EXAB + EXAM
+  - [x] `StoreWordToLocal(adr: integer; name: string)` — PUSH + LDR + ADIA + STP + POP + EXAM + EXAB + DECP + EXAM
+  - [x] Update `StoreVariable` in parser.pas
+  - [x] Verify: NO_DIFF
+
+  **Step 4.1.3 — Store functions for XRAM variables** ✅
+  Create in `CodeGen.pas`:
+  - [x] `StoreByteToXram` — LIDP + STD (adr=-1 → use name)
+  - [x] `StoreWordToXram` — LIDP + STD + LIDL/LIDP + STD
+  - [x] Update `StoreVariable` in parser.pas
+  - [x] Verify: NO_DIFF
+
+  **Step 4.1.4 — Load functions for global variables in registers** ✅
+  Create in `CodeGen.pas`:
+  - [x] `LoadByteFromReg` — LP/LIP + LDM
+  - [x] `LoadWordFromReg` — LP/LIP(adr+1) + LDM + EXAB + DECP + LDM
+  - [x] Update `LoadVariable` in parser.pas
+  - [x] Verify: NO_DIFF
+
+**Step 4.1.5 — Load functions for local variables** ✅
+  Create in `CodeGen.pas`:
+  - [x] `LoadByteFromLocal` — LDR + ADIA(adr+2+pushcnt) + STP + LDM
+  - [x] `LoadWordFromLocal` — LDR + ADIA + STP + LDM + EXAB + INCP + LDM
+  - [x] Update `LoadVariable` in parser.pas
+  - [x] Verify: NO_DIFF
+  - [x] Note: `pushcnt` is global in CodeGen.pas, removed from function parameters
+
+  **Step 4.1.6 — Load functions for XRAM variables** ✅
+  Create in `CodeGen.pas`:
+  - [x] `LoadByteFromXram` — LIDP + LDD
+  - [x] `LoadWordFromXram` — LIDP(adr+1) + LDD + EXAB + LIDL/LIDP + LDD
+  - [x] Update `LoadVariable` in parser.pas
+  - [x] Verify: NO_DIFF
+
+  **Step 4.1.7 — Array element access functions (byte)**
+  Create in `CodeGen.pas`:
+  - [ ] `LoadArrayByteFromReg` — LIB + LP 3 + ADM + EXAB + STP + LDM
+  - [ ] `LoadArrayByteFromXram` — PUSH + LP 5 + LIA HB + EXAM + LP 4 + LIA LB + EXAM + POP + LIB 0 + ADB + POP×2 + IYS
+  - [ ] `StoreArrayByteToReg`
+  - [ ] `StoreArrayByteToXram`
+  - [ ] Update `StoreVariable` and `LoadVariable` array sections
+  - [ ] Verify: NO_DIFF
+
+  **Step 4.1.8 — Array element access functions (word)**
+  Create in `CodeGen.pas`:
+  - [ ] `LoadArrayWordFromReg/Xram` — RC + SL + LII + LP + ADM + EXAM + STP + ...
+  - [ ] `StoreArrayWordToReg/Xram`
+  - [ ] Update parser.pas
+  - [ ] Verify: NO_DIFF
+
+  **Step 4.1.9 — Float Store/Load functions** (lower priority)
+  Create in `CodeGen.pas`:
+  - [ ] `StoreFloatToReg` — LIQ + LP(FloatXReg) + LII 7 + MVW
+  - [ ] `StoreFloatToLocal` — loop with PUSH×8
+  - [ ] `StoreFloatToXram` — LIDP + LP + LII 7 + EXWD
+  - [ ] `LoadFloatFromReg/Local/Xram`
+  - [ ] Update parser.pas float handling
+  - [ ] Verify: NO_DIFF
+
+  **Step 4.1.10 — Pointer dereferencing functions**
+  Create in `CodeGen.pas`:
+  - [ ] `LoadPointerContentXram(pnttyp: string; name: string)` — LP 4 + EXAM + LP 5 + EXAB + EXAM + DX + IXL (word: +EXAB+IXL+EXAB)
+  - [ ] `LoadPointerContentReg(pnttyp: string; name: string)` — STP + LDM (word: +EXAB+INCP+LDM+EXAB)
+  - [ ] `LoadAddressOf(adr: integer; name: string; isXram: boolean)` — LIA LB + LIB HB (xram) or LIA adr (reg)
+  - [ ] Update `Factor` procedure in parser.pas
+  - [ ] Verify: NO_DIFF
+
+  **Step 4.1.11 — Stack management functions**
+  Create in `CodeGen.pas`:
+  - [ ] `AllocStackSpace(bytes: integer; var pushcnt: integer)` — if <8: PUSH×n, else: LP 0 + EXAM + LDR + SBIA + STR + EXAM
+  - [ ] `FreeStackSpace(bytes: integer; var pushcnt: integer; hasReturn, isWord: boolean)` — various patterns based on return type
+  - [ ] Update `ProcCall` in parser.pas
+  - [ ] Verify: NO_DIFF
+
+  **Step 4.1.12 — Increment/Decrement register functions**
+  Create in `CodeGen.pas`:
+  - [ ] `EmitIncReg(regAddr: integer)` — INCI/INCJ/INCA/INCB/INCK/INCL/INCM/INCN based on addr (0,1,2,3,8,9,10,11)
+  - [ ] `EmitDecReg(regAddr: integer)` — DECI/DECJ/DECA/DECB/DECK/DECL/DECM/DECN
+  - [ ] Update `Assignment` increment/decrement section in parser.pas
+  - [ ] Verify: NO_DIFF
+
+  **Implementation notes:**
+  - Functions that modify stack must handle `pushcnt` as `var` parameter
+  - When `adr = -1`, use symbolic name instead of numeric address
+  - When `adr < 64`, use `LP`; otherwise use `LIP`
+  - All changes must be verified incrementally with `test.bat` → NO_DIFF against `reference_bounce.asm`
+
 - [ ] Task 4.2: consider introducing an AST (optional) for complex expressions.
 - [ ] Verification: generated asm is semantically identical; tests on demos pass.
 
