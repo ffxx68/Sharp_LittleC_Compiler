@@ -223,21 +223,23 @@ Phase 4 — Reduce Parser: separate syntax from emission (4-6 days)
   - [x] Update `LoadVariable` in parser.pas
   - [x] Verify: NO_DIFF
 
-  **Step 4.1.7 — Array element access functions (byte)**
+  **Step 4.1.7 — Array element access functions (byte)** ✅
   Create in `CodeGen.pas`:
-  - [ ] `LoadArrayByteFromReg` — LIB + LP 3 + ADM + EXAB + STP + LDM
-  - [ ] `LoadArrayByteFromXram` — PUSH + LP 5 + LIA HB + EXAM + LP 4 + LIA LB + EXAM + POP + LIB 0 + ADB + POP×2 + IYS
-  - [ ] `StoreArrayByteToReg`
-  - [ ] `StoreArrayByteToXram`
-  - [ ] Update `StoreVariable` and `LoadVariable` array sections
-  - [ ] Verify: NO_DIFF
+  - [x] `LoadArrayByteFromReg`
+  - [x] `LoadArrayByteFromXram`
+  - [x] `StoreArrayByteToReg`
+  - [x] `StoreArrayByteToXram`
+  - [x] Update `StoreVariable` and `LoadVariable` array sections
+  - [x] Verify: NO_DIFF
 
-  **Step 4.1.8 — Array element access functions (word)**
+  **Step 4.1.8 — Array element access functions (word)** ✅
   Create in `CodeGen.pas`:
-  - [ ] `LoadArrayWordFromReg/Xram` — RC + SL + LII + LP + ADM + EXAM + STP + ...
-  - [ ] `StoreArrayWordToReg/Xram`
-  - [ ] Update parser.pas
-  - [ ] Verify: NO_DIFF
+  - [x] `LoadArrayWordFromReg`
+  - [x] `LoadArrayWordFromXram`
+  - [x] `StoreArrayWordToReg`
+  - [x] `StoreArrayWordToXram`
+  - [x] Update parser.pas
+  - [x] Verify: NO_DIFF
 
   **Step 4.1.9 — Float Store/Load functions** (lower priority)
   Create in `CodeGen.pas`:

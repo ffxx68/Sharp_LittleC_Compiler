@@ -50,6 +50,18 @@ procedure LoadWordFromLocal(adr: integer; const name: string);
 procedure LoadByteFromXram(adr: integer; const name: string);
 procedure LoadWordFromXram(adr: integer; const name: string);
 
+// High-level array element access functions - byte (Task 4.1.7)
+procedure LoadArrayByteFromReg(adr: integer; const name: string);
+procedure LoadArrayByteFromXram(adr: integer; const name: string);
+procedure StoreArrayByteToReg(adr: integer; const name: string);
+procedure StoreArrayByteToXram(adr: integer; const name: string);
+
+// High-level array element access functions - word (Task 4.1.8)
+procedure LoadArrayWordFromReg(adr: integer; const name: string);
+procedure LoadArrayWordFromXram(adr: integer; const name: string);
+procedure StoreArrayWordToReg(adr: integer; const name: string);
+procedure StoreArrayWordToXram(adr: integer; const name: string);
+
 procedure CompSmOrEq;
 procedure CompGrOrEq;
 procedure CompGreater;
@@ -340,6 +352,183 @@ begin
   else
     EmitInst('LIDP', name);
   EmitInst('LDD', '', 'LB');
+end;
+
+{--------------------------------------------------------------}
+{ High-level array element access functions - byte (Task 4.1.7) }
+
+procedure LoadArrayByteFromReg(adr: integer; const name: string);
+begin
+  EmitInst('LIB', IntToStr(adr), 'Load array element from ' + name);
+  EmitInst('LP', '3');
+  EmitInst('ADM');
+  EmitInst('EXAB');
+  EmitInst('STP');
+  EmitInst('LDM');
+end;
+
+procedure LoadArrayByteFromXram(adr: integer; const name: string);
+begin
+  EmitInst('PUSH', '', 'Load array element from ' + name); Inc(pushcnt);
+  EmitInst('LP', '5', 'HB of address');
+  if adr <> -1 then
+  begin
+    EmitInst('LIA', 'HB(' + IntToStr(adr) + '-1)');
+    EmitInst('EXAM');
+    EmitInst('LP', '4', 'LB');
+    EmitInst('LIA', 'LB(' + IntToStr(adr) + '-1)');
+  end else
+  begin
+    EmitInst('LIA', 'HB(' + name + '-1)');
+    EmitInst('EXAM');
+    EmitInst('LP', '4', 'LB');
+    EmitInst('LIA', 'LB(' + name + '-1)');
+  end;
+  EmitInst('EXAM');
+  EmitInst('POP'); Dec(pushcnt);
+  EmitInst('LIB', '0');
+  EmitInst('ADB');
+  EmitInst('POP'); Dec(pushcnt);
+  EmitInst('EXAB');
+  EmitInst('POP'); Dec(pushcnt);
+  EmitInst('IYS');
+  EmitInst('EXAB');
+  EmitInst('IYS');
+end;
+
+procedure StoreArrayByteToReg(adr: integer; const name: string);
+begin
+  EmitInst('LIB', IntToStr(adr), 'Store array element from ' + name);
+  EmitInst('LP', '3');
+  EmitInst('ADM');
+  EmitInst('EXAB');
+  EmitInst('STP');
+  EmitInst('POP'); Dec(pushcnt);
+  EmitInst('EXAM');
+end;
+
+procedure StoreArrayByteToXram(adr: integer; const name: string);
+begin
+  EmitInst('PUSH', '', 'Store array element from ' + name); Inc(pushcnt);
+  EmitInst('LP', '7', 'HB of address');
+  if adr <> -1 then
+  begin
+    EmitInst('LIA', 'HB(' + IntToStr(adr) + '-1)');
+    EmitInst('EXAM');
+    EmitInst('LP', '6', 'LB');
+    EmitInst('LIA', 'LB(' + IntToStr(adr) + '-1)');
+  end else
+  begin
+    EmitInst('LIA', 'HB(' + name + '-1)');
+    EmitInst('EXAM');
+    EmitInst('LP', '6', 'LB');
+    EmitInst('LIA', 'LB(' + name + '-1)');
+  end;
+  EmitInst('EXAM');
+  EmitInst('POP'); Dec(pushcnt);
+  EmitInst('LIB', '0');
+  EmitInst('ADB');
+  EmitInst('POP'); Dec(pushcnt);
+  EmitInst('IYS');
+end;
+
+{--------------------------------------------------------------}
+{ High-level array element access functions - word (Task 4.1.8) }
+
+procedure LoadArrayWordFromReg(adr: integer; const name: string);
+begin
+  EmitInst('RC');
+  EmitInst('SL');
+  EmitInst('LII', IntToStr(adr), 'Load array element from ' + name);
+  EmitInst('LP', '0');
+  EmitInst('ADM');
+  EmitInst('EXAM');
+  EmitInst('STP');
+  EmitInst('INCP');
+  EmitInst('POP'); Dec(pushcnt);
+  EmitInst('EXAM');
+  EmitInst('DECP');
+  EmitInst('POP'); Dec(pushcnt);
+  EmitInst('EXAM');
+end;
+
+procedure LoadArrayWordFromXram(adr: integer; const name: string);
+begin
+  EmitInst('RC');
+  EmitInst('SL');
+  EmitInst('PUSH', '', 'Load array element from ' + name); Inc(pushcnt);
+  EmitInst('LP', '7', 'HB of address');
+  if adr <> -1 then
+  begin
+    EmitInst('LIA', 'HB(' + IntToStr(adr) + '-1)');
+    EmitInst('EXAM');
+    EmitInst('LP', '6', 'LB');
+    EmitInst('LIA', 'LB(' + IntToStr(adr) + '-1)');
+  end else
+  begin
+    EmitInst('LIA', 'HB(' + name + '-1)');
+    EmitInst('EXAM');
+    EmitInst('LP', '6', 'LB');
+    EmitInst('LIA', 'LB(' + name + '-1)');
+  end;
+  EmitInst('EXAM');
+  EmitInst('POP'); Dec(pushcnt);
+  EmitInst('LIB', '0');
+  EmitInst('ADB');
+  EmitInst('POP'); Dec(pushcnt);
+  EmitInst('EXAB');
+  EmitInst('POP'); Dec(pushcnt);
+  EmitInst('IYS');
+  EmitInst('EXAB');
+  EmitInst('IYS');
+end;
+
+procedure StoreArrayWordToReg(adr: integer; const name: string);
+begin
+  EmitInst('RC');
+  EmitInst('SL');
+  EmitInst('LII', IntToStr(adr), 'Store array element from ' + name);
+  EmitInst('LP', '0');
+  EmitInst('ADM');
+  EmitInst('EXAM');
+  EmitInst('STP');
+  EmitInst('INCP');
+  EmitInst('POP'); Dec(pushcnt);
+  EmitInst('EXAM');
+  EmitInst('DECP');
+  EmitInst('POP'); Dec(pushcnt);
+  EmitInst('EXAM');
+end;
+
+procedure StoreArrayWordToXram(adr: integer; const name: string);
+begin
+  EmitInst('RC');
+  EmitInst('SL');
+  EmitInst('PUSH', '', 'Store array element from ' + name); Inc(pushcnt);
+  EmitInst('LP', '7', 'HB of address');
+  if adr <> -1 then
+  begin
+    EmitInst('LIA', 'HB(' + IntToStr(adr) + '-1)');
+    EmitInst('EXAM');
+    EmitInst('LP', '6', 'LB');
+    EmitInst('LIA', 'LB(' + IntToStr(adr) + '-1)');
+  end else
+  begin
+    EmitInst('LIA', 'HB(' + name + '-1)');
+    EmitInst('EXAM');
+    EmitInst('LP', '6', 'LB');
+    EmitInst('LIA', 'LB(' + name + '-1)');
+  end;
+  EmitInst('EXAM');
+  EmitInst('POP'); Dec(pushcnt);
+  EmitInst('LIB', '0');
+  EmitInst('ADB');
+  EmitInst('POP'); Dec(pushcnt);
+  EmitInst('EXAB');
+  EmitInst('POP'); Dec(pushcnt);
+  EmitInst('IYS');
+  EmitInst('EXAB');
+  EmitInst('IYS');
 end;
 
 

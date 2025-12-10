@@ -801,85 +801,15 @@ begin
             if (typ='char') or (typ='byte') then
             begin
                 if not xr then
-                begin
-                        CodeGen.EmitInst('LIB', inttostr(adr), 'Store array element from '+name);
-                        CodeGen.EmitInst('LP', '3');
-                        CodeGen.EmitInst('ADM');
-                        CodeGen.EmitInst('EXAB');
-                        CodeGen.EmitInst('STP');
-                        CodeGen.EmitInst('POP'); dec(pushcnt);
-                        CodeGen.EmitInst('EXAM');
-                end else
-                begin
-                        CodeGen.EmitInst('PUSH', '', 'Store array element from '+name); inc(pushcnt);
-                        CodeGen.EmitInst('LP', '7', 'HB of address');
-                        if adr <> -1 then
-                        begin
-                                CodeGen.EmitInst('LIA', 'HB('+inttostr(adr)+'-1)');
-                                CodeGen.EmitInst('EXAM');
-                                CodeGen.EmitInst('LP', '6', 'LB');
-                                CodeGen.EmitInst('LIA', 'LB('+inttostr(adr)+'-1)');
-                        end else
-                        begin
-                                CodeGen.EmitInst('LIA', 'HB('+name+'-1)');
-                                CodeGen.EmitInst('EXAM');
-                                CodeGen.EmitInst('LP', '6', 'LB');
-                                CodeGen.EmitInst('LIA', 'LB('+name+'-1)');
-                        end;
-                        CodeGen.EmitInst('EXAM');
-                        CodeGen.EmitInst('POP'); dec(pushcnt);
-                        CodeGen.EmitInst('LIB', '0');
-                        CodeGen.EmitInst('ADB');
-                        CodeGen.EmitInst('POP'); dec(pushcnt);
-                        CodeGen.EmitInst('IYS');
-                end;
+                    CodeGen.StoreArrayByteToReg(adr, name)
+                else
+                    CodeGen.StoreArrayByteToXram(adr, name);
             end else if (typ='word') then
             begin
                 if not xr then
-                begin
-                        CodeGen.EmitInst('RC');
-                        CodeGen.EmitInst('SL');
-                        CodeGen.EmitInst('LII', inttostr(adr), 'Store array element from '+name);
-                        CodeGen.EmitInst('LP', '0');
-                        CodeGen.EmitInst('ADM');
-                        CodeGen.EmitInst('EXAM');
-                        CodeGen.EmitInst('STP');
-                        CodeGen.EmitInst('INCP');
-                        CodeGen.EmitInst('POP'); dec(pushcnt);
-                        CodeGen.EmitInst('EXAM');
-                        CodeGen.EmitInst('DECP');
-                        CodeGen.EmitInst('POP'); dec(pushcnt);
-                        CodeGen.EmitInst('EXAM');
-                end else
-                begin
-                        CodeGen.EmitInst('RC');
-                        CodeGen.EmitInst('SL');
-                        CodeGen.EmitInst('PUSH', '', 'Store array element from '+name); inc(pushcnt);
-                        CodeGen.EmitInst('LP', '7', 'HB of address');
-                        if adr <> -1 then
-                        begin
-                                CodeGen.EmitInst('LIA', 'HB('+inttostr(adr)+'-1)');
-                                CodeGen.EmitInst('EXAM');
-                                CodeGen.EmitInst('LP', '6', 'LB');
-                                CodeGen.EmitInst('LIA', 'LB('+inttostr(adr)+'-1)');
-                        end else
-                        begin
-                                CodeGen.EmitInst('LIA', 'HB('+name+'-1)');
-                                CodeGen.EmitInst('EXAM');
-                                CodeGen.EmitInst('LP', '6', 'LB');
-                                CodeGen.EmitInst('LIA', 'LB('+name+'-1)');
-                        end;
-                        CodeGen.EmitInst('EXAM');
-                        CodeGen.EmitInst('POP'); dec(pushcnt);
-                        CodeGen.EmitInst('LIB', '0');
-                        CodeGen.EmitInst('ADB');
-                        CodeGen.EmitInst('POP'); dec(pushcnt);
-                        CodeGen.EmitInst('EXAB');
-                        CodeGen.EmitInst('POP'); dec(pushcnt);
-                        CodeGen.EmitInst('IYS');
-                        CodeGen.EmitInst('EXAB');
-                        CodeGen.EmitInst('IYS');
-                end;
+                    CodeGen.StoreArrayWordToReg(adr, name)
+                else
+                    CodeGen.StoreArrayWordToXram(adr, name);
             end else if (typ='float') then
             begin
                  Error ( 'Float array storing unsupported yet ');
@@ -1039,88 +969,15 @@ begin
             if (typ='char') or (typ='byte') then
             begin
                 if not xr then
-                begin
-                        CodeGen.EmitInst('LIB', inttostr(adr), 'Load array element from '+name);
-                        CodeGen.EmitInst('LP', '3');
-                        CodeGen.EmitInst('ADM');
-                        CodeGen.EmitInst('EXAB');
-                        CodeGen.EmitInst('STP');
-                        CodeGen.EmitInst('LDM');
-                end else
-                begin
-                        CodeGen.EmitInst('PUSH', '', 'Load array element from '+name); inc(pushcnt);
-                        CodeGen.EmitInst('LP', '5', 'HB of address');
-                        if adr <> -1 then
-                        begin
-                                CodeGen.EmitInst('LIA', 'HB('+inttostr(adr)+'-1)');
-                                CodeGen.EmitInst('EXAM');
-                                CodeGen.EmitInst('LP', '4', 'LB');
-                                CodeGen.EmitInst('LIA', 'LB('+inttostr(adr)+'-1)');
-                        end else
-                        begin
-                                CodeGen.EmitInst('LIA', 'HB('+name+'-1)');
-                                CodeGen.EmitInst('EXAM');
-                                CodeGen.EmitInst('LP', '4', 'LB');
-                                CodeGen.EmitInst('LIA', 'LB('+name+'-1)');
-                        end;
-                        CodeGen.EmitInst('EXAM');
-                        CodeGen.EmitInst('POP'); dec(pushcnt);
-                        CodeGen.EmitInst('LIB', '0');
-                        CodeGen.EmitInst('ADB');
-                        CodeGen.EmitInst('POP'); dec(pushcnt);
-                        CodeGen.EmitInst('EXAB');
-                        CodeGen.EmitInst('POP'); dec(pushcnt);
-                        CodeGen.EmitInst('IYS');
-                        CodeGen.EmitInst('EXAB');
-                        CodeGen.EmitInst('IYS');
-                end;
+                    CodeGen.LoadArrayByteFromReg(adr, name)
+                else
+                    CodeGen.LoadArrayByteFromXram(adr, name);
             end else if (typ='word') then
             begin
                 if not xr then
-                begin
-                        CodeGen.EmitInst('RC');
-                        CodeGen.EmitInst('SL');
-                        CodeGen.EmitInst('LII', inttostr(adr), 'Load array element from '+name);
-                        CodeGen.EmitInst('LP', '0');
-                        CodeGen.EmitInst('ADM');
-                        CodeGen.EmitInst('EXAM');
-                        CodeGen.EmitInst('STP');
-                        CodeGen.EmitInst('INCP');
-                        CodeGen.EmitInst('POP'); dec(pushcnt);
-                        CodeGen.EmitInst('EXAM');
-                        CodeGen.EmitInst('DECP');
-                        CodeGen.EmitInst('POP'); dec(pushcnt);
-                        CodeGen.EmitInst('EXAM');
-                end else
-                begin
-                        CodeGen.EmitInst('RC');
-                        CodeGen.EmitInst('SL');
-                        CodeGen.EmitInst('PUSH', '', 'Load array element from '+name); inc(pushcnt);
-                        CodeGen.EmitInst('LP', '7', 'HB of address');
-                        if adr <> -1 then
-                        begin
-                                CodeGen.EmitInst('LIA', 'HB('+inttostr(adr)+'-1)');
-                                CodeGen.EmitInst('EXAM');
-                                CodeGen.EmitInst('LP', '6', 'LB');
-                                CodeGen.EmitInst('LIA', 'LB('+inttostr(adr)+'-1)');
-                        end else
-                        begin
-                                CodeGen.EmitInst('LIA', 'HB('+name+'-1)');
-                                CodeGen.EmitInst('EXAM');
-                                CodeGen.EmitInst('LP', '6', 'LB');
-                                CodeGen.EmitInst('LIA', 'LB('+name+'-1)');
-                        end;
-                        CodeGen.EmitInst('EXAM');
-                        CodeGen.EmitInst('POP'); dec(pushcnt);
-                        CodeGen.EmitInst('LIB', '0');
-                        CodeGen.EmitInst('ADB');
-                        CodeGen.EmitInst('POP'); dec(pushcnt);
-                        CodeGen.EmitInst('EXAB');
-                        CodeGen.EmitInst('POP'); dec(pushcnt);
-                        CodeGen.EmitInst('IYS');
-                        CodeGen.EmitInst('EXAB');
-                        CodeGen.EmitInst('IYS');
-                end;
+                    CodeGen.LoadArrayWordFromReg(adr, name)
+                else
+                    CodeGen.LoadArrayWordFromXram(adr, name);
             end else if (typ='float') then
             begin
                  Error ( 'Float array loading not supported yet ' );
