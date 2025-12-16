@@ -715,11 +715,11 @@ begin
 
         if not FindVar(Name) then error('Variable not defined: '+name);
 
-        typ := SymbolTable.GetVarInfo(varfound).typ;
-        adr := SymbolTable.GetVarInfo(varfound).address;
-        loc := SymbolTable.GetVarInfo(varfound).local;
-        arr := SymbolTable.GetVarInfo(varfound).arr;
-        xr := SymbolTable.GetVarInfo(varfound).xram;
+        typ := VarList[varfound].typ;
+        adr := VarList[varfound].address;
+        loc := VarList[varfound].local;
+        arr := VarList[varfound].arr;
+        xr := VarList[varfound].xram;
 
         if not arr then
         begin
@@ -2138,6 +2138,7 @@ procedure repadr;
 var i: integer;
     name: string;
     proc: TProcInfo;
+    stIdx: Integer;
 begin
         // Delegate to Semantic.RepAdr which updates SymbolTable
         Semantic.RepAdr(currproc);
@@ -2150,7 +2151,11 @@ begin
           begin
                   name := proc.parname[i];
                   if FindVar(name) then
-                          VarList[VarFound].address := SymbolTable.GetVarInfo(VarFound).address;
+                  begin
+                      // Use SymbolTable.FindVar to get the correct index in SymbolTable
+                      if SymbolTable.FindVar(name, stIdx) then
+                          VarList[VarFound].address := SymbolTable.GetVarInfo(stIdx).address;
+                  end;
           end;
 
         if proc.loccnt > 0 then
@@ -2158,7 +2163,11 @@ begin
           begin
                   name := proc.locname[i];
                   if FindVar(name) then
-                          VarList[VarFound].address := SymbolTable.GetVarInfo(VarFound).address;
+                  begin
+                      // Use SymbolTable.FindVar to get the correct index in SymbolTable
+                      if SymbolTable.FindVar(name, stIdx) then
+                          VarList[VarFound].address := SymbolTable.GetVarInfo(stIdx).address;
+                  end;
           end;
 end;
 
@@ -2405,41 +2414,42 @@ var name, typ, s, s2, s3: string;
     f2: textfile;
 begin
         md := MODESTR;
+        outfile := true;
         assign(f,'temp.asm');
         rewrite(f);
 
         { Write Intro }
-        writeln(f, '; pasm file - assemble with pasm!');
-        writeln(f, '; Compiled with lcc v1.1');
-        writeln(f, '');
-        writeln(f, '.ORG'#9+org);
-        writeln(f, '');
+        writln('; pasm file - assemble with pasm!');
+        writln('; Compiled with lcc v1.1');
+        writln('');
+        writln('.ORG'#9+org);
+        writln('');
 
         { Registry save point }
         if not nosave then
         begin
-          writeln(f, #9'LP'#9'0');
-          writeln(f, #9'LIDP'#9'SREG');
-          writeln(f, #9'LII'#9'11');
-          writeln(f, #9'EXWD');
+          writln(#9'LP'#9'0');
+          writln(#9'LIDP'#9'SREG');
+          writln(#9'LII'#9'11');
+          writln(#9'EXWD');
         end;
 
         { -mandatory- "main" entry point }
-        writeln(f, '');
-        writeln(f, #9'CALL'#9'main');
+        writln('');
+        writln(#9'CALL'#9'main');
 
         { Registry restore and return to BASIC }
         if not nosave then
         begin
-          writeln(f, '');
-          writeln(f, #9'LP'#9'0');
-          writeln(f, #9'LIDP'#9'SREG');
-          writeln(f, #9'LII'#9'11');
-          writeln(f, #9'MVWD');
-          writeln(f, #9'RTN');
-          writeln(f, '');
-          writeln(f, 'SREG:'#9'.DW 0, 0, 0, 0, 0, 0');
-          writeln(f, '');
+          writln('');
+          writln(#9'LP'#9'0');
+          writln(#9'LIDP'#9'SREG');
+          writln(#9'LII'#9'11');
+          writln(#9'MVWD');
+          writln(#9'RTN');
+          writln('');
+          writln('SREG:'#9'.DW 0, 0, 0, 0, 0, 0');
+          writln('');
         end;
 
         { Variables' initializations }
@@ -2528,34 +2538,33 @@ begin
                    if true // proclist[i].iscalled
                    then
                    begin
-                        writeln(f, '');
-                        writeln(f, proclist[i].procname+':'#9'; Procedure');
+                        writln('');
+                        writln(proclist[i].procname+':'#9'; Procedure');
                         dummy := proclist[i].proccode;
                         Level := 1;
                         currproc := i;
                         pushcnt := 0; firstp := true;
                         block;
                         if pushcnt <> 0 then
-                           writeln(f, proclist[i].procname+': Possible Stack corruption!');
+                           writeln(proclist[i].procname+': Possible Stack corruption!');
                         removelocvars(proclist[i].procname);
                         if proclist[i].procname = 'main' then
-                           writeln(f, #9'RTN'#9'; end of main');
-                        writeln(f, '');
+                           writln(#9'RTN'#9'; end of main');
+                        writln('');
                    end else
-                        writeln(f, '; Skipping procedure '+ proclist[i].procname +' (never used)');
+                        writln('; Skipping procedure '+ proclist[i].procname +' (never used)');
 
                    if proclist[i].procname = 'main' then
                       mainfound := true;
             end;
 
         if not(mainfound) then
-           Error ( '<main> procedure missing!' )
-        else begin
-          if (asmcnt > 0) then
-                  for i := 0 to asmcnt - 1 do
-                          writeln(f, asmlist[i]);
-          closefile(f);
-        end;
+           Error ( '<main> procedure missing!' );
+
+        if (asmcnt > 0) then
+                for i := 0 to asmcnt - 1 do
+                        writln(asmlist[i]);
+        closefile(f);
 
 
 
@@ -2785,10 +2794,17 @@ begin
         closefile(f2);
         closefile(f);
 
+        { Copy final output to destination file }
+        if filen <> '' then
+        begin
+                if fileexists(filen) then deletefile(filen);
+                renamefile('temp2.asm', filen);
+        end;
+
         deletefile('temp.asm');
         deletefile('temp2.asm');
 
-        writeln('Complete: ',i,' assembler lines were produced!');
+        writeln('Complete: ',i,' assembler lines were produced to ', filen, '!');
 end;
 {--------------------------------------------------------------}
 

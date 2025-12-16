@@ -119,9 +119,8 @@ begin
                 if not varinfo.local then
                         error('Var '+name+' not local!');
 
-                // Update address in local VarList (temporary - will be migrated)
-                // For now, we need to access the parser's VarList directly
-                // This will be fixed in a future refactor
+                // Update address using SymbolTable API
+                SymbolTable.SetVarAddress(idx, m - a);
                 writeln('LOCAL ',proc.procname,' PARAM: ', name,
                                '(',proc.partyp[i],')',
                                ': ', m - a );

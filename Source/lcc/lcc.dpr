@@ -13,8 +13,8 @@ begin
         outfile := true;
         writeln;
         writeln('lcc v2.1 - littleC Compiler for Hitachi SC61860 CPU');
-        writeln('(c) Simon Lehmayr 2004');
-        writeln('(c) Fabio Fumi - refactored - 2025');
+        writeln('(c) Simon Lehmayr v1.0 2004');
+        writeln('(c) Fabio Fumi - refactored - v2.1 2025');
         if paramcount = 2 then
         begin
                 if not fileexists(ParamStr(1)) then exit;
