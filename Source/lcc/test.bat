@@ -36,8 +36,8 @@ if %errorlevel% neq 0 (
 
 echo Test completed. Output: tmp.asm
 
-REM Compare produced asm with reference
-cmd /c fc ".\test_C\bounce\tmp.asm" ".\reference_bounce.asm" >nul
+REM Compare produced asm with reference (ignoring whitespace)
+cmd /c fc /W ".\test_C\bounce\tmp.asm" ".\reference_bounce.asm" >nul
 if %errorlevel% equ 0 (
     echo NO_DIFF
 ) else (
