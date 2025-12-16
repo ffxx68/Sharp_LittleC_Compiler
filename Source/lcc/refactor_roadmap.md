@@ -245,7 +245,7 @@ Phase 4 — Reduce Parser: separate syntax from emission (4-6 days)
 
   **Step 4.1.9 — Float Store/Load functions** (lower priority)
   Create in `CodeGen.pas`:
-  - [ ] verify constant float generation (differences are found with current code, wrt to backup/parser.pas)
+  - [ ] verify float constant generation (differences are found with current code, wrt to backup/parser.pas)
   - [ ] `StoreFloatToReg` — LIQ + LP(FloatXReg) + LII 7 + MVW
   - [ ] `StoreFloatToLocal` — loop with PUSH×8
   - [ ] `StoreFloatToXram` — LIDP + LP + LII 7 + EXWD
