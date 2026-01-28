@@ -11,7 +11,7 @@ if not exist "%FPC%" (
     echo FPC not found at %FPC%
     exit /b 9009
 )
-"%FPC%" lcc.dpr > baseline_build.log 2>&1
+"%FPC%" -B -Pi386 -Mdelphi lcc.dpr > baseline_build.log 2>&1
 if %ERRORLEVEL% neq 0 (
     echo build failed
     type baseline_build.log

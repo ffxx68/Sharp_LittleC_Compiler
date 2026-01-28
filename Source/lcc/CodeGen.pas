@@ -768,11 +768,12 @@ var
   i: integer;
   s: string;
 begin
-
   s := '';
-  for i := 1 to 7 do begin s := s + '0x'+IntToHex(ord(Value[i]), 2) + ',';
+  for i := 1 to 7 do begin
+    s := s + '0x'+IntToHex(ord(Value[i]), 2) + ',';
   end;
   s := s + '0x'+IntToHex(ord(Value[8]), 2);
+
 
   addasm(nm + ':'#9'; Floating-point  ' + nm ) ;
   s := #9'.DB'#9 + s;

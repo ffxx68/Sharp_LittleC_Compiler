@@ -24,6 +24,7 @@ main()
     fTestLocal = 1.618; // assegnazione separata
     fTest = 3.1415; // esempio di dichiarazione float globale xram
     fTest = fTest * 2.0;  // esempio di utilizzo float globale
+    ftest = fTest + (-1.0E-10); // esempio di utilizzo float globale con notazione scientifica
     fTestLocal = fTestLocal + fTest; // esempio di utilizzo float locale
     // debug: visualizza i valori (ipotetico, dipende dal supporto della toolchain)
     // lcd_print_float(fTest); // decommentare se esiste una funzione di stampa float

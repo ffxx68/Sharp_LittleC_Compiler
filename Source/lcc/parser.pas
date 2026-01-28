@@ -63,6 +63,7 @@ var VarList: Array [0..1000] of VarEntry;
 
 // Build a string of bytes in the Sharp floating point BCD format
 // Numbers from -9.999999999 x 10^99 to 9.999999999 x 10^99 can be represented
+{$H-}  // Use ShortString to preserve binary bytes
 function SharpBCD(x: Float): String;
 var
   m: Float ;
@@ -70,7 +71,8 @@ var
 begin
   Result := '';
   if x=0.0 then begin
-      for i := 1 to 8 do Result := Result + chr(0);
+      SetLength(Result, 8);
+      FillChar(Result[1], 8, 0);
       exit;
   end else
       e := round(Log10(abs(x)));
@@ -79,12 +81,6 @@ begin
      Error ( 'Float OUT OF RANGE :' + FloatToStr ( x ) );
 
   m := abs(x/intpower(10.0, e - 10 ));
-  {if sign(e) = 1 then
-  begin
-      e := e - 1;
-      m := m * 10;
-  end;
-  }
 
   Result := '';
   c := 0;
@@ -100,28 +96,24 @@ begin
   end;
 
   // mantissa sign
-  // Zero is used when the mantissa is positive
-  // Eight is used when the mantissa is negative.
   if sign(x) = -1 then c := 8
   else c := 0;
 
   // exponent
-  // The most significant digit is zero for positive numbers.
-  // Negative numbers are represented using a 100-complement.
-  //   "901" ( 10E-99 ) to "099" (10E99)
   if sign(e) = -1 then
   begin
        e := e + 100;
-       Result := chr ( trunc ( e mod 10 ) * 16 + c ) + Result;
+       Result := chr(trunc ( e mod 10 ) * 16 + c) + Result;
        c := 9 * 16;
   end else
   begin
-       Result := chr ( trunc ( e mod 10 ) * 16 + c ) + Result;
+       Result := chr(trunc ( e mod 10 ) * 16 + c) + Result;
        c := 0;
   end;
   e := trunc (e / 10);
-  Result := chr ( c + trunc ( e mod 10 ) ) + Result;
+  Result := chr(c + trunc ( e mod 10 )) + Result;
 end;
+{$H+}  // Restore AnsiString/LongString mode
 
 // Conversion helpers for SymbolTable sync
 function VarEntryToTVarInfo(const ve: VarEntry): TVarInfo;
@@ -825,6 +817,7 @@ end;
 procedure LoadConstant(n: string);
 var s, lb: string;
 var f: float;
+var idx: integer;
 begin
 
     if optype = floatp then
