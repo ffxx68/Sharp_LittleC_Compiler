@@ -611,6 +611,7 @@ var
   v, c: integer;
   s: string;
 begin
+
   if (size = 0) then exit;
 
   s := '';
@@ -672,7 +673,7 @@ begin
   begin
     EmitComment('Variable ' + nm + ' = (' + s + ')');
     load_x(nm + '-1');
-    load_y(IntToStr(adr - 1));
+    load_y(nm + '-1');
     EmitInst('LII', IntToStr(size), 'Load I as counter');
     writln(#9'IXL');
     writln(#9'IYS');
@@ -688,7 +689,7 @@ begin
   begin
     writln(#9'; Variable ' + nm + ' = (' + s + ')');
     load_x(nm + '-1');
-    load_y(IntToStr(adr - 1));
+    load_y(nm + '-1');
     writln(#9'LII'#9 + IntToStr(size * 2) + #9'; Load I as counter');
     writln(#9'IXL');
     writln(#9'IYS');
@@ -769,9 +770,9 @@ var
 begin
 
   s := '';
-  for i := 1 to 7 do begin s := s + '0x'+IntToHex(ord(Value[i])) + ',';
+  for i := 1 to 7 do begin s := s + '0x'+IntToHex(ord(Value[i]), 2) + ',';
   end;
-  s := s + '0x'+IntToHex(ord(Value[8]));
+  s := s + '0x'+IntToHex(ord(Value[8]), 2);
 
   addasm(nm + ':'#9'; Floating-point  ' + nm ) ;
   s := #9'.DB'#9 + s;
@@ -791,8 +792,8 @@ begin
             + ' array (' + IntToStr( size ) + ')' ) ;
   for j := 0 to size-1 do begin
     s := '';
-    for i := 1 to 7 do s := s + '0x'+IntToHex(ord(Value[j*8 + i])) + ',';
-    s := s + '0x'+IntToHex(ord(Value[j*8 + 8]));
+    for i := 1 to 7 do s := s + '0x'+IntToHex(ord(Value[j*8 + i]), 2) + ',';
+    s := s + '0x'+IntToHex(ord(Value[j*8 + 8]), 2);
     s := #9'.DB'#9 + s + ' ; ' + IntToStr( j ) ;
     addasm(s);
   end;
@@ -1676,11 +1677,11 @@ begin
     writln(#9'; PopDiv float');
     PopFloat;
     writln( #9'LP 0x10 ; FloatXReg --> Xreg; (Q) -> (P), I+1 times' );
-    writln( #9'LIQ 0x'+IntToHex(FloatXReg,2) );
-    writln( #9'LII 7'); // 8 bytes
-    writln( #9'MVW');
+    writeln( #9'LIQ 0x'+IntToHex(FloatXReg,2) );
+    writeln( #9'LII 7'); // 8 bytes
+    writeln( #9'MVW');
     // Floating point division
-    writln( #9'CALL 0x10EA ; Yreg / Xreg -> Xreg ( PC-1403 only? )');
+    writeln( #9'CALL 0x10EA ; Yreg / Xreg -> Xreg ( PC-1403 only? )');
     writln( #9'LP 0x'+IntToHex(FloatXReg,2)+' ; Xreg --> FloatXReg; (Q) -> (P), I+1 times' );
     writln( #9'LIQ 0x10' );
     writln( #9'LII 7'); // 8 bytes
