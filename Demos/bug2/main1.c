@@ -1,0 +1,29 @@
+#org 0xe030
+
+main()
+{
+
+	#asm
+
+	LIDP 0xfbd8
+	LIA 0xf5
+	FILD
+	LIA 0x41
+	FILD
+	LIA 0x42
+	FILD
+	LIA 0x43
+	FILD
+	LIA 0x44
+	FILD
+	LIA 0x45
+	FILD
+	LIA 0x46
+	FILD
+	LIA 0x0
+	FILD
+
+	#endasm
+
+
+}
