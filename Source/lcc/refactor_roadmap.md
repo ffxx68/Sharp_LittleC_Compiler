@@ -249,7 +249,15 @@ Phase 4 — Reduce Parser: separate syntax from emission (4-6 days)
   - [x] Verified float constant generation (NO differences found with backup/parser.pas)
   - [x] Verify: NO_DIFF ✅
 
-  **Step 4.1.10 — Fix "Possible Stack corruption!" and Float Store/Load functions**
+  **Step 4.1.10 — Pointer dereferencing functions**
+  Create in `CodeGen.pas`:
+  - [ ] `LoadPointerContentXram(pnttyp: string; name: string)` — LP 4 + EXAM + LP 5 + EXAB + EXAM + DX + IXL (word: +EXAB+IXL+EXAB)
+  - [ ] `LoadPointerContentReg(pnttyp: string; name: string)` — STP + LDM (word: +EXAB+INCP+LDM+EXAB)
+  - [ ] `LoadAddressOf(adr: integer; name: string; isXram: boolean)` — LIA LB + LIB HB (xram) or LIA adr (reg)
+  - [ ] Update `Factor` procedure in parser.pas
+  - [ ] Verify: NO_DIFF
+
+  **Step 4.1.11 — Fix "Possible Stack corruption!" and Float Store/Load functions**
   - [ ] **Fix "Possible Stack corruption!" warning** (preexisting issue, not caused by refactor)
     - Float local variables allocated with PUSH are not deallocated with POP before RTN
     - Issue exists in original compiler (verified in reference_bounce.asm.old)
@@ -262,14 +270,6 @@ Phase 4 — Reduce Parser: separate syntax from emission (4-6 days)
   - [ ] `StoreFloatToXram` — LIDP + LP + LII 7 + EXWD
   - [ ] `LoadFloatFromReg/Local/Xram`
   - [ ] Update parser.pas float handling
-  - [ ] Verify: NO_DIFF
-
-  **Step 4.1.11 — Pointer dereferencing functions**
-  Create in `CodeGen.pas`:
-  - [ ] `LoadPointerContentXram(pnttyp: string; name: string)` — LP 4 + EXAM + LP 5 + EXAB + EXAM + DX + IXL (word: +EXAB+IXL+EXAB)
-  - [ ] `LoadPointerContentReg(pnttyp: string; name: string)` — STP + LDM (word: +EXAB+INCP+LDM+EXAB)
-  - [ ] `LoadAddressOf(adr: integer; name: string; isXram: boolean)` — LIA LB + LIB HB (xram) or LIA adr (reg)
-  - [ ] Update `Factor` procedure in parser.pas
   - [ ] Verify: NO_DIFF
 
   **Step 4.1.12 — Stack management functions**
