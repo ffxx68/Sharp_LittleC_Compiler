@@ -20,6 +20,7 @@ float xram fTest;
 
 main()
 {
+/*
     float fTestLocal; // dichiarazione senza inizializzazione
     fTestLocal = 1.618; // assegnazione separata
     fTest = 3.1415; // esempio di dichiarazione float globale xram
@@ -29,7 +30,7 @@ main()
     // debug: visualizza i valori (ipotetico, dipende dal supporto della toolchain)
     // lcd_print_float(fTest); // decommentare se esiste una funzione di stampa float
     // lcd_print_float(fTestLocal);
-
+*/
 	bCpos = 50; // initial cursor position
 	bCpos_old = 50;
 

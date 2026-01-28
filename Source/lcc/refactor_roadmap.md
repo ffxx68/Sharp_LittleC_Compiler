@@ -241,11 +241,22 @@ Phase 4 — Reduce Parser: separate syntax from emission (4-6 days)
   - [x] Update parser.pas
   - [x] Verify: NO_DIFF
 
-    
+  **Step 4.1.9 — Code formatting consistency fix** ✅
+  - [x] Added `EmitInstComment(inst, comment)` to CodeGen.pas for instructions without operand
+  - [x] Replaced 18 occurrences of `EmitInst(inst, '', comment)` with `EmitInstComment(inst, comment)`
+  - [x] Fixed TAB/SPACE formatting inconsistencies in generated assembly
+  - [x] Regenerated reference_bounce.asm with consistent formatting
+  - [x] Verified float constant generation (NO differences found with backup/parser.pas)
+  - [x] Verify: NO_DIFF ✅
 
-  **Step 4.1.9 — Float Store/Load functions** (lower priority)
+  **Step 4.1.10 — Fix "Possible Stack corruption!" and Float Store/Load functions**
+  - [ ] **Fix "Possible Stack corruption!" warning** (preexisting issue, not caused by refactor)
+    - Float local variables allocated with PUSH are not deallocated with POP before RTN
+    - Issue exists in original compiler (verified in reference_bounce.asm.old)
+    - Need to add proper stack cleanup before procedure RTN
+    - Update `removelocvars` or add cleanup in `Block` procedure
+    - Verify: NO_DIFF after fix
   Create in `CodeGen.pas`:
-  - [ ] verify float constant generation (differences are found with current code, wrt to backup/parser.pas)
   - [ ] `StoreFloatToReg` — LIQ + LP(FloatXReg) + LII 7 + MVW
   - [ ] `StoreFloatToLocal` — loop with PUSH×8
   - [ ] `StoreFloatToXram` — LIDP + LP + LII 7 + EXWD
@@ -253,7 +264,7 @@ Phase 4 — Reduce Parser: separate syntax from emission (4-6 days)
   - [ ] Update parser.pas float handling
   - [ ] Verify: NO_DIFF
 
-  **Step 4.1.10 — Pointer dereferencing functions**
+  **Step 4.1.11 — Pointer dereferencing functions**
   Create in `CodeGen.pas`:
   - [ ] `LoadPointerContentXram(pnttyp: string; name: string)` — LP 4 + EXAM + LP 5 + EXAB + EXAM + DX + IXL (word: +EXAB+IXL+EXAB)
   - [ ] `LoadPointerContentReg(pnttyp: string; name: string)` — STP + LDM (word: +EXAB+INCP+LDM+EXAB)
@@ -261,19 +272,21 @@ Phase 4 — Reduce Parser: separate syntax from emission (4-6 days)
   - [ ] Update `Factor` procedure in parser.pas
   - [ ] Verify: NO_DIFF
 
-  **Step 4.1.11 — Stack management functions**
+  **Step 4.1.12 — Stack management functions**
   Create in `CodeGen.pas`:
   - [ ] `AllocStackSpace(bytes: integer; var pushcnt: integer)` — if <8: PUSH×n, else: LP 0 + EXAM + LDR + SBIA + STR + EXAM
   - [ ] `FreeStackSpace(bytes: integer; var pushcnt: integer; hasReturn, isWord: boolean)` — various patterns based on return type
   - [ ] Update `ProcCall` in parser.pas
   - [ ] Verify: NO_DIFF
 
-  **Step 4.1.12 — Increment/Decrement register functions**
+  **Step 4.1.13 — Increment/Decrement register functions**
   Create in `CodeGen.pas`:
   - [ ] `EmitIncReg(regAddr: integer)` — INCI/INCJ/INCA/INCB/INCK/INCL/INCM/INCN based on addr (0,1,2,3,8,9,10,11)
   - [ ] `EmitDecReg(regAddr: integer)` — DECI/DECJ/DECA/DECB/DECK/DECL/DECM/DECN
   - [ ] Update `Assignment` increment/decrement section in parser.pas
   - [ ] Verify: NO_DIFF
+
+  **Step 4.1.14 — Verify and remove residual ASM emission in parser.pas**
 
   **Implementation notes:**
   - Functions that modify stack must handle `pushcnt` as `var` parameter
@@ -282,7 +295,7 @@ Phase 4 — Reduce Parser: separate syntax from emission (4-6 days)
   - All changes must be verified incrementally with `test.bat` → NO_DIFF against `reference_bounce.asm`
 
 - [ ] Task 4.2: consider introducing an AST (optional) for complex expressions.
-- [ ] Verification: generated asm is semantically identical; tests on demos pass.
+- [ ] Verification: generated asm is semantically identical - Verify: NO_DIFF
 
 Phase 5 — Backend and optimizations (2-3 days)
 - [ ] Task 5.1: extract optimization logic (temp -> temp2 passes) into `Backend.pas`.

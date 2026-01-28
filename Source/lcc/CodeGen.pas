@@ -15,6 +15,7 @@ uses Output, SysUtils;
 procedure EmitInst(const inst: string); overload;
 procedure EmitInst(const inst, operand: string); overload;
 procedure EmitInst(const inst, operand, comment: string); overload;
+procedure EmitInstComment(const inst, comment: string); overload;
 procedure EmitComment(const comment: string);
 procedure EmitBlankLine;
 
@@ -158,6 +159,11 @@ begin
   WritLn(#9 + inst + #9 + operand + #9 + '; ' + comment);
 end;
 
+procedure EmitInstComment(const inst, comment: string);
+begin
+  WritLn(#9 + inst + #9 + '; ' + comment);
+end;
+
 procedure EmitComment(const comment: string);
 begin
   WritLn(#9 + '; ' + comment);
@@ -218,9 +224,9 @@ begin
     EmitInst('LP', IntToStr(adr), 'Store 16bit variable ' + name)
   else
     EmitInst('LIP', IntToStr(adr), 'Store 16bit variable ' + name);
-  EmitInst('EXAM', '', 'LB');
+  EmitInstComment('EXAM', 'LB');
   EmitInst('EXAB');
-  EmitInst('INCP', '', 'HB');
+  EmitInstComment('INCP', 'HB');
   EmitInst('EXAM');
 end;
 
@@ -234,7 +240,7 @@ begin
   EmitInst('ADIA', IntToStr(adr + 2 + pushcnt));  // add relative address
   EmitInst('STP');   // move result to P (absolute address)
   EmitInst('EXAB');  // restore A
-  EmitInst('EXAM', '', 'Store result in ' + name);  // store value to P location
+  EmitInstComment('EXAM', 'Store result in ' + name);  // store value to P location
 end;
 
 procedure StoreWordToLocal(adr: integer; const name: string);
@@ -244,10 +250,10 @@ begin
   EmitInst('ADIA', IntToStr(adr + 2 + pushcnt));  // adr + size + pushcnt
   EmitInst('STP');
   EmitInst('POP'); Dec(pushcnt);   // restore A
-  EmitInst('EXAM', '', 'LB - Store result in ' + name);
+  EmitInstComment('EXAM', 'LB - Store result in ' + name);
   EmitInst('EXAB');
   EmitInst('DECP');
-  EmitInst('EXAM', '', 'HB');
+  EmitInstComment('EXAM', 'HB');
 end;
 
 {--------------------------------------------------------------}
@@ -268,7 +274,7 @@ begin
     EmitInst('LIDP', IntToStr(adr), 'Store 16bit variable ' + name)
   else
     EmitInst('LIDP', name, 'Store 16bit variable ' + name);
-  EmitInst('STD', '', 'LB');
+  EmitInstComment('STD', 'LB');
   EmitInst('EXAB');
   if (adr <> -1) and ((adr + 1) div 256 = adr div 256) then
     EmitInst('LIDL', 'LB(' + IntToStr(adr) + '+1)')
@@ -276,7 +282,7 @@ begin
     EmitInst('LIDP', IntToStr(adr) + '+1')
   else
     EmitInst('LIDP', name + '+1');  // PASM doesn't parse "name + 1"
-  EmitInst('STD', '', 'HB');
+  EmitInstComment('STD', 'HB');
 end;
 
 {--------------------------------------------------------------}
@@ -297,9 +303,9 @@ begin
     EmitInst('LP', IntToStr(adr + 1), 'Load 16bit variable ' + name)
   else
     EmitInst('LIP', IntToStr(adr + 1), 'Load 16bit variable ' + name);
-  EmitInst('LDM', '', 'HB');
+  EmitInstComment('LDM', 'HB');
   EmitInst('EXAB');
-  EmitInst('DECP', '', 'LB');
+  EmitInstComment('DECP', 'LB');
   EmitInst('LDM');
 end;
 
@@ -311,7 +317,7 @@ begin
   EmitInst('LDR');
   EmitInst('ADIA', IntToStr(adr + 2 + pushcnt));
   EmitInst('STP');
-  EmitInst('LDM', '', 'Load variable ' + name);
+  EmitInstComment('LDM', 'Load variable ' + name);
 end;
 
 procedure LoadWordFromLocal(adr: integer; const name: string);
@@ -319,10 +325,10 @@ begin
   EmitInst('LDR');
   EmitInst('ADIA', IntToStr(adr + 1 + pushcnt));
   EmitInst('STP');
-  EmitInst('LDM', '', 'HB - Load variable ' + name);
+  EmitInstComment('LDM', 'HB - Load variable ' + name);
   EmitInst('EXAB');
   EmitInst('INCP');
-  EmitInst('LDM', '', 'LB');
+  EmitInstComment('LDM', 'LB');
 end;
 
 {--------------------------------------------------------------}
@@ -343,7 +349,7 @@ begin
     EmitInst('LIDP', IntToStr(adr + 1), 'Load 16bit variable ' + name)
   else
     EmitInst('LIDP', name + '+1', 'Load 16bit variable ' + name);
-  EmitInst('LDD', '', 'HB');
+  EmitInstComment('LDD', 'HB');
   EmitInst('EXAB');
   if (adr <> -1) and ((adr + 1) div 256 = adr div 256) then
     EmitInst('LIDL', 'LB(' + IntToStr(adr) + ')')
@@ -351,7 +357,7 @@ begin
     EmitInst('LIDP', IntToStr(adr))
   else
     EmitInst('LIDP', name);
-  EmitInst('LDD', '', 'LB');
+  EmitInstComment('LDD', 'LB');
 end;
 
 {--------------------------------------------------------------}
@@ -369,7 +375,7 @@ end;
 
 procedure LoadArrayByteFromXram(adr: integer; const name: string);
 begin
-  EmitInst('PUSH', '', 'Load array element from ' + name); Inc(pushcnt);
+  EmitInstComment('PUSH', 'Load array element from ' + name); Inc(pushcnt);
   EmitInst('LP', '5', 'HB of address');
   if adr <> -1 then
   begin
@@ -409,7 +415,7 @@ end;
 
 procedure StoreArrayByteToXram(adr: integer; const name: string);
 begin
-  EmitInst('PUSH', '', 'Store array element from ' + name); Inc(pushcnt);
+  EmitInstComment('PUSH', 'Store array element from ' + name); Inc(pushcnt);
   EmitInst('LP', '7', 'HB of address');
   if adr <> -1 then
   begin
@@ -456,7 +462,7 @@ procedure LoadArrayWordFromXram(adr: integer; const name: string);
 begin
   EmitInst('RC');
   EmitInst('SL');
-  EmitInst('PUSH', '', 'Load array element from ' + name); Inc(pushcnt);
+  EmitInstComment('PUSH', 'Load array element from ' + name); Inc(pushcnt);
   EmitInst('LP', '7', 'HB of address');
   if adr <> -1 then
   begin
@@ -504,7 +510,7 @@ procedure StoreArrayWordToXram(adr: integer; const name: string);
 begin
   EmitInst('RC');
   EmitInst('SL');
-  EmitInst('PUSH', '', 'Store array element from ' + name); Inc(pushcnt);
+  EmitInstComment('PUSH', 'Store array element from ' + name); Inc(pushcnt);
   EmitInst('LP', '7', 'HB of address');
   if adr <> -1 then
   begin
