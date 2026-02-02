@@ -541,14 +541,14 @@ begin
                 begin // array
                   if(typ = 'char') then
                   begin
-                          delete(t, 1, 1); delete(t, length(t), 1);
+                          t := trim(t); delete(t, 1, 1); t := trim(t); delete(t, length(t), 1);
                           //VarList[VarCount].inits := stringparse(t, size);
                           VarList[VarCount].inits := t+chr(0);
                           VarList[VarCount].initn := 0;
                           VarList[VarCount].initf := 0;
                   end else if VarList[VarCount].arr and (typ = 'byte') then
                   begin
-                          delete(t, 1, 2); delete(t, length(t), 1);
+                          t := trim(t); delete(t, 1, 1); t := trim(t); delete(t, length(t), 1);
                           t := t + ',';
                           litem := ExtrList(t);
                           repeat
@@ -560,7 +560,7 @@ begin
                           VarList[VarCount].initf := 0;
                   end else if VarList[VarCount].arr and (typ = 'word') then
                   begin
-                          delete(t, 1, 2); delete(t, length(t), 1);
+                          t := trim(t); delete(t, 1, 1); t := trim(t); delete(t, length(t), 1);
                           t := t + ',';
                           litem := ExtrList(t);
                           repeat
@@ -573,7 +573,7 @@ begin
                           VarList[VarCount].initf := 0;
                   end else if VarList[VarCount].arr and (typ = 'float') then
                   begin
-                       delete(t, 1, 2); delete(t, length(t), 1);
+                       t := trim(t); delete(t, 1, 1); t := trim(t); delete(t, length(t), 1);
                        t := t + ',';
                        litem := ExtrList(t);
                        VarList[VarCount].inits := '';

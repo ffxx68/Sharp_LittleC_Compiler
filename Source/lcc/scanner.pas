@@ -169,6 +169,7 @@ begin
         c := ' ';
         while ((list <> '') and not (list[1] = ',')) or (l > 0) or (c <> ' ') do
         begin
+                if list = '' then break;
                 if list[1] = '(' then inc(l);
                 if list[1] = ')' then dec(l);
                 if list[1] in ['"', ''''] then

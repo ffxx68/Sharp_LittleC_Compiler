@@ -24,7 +24,17 @@ This document collects the analysis and the refactor plan to make the `lcc` comp
 
 ## Test Scripts
 
-- **test.bat**: Script per testare la toolchain lcpp + lcc su un sorgente di test (es. test_C/bounce/main.c), preprocessando e compilando il file, con output in test_C/bounce/tmp.asm.
+- **test.bat**: Script avanzato di regression testing.
+  - Ricompila automaticamente il nuovo compilatore `lcc` dai sorgenti correnti.
+  - Esegue un confronto (regression test) tra il compilatore originale (`lcc.exe` nella root) e quello nuovo (`Source/lcc/lcc.exe`).
+  - Preprocessa i file con `lcpp.exe`.
+  - Compila i file di test con entrambe le versioni e confronta gli output (`reference.asm` vs `new.asm`) usando `fc /W` (file compare).
+  - Supporta l'esecuzione su una singola demo (passando il nome come argomento) o su una suite predefinita di demo ("16bitdiv", "Array", "bounce", "Loop demo", "Math demo").
+
+  **Esempi d'uso:**
+  - `test.bat` → Esegue l'intera suite di regressione.
+  - `test.bat bounce` → Esegue il test solo per la demo "bounce" (utile per debug rapido).
+  - `test.bat Array` → Esegue il test solo per la demo "Array" (quella che mostra differenze).
 
 ---
 
@@ -183,7 +193,7 @@ Phase 4 — Reduce Parser: separate syntax from emission (4-6 days)
   Create in `CodeGen.pas`:
   - [x] `StoreByteToReg(adr: integer; name: string)` — LP/LIP (adr<64?) + EXAM
   - [x] `StoreWordToReg(adr: integer; name: string)` — LP/LIP + EXAM + EXAB + INCP + EXAM
-  - [x] Update `StoreVariable` in parser.pas to use these functions
+  - [x] Update `StoreVariable` in parser.pas to use queste funzioni
   - [x] Verify: `test.bat` → NO_DIFF
   - [x] Also added: `NewLabel`, `PostLabel`, `load_x`, `CompGreater`, `CompSmaller` to CodeGen interface
 
@@ -248,6 +258,18 @@ Phase 4 — Reduce Parser: separate syntax from emission (4-6 days)
   - [x] Regenerated reference_bounce.asm with consistent formatting
   - [x] Verified float constant generation (NO differences found with backup/parser.pas)
   - [x] Verify: NO_DIFF ✅
+
+  **Step 4.1.9b — Regression fixes (Array demo & others)**
+  - [ ] Run full regression suite using `test.bat` (covers 16bitdiv, Array, bounce, Loop demo, Math demo)
+  - [ ] **Fix regressions in "Array" demo**:
+    - [ ] Analyze differences in `test_C/Array/diff.txt`
+    - [ ] Locate source of divergence (likely CodeGen or Parser logic change)
+    - [ ] Fix the issue
+    - [ ] Verify: `test.bat Array` → NO_DIFF
+  - [ ] **Fix regressions in other demos** (if any):
+    - [ ] Address any issues revealed by remaining tests
+    - [ ] Verify: `test.bat` (full suite) → ALL OK
+  - [ ] Verify: NO_DIFF on all demos ✅
 
   **Step 4.1.10 — Pointer dereferencing functions**
   Create in `CodeGen.pas`:
