@@ -259,17 +259,23 @@ Phase 4 — Reduce Parser: separate syntax from emission (4-6 days)
   - [x] Verified float constant generation (NO differences found with backup/parser.pas)
   - [x] Verify: NO_DIFF ✅
 
-  **Step 4.1.9b — Regression fixes (Array demo & others)**
-  - [ ] Run full regression suite using `test.bat` (covers 16bitdiv, Array, bounce, Loop demo, Math demo)
-  - [ ] **Fix regressions in "Array" demo**:
-    - [ ] Analyze differences in `test_C/Array/diff.txt`
-    - [ ] Locate source of divergence (likely CodeGen or Parser logic change)
-    - [ ] Fix the issue
-    - [ ] Verify: `test.bat Array` → NO_DIFF
-  - [ ] **Fix regressions in other demos** (if any):
-    - [ ] Address any issues revealed by remaining tests
-    - [ ] Verify: `test.bat` (full suite) → ALL OK
-  - [ ] Verify: NO_DIFF on all demos ✅
+  **Step 4.1.9b — Regression fixes (Array demo & others)** ✅
+  - [x] Run full regression suite using `test.bat` (covers 16bitdiv, Array, bounce, Loop demo, Math demo)
+  - [x] **Fixed regressions in "Array" demo**:
+    - Issue 1: Byte values > 127 corrupted during array initialization (232 → 63) due to FPC 3.x UTF-8 codepage conversion
+    - Solution: Used `{$H-}` + SetLength + direct chr() assignment instead of string concatenation
+    - Issue 2: Missing `SREG: .DW 0, 0, 0, 0, 0, 0` label in output
+    - Solution: Fixed typo `writeln` → `writln` at line 2489 to write to file instead of console
+  - [x] **Fixed regressions in "Loop demo" and "Math demo"**:
+    - Issue: Missing shift operator debug comments `; <<` and `; >>`
+    - Solution: Fixed typo `writeln` → `writln` at lines 1337 and 1339
+  - [x] Verify: `test.bat Array` → **NO_DIFF** ✅
+  - [x] Verify: `test.bat bounce` → **NO_DIFF** ✅
+  - [x] Verify: `test.bat "Loop demo"` → **NO_DIFF** ✅
+  - [x] Verify: `test.bat "Math demo"` → **NO_DIFF** ✅
+  - [x] **Full regression suite: 4/4 working tests PASS** ✅
+    - Note: 16bitdiv excluded (missing getkey.h dependency)
+  - [x] Enhanced `test.bat` with summary report showing test counts and detailed results
 
   **Step 4.1.10 — Pointer dereferencing functions**
   Create in `CodeGen.pas`:

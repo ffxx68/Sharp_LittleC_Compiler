@@ -23,7 +23,7 @@ type
     InitF: Double;
     Typ: string;
     PntTyp: string;
-    Inits: string;
+    Inits: RawByteString;
   end;
 
   TProcInfo = record

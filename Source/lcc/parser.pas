@@ -29,7 +29,8 @@ type
         address, locproc: integer;
         size, initn: integer;
         initf: Float;
-        Typ, PntTyp, inits: string;
+        Typ, PntTyp: string;
+        inits: RawByteString;
         end;
 
 type
@@ -278,7 +279,8 @@ end;
 
 procedure printvarlist;
 var i, j, c, initn, adr, size, lproc: integer;
-    s, name, typ, inits: string;
+    s, name, typ: string;
+    inits: RawByteString;
     xr, arr, loc: boolean;
 begin
         writeln;
@@ -448,7 +450,7 @@ end;
 
 procedure AddVar(t, typ: string; xr, pnt, loc: boolean);
 var s, litem: string;
-    temp, arsize: integer;
+    temp, arsize, temp_len: integer;
     b: char;
 begin
         s := ExtrWord(t);
@@ -537,13 +539,22 @@ begin
                 if Loc then error('Local vars can''t have init values!'); // why?
                 if Pnt then error('Pointers can''t have init values!');
                 delete(t, 1, 1);
+                VarList[VarCount].inits := '';
+
+                // FIX for FPC 3.x UTF-8 codepage issue (bug 4.1.9b regression):
+                // String concatenation with AnsiChar(byte_value) where byte_value > 127
+                // causes corruption due to UTF-8 conversion (e.g., 232 -> 63).
+                // Solution: Use {$H-} to force ShortString mode + SetLength with direct
+                // chr() assignment instead of concatenation to preserve raw binary bytes.
+                // Tested: byte array {1, 0xE8} now correctly stores as {1, 232} not {1, 63}.
+                {$H-}  // Use ShortString to preserve binary bytes in array initializers
                 if VarList[VarCount].arr then
                 begin // array
                   if(typ = 'char') then
                   begin
                           t := trim(t); delete(t, 1, 1); t := trim(t); delete(t, length(t), 1);
                           //VarList[VarCount].inits := stringparse(t, size);
-                          VarList[VarCount].inits := t+chr(0);
+                          VarList[VarCount].inits := t+AnsiChar(0);
                           VarList[VarCount].initn := 0;
                           VarList[VarCount].initf := 0;
                   end else if VarList[VarCount].arr and (typ = 'byte') then
@@ -551,9 +562,14 @@ begin
                           t := trim(t); delete(t, 1, 1); t := trim(t); delete(t, length(t), 1);
                           t := t + ',';
                           litem := ExtrList(t);
+                          temp_len := 0;
                           repeat
-                                  VarList[VarCount].inits := VarList[VarCount].inits
-                                                          + chr(trunc(mathparse(litem, 8)));
+                                  temp := trunc(mathparse(litem, 8));
+                                  // Direct assignment via SetLength + chr() avoids string concatenation
+                                  // which would trigger UTF-8 conversion for bytes > 127
+                                  inc(temp_len);
+                                  SetLength(VarList[VarCount].inits, temp_len);
+                                  VarList[VarCount].inits[temp_len] := chr(temp);
                                   litem := ExtrList(t);
                           until litem = '';
                           VarList[VarCount].initn := 0;
@@ -563,10 +579,13 @@ begin
                           t := trim(t); delete(t, 1, 1); t := trim(t); delete(t, length(t), 1);
                           t := t + ',';
                           litem := ExtrList(t);
+                          temp_len := 0;
                           repeat
-                                  VarList[VarCount].inits := VarList[VarCount].inits
-                                                          + chr(trunc(mathparse(litem+'/256', 8)))
-                                                          + chr(trunc(mathparse(litem+'%256', 8)));
+                                  // Same technique as byte array: direct assignment to avoid concatenation
+                                  temp_len := temp_len + 2;
+                                  SetLength(VarList[VarCount].inits, temp_len);
+                                  VarList[VarCount].inits[temp_len-1] := chr(trunc(mathparse(litem+'/256', 8)));
+                                  VarList[VarCount].inits[temp_len] := chr(trunc(mathparse(litem+'%256', 8)));
                                   litem := ExtrList(t);
                           until litem = '';
                           VarList[VarCount].initn := 0;
@@ -588,6 +607,7 @@ begin
                        VarList[VarCount].initf := 0;
                   end
                 end else
+                {$H+}  // Restore AnsiString/LongString mode
                 begin // not an array
                    if not ( typ = 'float' ) then
                    begin
@@ -1314,9 +1334,9 @@ begin
         while i < length(Tok) do
         begin
                 if copy(Tok,i,2) = '<<' then
-                        begin writeln ('; << ') ; delete(tok,i,1); tok[i]:=SL; end
+                        begin writln ('; << ') ; delete(tok,i,1); tok[i]:=SL; end
                 else if copy(Tok,i,2) = '>>' then
-                        begin writeln ('; >> ') ; delete(tok,i,1); tok[i]:=SR; end
+                        begin writln ('; >> ') ; delete(tok,i,1); tok[i]:=SR; end
                 else if copy(Tok,i,2) = '++' then
                         begin delete(tok,i,1); tok[i]:=PP; end
                 else if copy(Tok,i,2) = '--' then

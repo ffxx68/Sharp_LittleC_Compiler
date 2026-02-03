@@ -87,13 +87,13 @@ procedure PopAnd;
 procedure PopMod;
 procedure NotIt;
 procedure varxram(Value, adr, size: integer; nm: string);
-procedure varxarr(Value: string; adr, size: integer; nm, typ: string);
+procedure varxarr(Value: RawByteString; adr, size: integer; nm, typ: string);
 procedure varcode(Value, adr, size: integer; nm: string);
-procedure varfcode(Value, nm: string);
-procedure varcarr(Value: string; adr, size: integer; nm, typ: string);
-procedure varfarr(Value: string; size: integer; nm: string);
+procedure varfcode(Value: RawByteString; nm: string);
+procedure varcarr(Value: RawByteString; adr, size: integer; nm, typ: string);
+procedure varfarr(Value: RawByteString; size: integer; nm: string);
 procedure varreg(Value, adr, size: integer; nm: string);
-procedure varrarr(Value: string; adr, size: integer; nm, typ: string);
+procedure varrarr(Value: RawByteString; adr, size: integer; nm, typ: string);
 
 type OpTypes = (byte, word, floatp);
 
@@ -611,7 +611,7 @@ end;
 {--------------------------------------------------------------}
 { Generates init code for an array in xram }
 
-procedure varxarr(Value: string; adr, size: integer; nm, typ: string);
+procedure varxarr(Value: RawByteString; adr, size: integer; nm, typ: string);
 var
   i: integer;
   v, c: integer;
@@ -736,7 +736,7 @@ end;
 {--------------------------------------------------------------}
 { Generates init code for an array in code space }
 
-procedure varcarr(Value: string; adr, size: integer; nm, typ: string);
+procedure varcarr(Value: RawByteString; adr, size: integer; nm, typ: string);
 var
   i: integer;
   s: string;
@@ -769,7 +769,7 @@ end;
 
 { Generates init code for a float in code space }
 
-procedure varfcode(Value, nm: string);
+procedure varfcode(Value: RawByteString; nm: string);
 var
   i: integer;
   s: string;
@@ -789,7 +789,7 @@ end;
 {--------------------------------------------------------------}
 
 { Generates init code for a float array in code space }
-procedure varfarr(Value: string; size: integer; nm: string);
+procedure varfarr(Value: RawByteString; size: integer; nm: string);
 var
   i, j : integer;
   s: string;
@@ -864,7 +864,7 @@ end;
 {--------------------------------------------------------------}
 { Generates init code for an array variable in a register }
 
-procedure varrarr(Value: string; adr, size: integer; nm, typ: string);
+procedure varrarr(Value: RawByteString; adr, size: integer; nm, typ: string);
 var
   i: integer;
   s: string;
