@@ -63,6 +63,11 @@ procedure LoadArrayWordFromXram(adr: integer; const name: string);
 procedure StoreArrayWordToReg(adr: integer; const name: string);
 procedure StoreArrayWordToXram(adr: integer; const name: string);
 
+// Pointer dereferencing functions (Task 4.1.10)
+procedure LoadPointerContentXram(const pnttyp, name: string);
+procedure LoadPointerContentReg(const pnttyp, name: string);
+procedure LoadAddressOf(adr: integer; const name: string; isXram: boolean);
+
 procedure CompSmOrEq;
 procedure CompGrOrEq;
 procedure CompGreater;
@@ -198,12 +203,12 @@ end;
 
 procedure load_x(s: string);
 begin
-  writln(#9'LP'#9'4'#9'; Load XL');
-  writln(#9'LIA'#9'LB(' + s + ')');
-  writln(#9'EXAM');
-  writln(#9'LP'#9'5'#9'; Load XH');
-  writln(#9'LIA'#9'HB(' + s + ')');
-  writln(#9'EXAM');
+  EmitInst('LP', '4', 'Load XL');
+  EmitInst('LIA', 'LB(' + s + ')');
+  EmitInst('EXAM');
+  EmitInst('LP', '5', 'Load XH');
+  EmitInst('LIA', 'HB(' + s + ')');
+  EmitInst('EXAM');
 end;
 
 {--------------------------------------------------------------}
@@ -537,15 +542,74 @@ begin
   EmitInst('IYS');
 end;
 
+{--------------------------------------------------------------}
+{ Pointer dereferencing functions (Task 4.1.10) }
+
+procedure LoadPointerContentXram(const pnttyp, name: string);
+begin
+  EmitInst('LP', '4', 'XL');
+  EmitInst('EXAM');
+  EmitInst('LP', '5', 'XH');
+  EmitInst('EXAB');
+  EmitInst('EXAM');
+  EmitInst('DX');
+  if pnttyp <> 'word' then
+  begin
+    EmitInstComment('IXL', 'Load content *' + name);
+  end else
+  begin
+    EmitInstComment('IXL', 'Load content LB *' + name);
+    EmitInst('EXAB');
+    EmitInstComment('IXL', 'Load content HB *' + name);
+    EmitInst('EXAB');
+  end;
+end;
+
+procedure LoadPointerContentReg(const pnttyp, name: string);
+begin
+  EmitInstComment('STP', 'Set P');
+  if pnttyp <> 'word' then
+  begin
+    EmitInstComment('LDM', 'Load content *' + name);
+  end else
+  begin
+    EmitInstComment('LDM', 'Load content LB *' + name);
+    EmitInst('EXAB');
+    EmitInst('INCP');
+    EmitInstComment('LDM', 'Load content HB *' + name);
+    EmitInst('EXAB');
+  end;
+end;
+
+procedure LoadAddressOf(adr: integer; const name: string; isXram: boolean);
+begin
+  if isXram then
+  begin
+    if adr <> -1 then
+    begin
+      EmitInst('LIA', 'LB(' + IntToStr(adr) + ')', '&' + name);
+      EmitInst('LIB', 'HB(' + IntToStr(adr) + ')', '&' + name);
+    end else
+    begin
+      EmitInst('LIA', 'LB(' + name + ')', '&' + name);
+      EmitInst('LIB', 'HB(' + name + ')', '&' + name);
+    end;
+  end else
+  begin
+    EmitInst('LIA', IntToStr(adr), '&' + name);
+  end;
+end;
+
+{--------------------------------------------------------------}
 
 procedure load_y(s: string);
 begin
-  writln(#9'LP'#9'6'#9'; Load YL');
-  writln(#9'LIA'#9'LB(' + s + ')');
-  writln(#9'EXAM');
-  writln(#9'LP'#9'7'#9'; Load YH');
-  writln(#9'LIA'#9'HB(' + s + ')');
-  writln(#9'EXAM');
+  EmitInst('LP', '6', 'Load YL');
+  EmitInst('LIA', 'LB(' + s + ')');
+  EmitInst('EXAM');
+  EmitInst('LP', '7', 'Load YH');
+  EmitInst('LIA', 'HB(' + s + ')');
+  EmitInst('EXAM');
 end;
 
 
@@ -601,9 +665,9 @@ begin
     EmitInst('STD');
   end
   else if size = 8 then
-    writln(' ; varxram - Unsupported float');
+    EmitComment('varxram - Unsupported float');
 
-  writln('');
+  EmitBlankLine;
 end;
 {--------------------------------------------------------------}
 
@@ -681,10 +745,10 @@ begin
     load_x(nm + '-1');
     load_y(nm + '-1');
     EmitInst('LII', IntToStr(size), 'Load I as counter');
-    writln(#9'IXL');
-    writln(#9'IYS');
-    writln(#9'DECI');
-    writln(#9'JRNZM'#9'4');
+    EmitInst('IXL');
+    EmitInst('IYS');
+    EmitInst('DECI');
+    EmitInst('JRNZM', '4');
 
     addasm(nm + ':'#9'; Variable init data ' + nm);
     s := #9'.DB'#9 + s;
@@ -693,14 +757,14 @@ begin
   end
   else if (typ = 'word') then
   begin
-    writln(#9'; Variable ' + nm + ' = (' + s + ')');
+    EmitComment('Variable ' + nm + ' = (' + s + ')');
     load_x(nm + '-1');
     load_y(nm + '-1');
-    writln(#9'LII'#9 + IntToStr(size * 2) + #9'; Load I as counter');
-    writln(#9'IXL');
-    writln(#9'IYS');
-    writln(#9'DECI');
-    writln(#9'JRNZM'#9'4');
+    EmitInst('LII', IntToStr(size * 2), 'Load I as counter');
+    EmitInst('IXL');
+    EmitInst('IYS');
+    EmitInst('DECI');
+    EmitInst('JRNZM', '4');
 
     addasm(nm + ':'#9'; Variable init data ' + nm);
     s := #9'.DW'#9 + s;
@@ -710,10 +774,10 @@ begin
   else if (typ = 'float') then
   begin
     //...  TODO - float
-    writln(#9'; varxarr - Unsupported float ' + nm);
+    EmitComment('varxarr - Unsupported float ' + nm);
   end;
 
-  writln('');
+  EmitBlankLine;
 end;
 {--------------------------------------------------------------}
 
@@ -817,46 +881,45 @@ begin
   if ((adr = 0) or (adr = 1)) and (size = 1) then
   begin
     if adr = 0 then
-      writln(#9'LII'#9 + IntToStr(Value) + #9'; I is ' + nm + ' = ' + IntToStr(Value))
+      EmitInst('LII', IntToStr(Value), 'I is ' + nm + ' = ' + IntToStr(Value))
     else
-      writln(#9'LIJ'#9 + IntToStr(Value) + #9'; J is ' + nm + ' = ' + IntToStr(Value));
-    writln('');
+      EmitInst('LIJ', IntToStr(Value), 'J is ' + nm + ' = ' + IntToStr(Value));
+    EmitBlankLine;
     exit;
   end;
 
   if adr <= 63 then
-    writln(#9'LP'#9 + IntToStr(adr) + #9'; Variable ' + nm + ' = ' + IntToStr(Value))
+    EmitInst('LP', IntToStr(adr), 'Variable ' + nm + ' = ' + IntToStr(Value))
   else
   begin
-    writln(#9'LIP'#9 + IntToStr(adr) + #9'; Variable ' + nm +
-      ' = ' + IntToStr(Value));
+    EmitInst('LIP', IntToStr(adr), 'Variable ' + nm + ' = ' + IntToStr(Value));
   end;
   if size = 1 then
   begin
-    writln(#9'LIA'#9 + IntToStr(Value));
-    writln(#9'EXAM');
+    EmitInst('LIA', IntToStr(Value));
+    EmitInst('EXAM');
   end
   else if size = 2 then
   begin
                 { if value mod 256 = 0 then
-                        writln( #9'RA'#9'; LB')
+                        EmitInst('RA')
                 else    }
-    writln(#9'LIA'#9'LB(' + IntToStr(Value) + ')' + #9'; LB');
-    writln(#9'EXAM');
+    EmitInst('LIA', 'LB(' + IntToStr(Value) + ')', 'LB');
+    EmitInst('EXAM');
 
-    writln(#9'INCP');
+    EmitInst('INCP');
     if Value mod 256 <> Value div 256 then
                 { if value div 256 = 0 then
-                        writln( #9'RA'#9'; HB')    }
+                        EmitInst('RA')    }
     else
-      writln(#9'LIA'#9'HB(' + IntToStr(Value) + ')' + #9'; HB');
-    writln(#9'EXAM');
+      EmitInst('LIA', 'HB(' + IntToStr(Value) + ')', 'HB');
+    EmitInst('EXAM');
   end
   else if size = 8 then
   begin
-    writln(#9'; varreg - Unsupported float');
+    EmitComment('varreg - Unsupported float');
   end;
-  writln('');
+  EmitBlankLine;
 end;
 {--------------------------------------------------------------}
 
@@ -870,7 +933,7 @@ var
   s: string;
 begin
   if size = 0 then exit;
-  if typ = 'float' then writln(#9'; varrarr - Unsupported float');
+  if typ = 'float' then EmitComment('varrarr - Unsupported float');
 
   s := '';
   for i := 1 to size do
@@ -889,15 +952,15 @@ begin
   end;
 
   if typ <> 'word' then
-    writln(#9'LII'#9 + IntToStr(size - 1) + #9'; Variable ' + nm + ' = (' + s + ')')
+    EmitInst('LII', IntToStr(size - 1), 'Variable ' + nm + ' = (' + s + ')')
   else
-    writln(#9'LII'#9 + IntToStr(size * 2 - 1) + #9'; Variable ' + nm + ' = (' + s + ')');
-  writln(#9'LIDP'#9 + nm);
+    EmitInst('LII', IntToStr(size * 2 - 1), 'Variable ' + nm + ' = (' + s + ')');
+  EmitInst('LIDP', nm);
   if adr <= 63 then
-    writln(#9'LP'#9 + IntToStr(adr))
+    EmitInst('LP', IntToStr(adr))
   else
-    writln(#9'LIP'#9 + IntToStr(adr));
-  writln(#9'MVWD');
+    EmitInst('LIP', IntToStr(adr));
+  EmitInst('MVWD');
 
   addasm(nm + ':'#9'; Variable init data ' + nm);
   if typ <> 'word' then
@@ -907,7 +970,7 @@ begin
   addasm(s);
   addasm('');
 
-  writln('');
+  EmitBlankLine;
 end;
 {--------------------------------------------------------------}
 
@@ -919,31 +982,32 @@ procedure CompEqual;
 begin
   if optype = word then
   begin
-    writln(#9'LP'#9'0');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM');
-    writln(#9'POP');
+    EmitInst('LP', '0');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_CPE16'#9'; Compare for equal');
+    EmitInst('CALL', 'LIB_CPE16', 'Compare for equal');
     addlib(CPE16);
   end
   else
   begin
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'LP'#9'3');
-    writln(#9'CPMA'#9#9'; Compare for equal');
-    {writln( #9'RA')}writln(#9'LIA'#9'0');
-    writln(#9'JRNZP'#9'2');
-    writln(#9'DECA');
+    EmitInst('LP', '3');
+    EmitInstComment('CPMA', 'Compare for equal');
+    {EmitInst('RA')}
+    EmitInst('LIA', '0');
+    EmitInst('JRNZP', '2');
+    EmitInst('DECA');
   end;
-  writln('');
+  EmitBlankLine;
 end;
 
 
@@ -954,31 +1018,32 @@ procedure CompNotEqual;
 begin
   if optype = word then
   begin
-    writln(#9'LP'#9'0');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM');
-    writln(#9'POP');
+    EmitInst('LP', '0');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_CPNE16'#9'; Compare not equal');
+    EmitInst('CALL', 'LIB_CPNE16', 'Compare not equal');
     addlib(CPNE16);
   end
   else
   begin
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'LP'#9'3');
-    writln(#9'CPMA'#9#9'; Compare for not equal');
-    {writln( #9'RA')}writln(#9'LIA'#9'0');
-    writln(#9'JRZP'#9'2');
-    writln(#9'DECA');
+    EmitInst('LP', '3');
+    EmitInstComment('CPMA', 'Compare for not equal');
+    {EmitInst('RA')}
+    EmitInst('LIA', '0');
+    EmitInst('JRZP', '2');
+    EmitInst('DECA');
   end;
-  writln('');
+  EmitBlankLine;
 end;
 
 
@@ -989,32 +1054,33 @@ procedure CompGrOrEq;
 begin
   if optype = word then
   begin
-    writln(#9'LP'#9'0');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM');
-    writln(#9'POP');
+    EmitInst('LP', '0');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_CPGE16'#9'; Compare for Greater or Equal');
+    EmitInst('CALL', 'LIB_CPGE16', 'Compare for Greater or Equal');
     addlib(CPGE16);
   end
   else
   begin
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'EXAB');
-    writln(#9'LP'#9'3');
-    writln(#9'CPMA'#9#9'; Compare for Greater or Equal');
-    {writln( #9'RA')}writln(#9'LIA'#9'0');
-    writln(#9'JRCP'#9'2');
-    writln(#9'DECA');
+    EmitInst('EXAB');
+    EmitInst('LP', '3');
+    EmitInstComment('CPMA', 'Compare for Greater or Equal');
+    {EmitInst('RA')}
+    EmitInst('LIA', '0');
+    EmitInst('JRCP', '2');
+    EmitInst('DECA');
   end;
-  writln('');
+  EmitBlankLine;
 end;
 
 
@@ -1025,31 +1091,32 @@ procedure CompSmOrEq;
 begin
   if optype = word then
   begin
-    writln(#9'LP'#9'0');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM');
-    writln(#9'POP');
+    EmitInst('LP', '0');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_CPSE16'#9'; Compare for smaller or equal');
+    EmitInst('CALL', 'LIB_CPSE16', 'Compare for smaller or equal');
     addlib(CPSE16);
   end
   else
   begin
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'LP'#9'3');
-    writln(#9'CPMA'#9#9'; Compare for smaller or equal');
-    {writln( #9'RA')}writln(#9'LIA'#9'0');
-    writln(#9'JRCP'#9'2');
-    writln(#9'DECA');
+    EmitInst('LP', '3');
+    EmitInstComment('CPMA', 'Compare for smaller or equal');
+    {EmitInst('RA')}
+    EmitInst('LIA', '0');
+    EmitInst('JRCP', '2');
+    EmitInst('DECA');
   end;
-  writln('');
+  EmitBlankLine;
 end;
 
 
@@ -1060,31 +1127,31 @@ procedure CompGreater;
 begin
   if optype = word then
   begin
-    writln(#9'LP'#9'0');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM');
-    writln(#9'POP');
+    EmitInst('LP', '0');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_CPG16'#9'; Compare for greater');
+    EmitInst('CALL', 'LIB_CPG16', 'Compare for greater');
     addlib(CPG16);
   end
   else
   begin
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'LP'#9'3');
-    writln(#9'CPMA'#9#9'; Compare for greater');
-    {writln( #9'RA')}writln(#9'LIA'#9'0');
-    writln(#9'JRNCP'#9'2');
-    writln(#9'DECA');
+    EmitInst('LP', '3');
+    EmitInstComment('CPMA', 'Compare for greater');
+    {EmitInst('RA')}EmitInst('LIA', '0');
+    EmitInst('JRNCP', '2');
+    EmitInst('DECA');
   end;
-  writln('');
+  EmitBlankLine;
 end;
 
 
@@ -1095,32 +1162,33 @@ procedure CompSmaller;
 begin
   if optype = word then
   begin
-    writln(#9'LP'#9'0');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM');
-    writln(#9'POP');
+    EmitInst('LP', '0');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_CPS16'#9'; Compare for smaller');
+    EmitInst('CALL', 'LIB_CPS16', 'Compare for smaller');
     addlib(CPS16);
   end
   else
   begin
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'EXAB');
-    writln(#9'LP'#9'3');
-    writln(#9'CPMA'#9#9'; Compare for smaller');
-    {writln( #9'RA')}writln(#9'LIA'#9'0');
-    writln(#9'JRNCP'#9'2');
-    writln(#9'DECA');
+    EmitInst('EXAB');
+    EmitInst('LP', '3');
+    EmitInstComment('CPMA', 'Compare for smaller');
+    {EmitInst('RA')}
+    EmitInst('LIA', '0');
+    EmitInst('JRNCP', '2');
+    EmitInst('DECA');
   end;
-  writln('');
+  EmitBlankLine;
 end;
 
 {---------------------------------------------------------------}
@@ -1128,7 +1196,7 @@ end;
 
 procedure BranchAbs(L: string);
 begin
-  writln(#9'JP'#9 + L);
+  EmitInst('JP', L);
 end;
 
 {---------------------------------------------------------------}
@@ -1136,7 +1204,7 @@ end;
 
 procedure Branch(L: string);
 begin
-  writln(#9'RJMP'#9 + L);
+  EmitInst('RJMP', L);
 end;
 
 
@@ -1145,9 +1213,9 @@ end;
 
 procedure BranchFalse(L: string);
 begin
-  writln(#9'TSIA'#9'255'#9'; Branch if false');
-  writln(#9'JRZP'#9 + L);
-  writln('');
+  EmitInst('TSIA', '255', 'Branch if false');
+  EmitInst('JRZP', L);
+  EmitBlankLine;
 end;
 
 {---------------------------------------------------------------}
@@ -1155,9 +1223,9 @@ end;
 
 procedure BranchAbsFalse(L: string);
 begin
-  writln(#9'TSIA'#9'255'#9'; Branch if false');
-  writln(#9'JPZ'#9 + L);
-  writln('');
+  EmitInst('TSIA', '255', 'Branch if false');
+  EmitInst('JPZ', L);
+  EmitBlankLine;
 end;
 
 {--------------------------------------------------------------}
@@ -1167,46 +1235,46 @@ procedure NotIt;
 begin
   if optype = word then
   begin
-    writln(#9'LP'#9'1');
-    writln(#9'ORIM'#9'255');
-    writln(#9'LP'#9'0');
-    writln(#9'ORIM'#9'255');
-    writln(#9'SBB'#9#9'; Negate');
-    writln(#9'LP'#9'1');
-    writln(#9'LDM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'0');
-    writln(#9'LDM');
+    EmitInst('LP', '1');
+    EmitInst('ORIM', '255');
+    EmitInst('LP', '0');
+    EmitInst('ORIM', '255');
+    EmitInstComment('SBB', 'Negate');
+    EmitInst('LP', '1');
+    EmitInst('LDM');
+    EmitInst('EXAB');
+    EmitInst('LP', '0');
+    EmitInst('LDM');
   end
   else
   begin
-    writln(#9'LIB'#9'0');
-    writln(#9'LP'#9'3');
-    writln(#9'SBM'#9#9'; Negate');
-    writln(#9'EXAB');
+    EmitInst('LIB', '0');
+    EmitInst('LP', '3');
+    EmitInstComment('SBM', 'Negate');
+    EmitInst('EXAB');
   end;
 {    if optype = word then
     begin
-        writln( #9'LP'#9'0');
-        writln( #9'EXAM');
-        writln( #9'LP'#9'1');
-        writln( #9'EXAB');
-        writln( #9'EXAM');
-        writln( #9'LIA'#9'255');
-        writln( #9'SBM'#9#9'; NOT HB');
-        writln( #9'EXAB');
-        writln( #9'EXAM');
-        writln( #9'EXAB');
-        writln( #9'LP'#9'0');
-        writln( #9'SBM'#9#9'; NOT LB');
-        writln( #9'EXAM');
+        EmitInst('LP', '0');
+        EmitInst('EXAM');
+        EmitInst('LP', '1');
+        EmitInst('EXAB');
+        EmitInst('EXAM');
+        EmitInst('LIA', '255');
+        EmitInstComment('SBM', 'NOT HB');
+        EmitInst('EXAB');
+        EmitInst('EXAM');
+        EmitInst('EXAB');
+        EmitInst('LP', '0');
+        EmitInstComment('SBM', 'NOT LB');
+        EmitInst('EXAM');
     end else
     begin
-        writln( #9'EXAB');
-        writln( #9'LIA'#9'255');
-        writln( #9'LP'#9'3');
-  writln( #9'SBM'#9#9'; NOT');
-        writln( #9'EXAB');
+        EmitInst('EXAB');
+        EmitInst('LIA', '255');
+        EmitInst('LP', '3');
+        EmitInstComment('SBM', 'NOT');
+        EmitInst('EXAB');
     end;}
 end;
 
@@ -1220,25 +1288,25 @@ procedure Negate;
 begin
   if optype = word then
   begin
-    writln(#9'LP'#9'1');
-    writln(#9'ORIM'#9'255');
-    writln(#9'LP'#9'0');
-    writln(#9'ORIM'#9'255');
-    writln(#9'SBB'#9#9'; Negate');
-    writln(#9'LP'#9'1');
-    writln(#9'LDM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'0');
-    writln(#9'LDM');
+    EmitInst('LP', '1');
+    EmitInst('ORIM', '255');
+    EmitInst('LP', '0');
+    EmitInst('ORIM', '255');
+    EmitInstComment('SBB', 'Negate');
+    EmitInst('LP', '1');
+    EmitInst('LDM');
+    EmitInst('EXAB');
+    EmitInst('LP', '0');
+    EmitInst('LDM');
   end else if optype = floatp then
   begin
-    writln(#9' ; TO-DO? Negate a floating point');
+    EmitComment('TO-DO? Negate a floating point');
   end else
   begin
-    writln(#9'LIB'#9'0');
-    writln(#9'LP'#9'3');
-    writln(#9'SBM'#9#9'; Negate');
-    writln(#9'EXAB');
+    EmitInst('LIB', '0');
+    EmitInst('LP', '3');
+    EmitInstComment('SBM', 'Negate');
+    EmitInst('EXAB');
   end;
 end;
 {--------------------------------------------------------------}
@@ -1251,34 +1319,34 @@ procedure PopOr;
 begin
   if optype = word then
   begin
-    writln(#9'LP'#9'0');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM');
-    writln(#9'POP');
+    EmitInst('LP', '0');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'ORMA'#9#9'; OR HB');
-    writln(#9'LP'#9'0');
-    writln(#9'POP');
+    EmitInstComment('ORMA', 'OR HB');
+    EmitInst('LP', '0');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'ORMA'#9#9'; OR LB');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
+    EmitInstComment('ORMA', 'OR LB');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
   end else if optype = floatp then
   begin
-    writln(#9' ; !!! USUPPORTED Floating-point OR');
+    EmitComment('!!! USUPPORTED Floating-point OR');
   end else
   begin
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'LP'#9'3');
-    writln(#9'ORMA'#9#9'; OR');
-    writln(#9'EXAB');
+    EmitInst('LP', '3');
+    EmitInstComment('ORMA', 'OR');
+    EmitInst('EXAB');
   end;
 end;
 
@@ -1289,28 +1357,28 @@ procedure PopXor;
 begin
   if optype = word then
   begin
-    writln(#9'LP'#9'0');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM');
-    writln(#9'POP');
+    EmitInst('LP', '0');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_XOR16'#9'; XOR');
+    EmitInst('CALL', 'LIB_XOR16', 'XOR');
     addlib(XOR16);
     addlib(XOR8);
   end else if optype = floatp then
   begin
-    writln(#9' ; !!! USUPPORTED Floating-point XOR');
+    EmitComment('!!! UNSUPPORTED Floating-point XOR');
   end else
   begin
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_XOR8'#9'; XOR');
+    EmitInst('CALL', 'LIB_XOR8', 'XOR');
     addlib(XOR8);
   end;
 end;
@@ -1324,28 +1392,28 @@ procedure PopSL;
 begin
   if optype = word then
   begin
-    writln(#9'LP'#9'0');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM');
-    writln(#9'POP');
+    EmitInst('LP', '0');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_SL16'#9'; SL');
+    EmitInst('CALL', 'LIB_SL16', 'Shift left');
     addlib(SL16);
   end else if optype = floatp then
   begin
-    writln(#9' ; !!! USUPPORTED Floating-point Shift');
+    EmitComment('!!! UNSUPPORTED Floating-point Shift');
   end
   else
   begin
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_SL8'#9'; Shift left');
+    EmitInst('CALL', 'LIB_SL8', 'Shift left');
     addlib(SL8);
   end;
 end;
@@ -1359,26 +1427,26 @@ procedure PopSR;
 begin
   if optype = word then
   begin
-    writln(#9'LP'#9'0');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM');
-    writln(#9'POP');
+    EmitInst('LP', '0');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_SR16'#9'; SR');
+    EmitInst('CALL', 'LIB_SR16', 'Shift right');
     addlib(SR16);
   end else if optype = floatp then
   begin
-    writln(#9' ; !!! UNSUPPORTED Floating-point Shift');
+    EmitComment('!!! UNSUPPORTED Floating-point Shift');
   end else begin
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_SR8'#9'; Shift right');
+    EmitInst('CALL', 'LIB_SR8', 'Shift right');
     addlib(SR8);
   end;
 end;
@@ -1392,29 +1460,29 @@ procedure PopMod;
 begin
   if optype = word then
   begin
-    writln(#9'LP'#9'0');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM');
-    writln(#9'POP');
+    EmitInst('LP', '0');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_MOD16'#9'; Modulo');
+    EmitInst('CALL', 'LIB_MOD16', 'Modulo');
     addlib(MOD16);
   end
   else if optype = floatp then
   begin
-    writln(#9' TO DO - Float Modulo');
+    EmitComment('TO DO - Float Modulo');
   end else
   begin
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_DIV8'#9'; Modulo');
-    writln(#9'EXAB');
+    EmitInst('CALL', 'LIB_DIV8', 'Modulo');
+    EmitInst('EXAB');
     addlib(DIVMOD8);
   end;
 end;
@@ -1428,47 +1496,49 @@ procedure PopAnd;
 begin
   if optype = word then
   begin
-    writln(#9'LP'#9'0');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM');
-    writln(#9'POP');
+    EmitInst('LP', '0');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'ANMA'#9#9'; AND HB');
-    writln(#9'LP'#9'0');
-    writln(#9'POP');
+    EmitInstComment('ANMA', 'AND HB');
+    EmitInst('LP', '0');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'ANMA'#9#9'; AND LB');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
+    EmitInstComment('ANMA', 'AND LB');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
   end else if optype = floatp then
   begin
-    writln(#9' ; !!! UNSUPPORTED Floating-point AND');
+    EmitComment('!!! UNSUPPORTED Floating-point AND');
   end else
   begin
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'LP'#9'3');
-    writln(#9'ANMA'#9#9'; AND');
-    writln(#9'EXAB');
+    EmitInst('LP', '3');
+    EmitInstComment('ANMA', 'AND');
+    EmitInst('EXAB');
   end;
 end;
+
 {--------------------------------------------------------------}
 // to review and verify !
 procedure PopFloat;
 var i: integer;
 begin
-    writln(#9'LP 0x1F ; Pop 8 bytes, to Yreg'); /// Why YReg ???
+    EmitInst('LP', '0x1F', 'Pop 8 bytes, to Yreg');
     // Need to make a smarter ASM block! like Push
     for i := 0 to 7 do begin
-        writln(#9'POP'); dec(pushcnt);
-        writln(#9'EXAM');
-        writln(#9'DECP');  // should we go up?
+        EmitInst('POP');
+        dec(pushcnt);
+        EmitInst('EXAM');
+        EmitInst('DECP');  // should we go up?
     end;
 end;
 
@@ -1480,34 +1550,34 @@ var lb: String;
 begin
   if optype = word then
   begin
-    writln(#9'PUSH ; word (A, then B)');
+    EmitInst('PUSH', '', 'word (A, then B)');
     Inc(pushcnt);
-    writln(#9'EXAB');
-    writln(#9'PUSH');
+    EmitInst('EXAB');
+    EmitInst('PUSH');
     Inc(pushcnt);
   end
   else if optype = floatp then
   begin
-    writln(#9'LP 0x'+IntToHex(FloatXReg,2)+' ; float');
-    writln(#9'LIJ 0x08');
+    EmitInst('LP', '0x'+IntToHex(FloatXReg,2), 'float');
+    EmitInst('LIJ', '0x08');
     lb := NewLabel;
     PostLabel(lb);
-    writln(#9'LDM');
-    writln(#9'PUSH'); inc(pushcnt);
-    writln(#9'INCP');
-    writln(#9'DECJ');
-    writln(#9'JRNZM '+ lb);
+    EmitInst('LDM');
+    EmitInst('PUSH'); inc(pushcnt);
+    EmitInst('INCP');
+    EmitInst('DECJ');
+    EmitInst('JRNZM', lb);
 {
     for i := 0 to 7 do begin
-      writln(#9'LDM');
-      writln(#9'PUSH'); inc(pushcnt);
-      writln(#9'INCP');
+      EmitInst('LDM');
+      EmitInst('PUSH'); inc(pushcnt);
+      EmitInst('INCP');
     end;
 }
   end
   else  // byte or char
   begin
-    writln(#9'PUSH ; byte');
+    EmitInst('PUSH', '', 'byte');
     Inc(pushcnt);
   end;
 end;
@@ -1520,46 +1590,46 @@ procedure PopAdd;
 begin
   if optype = word then
   begin
-    writln(#9'LP'#9'0');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM');
-    writln(#9'POP');
+    EmitInst('LP', '0');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'EXAB');
-    writln(#9'POP'); dec(pushcnt);
-    //      writln( #9'EXAB');
-    writln(#9'LP'#9'0');
-    writln(#9'ADB'#9#9'; Addition');
-    writln(#9'LP'#9'1');
-    writln(#9'LDM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'0');
-    writln(#9'LDM');
+    EmitInst('EXAB');
+    EmitInst('POP'); dec(pushcnt);
+    //      EmitInst('EXAB');
+    EmitInst('LP', '0');
+    EmitInstComment('ADB', 'Addition');
+    EmitInst('LP', '1');
+    EmitInst('LDM');
+    EmitInst('EXAB');
+    EmitInst('LP', '0');
+    EmitInst('LDM');
   end
   else if optype = floatp then
   begin
-    writln(#9'; PopAdd float');
+    EmitComment('PopAdd float');
     PopFloat;
-    writln( #9'LP 0x10 ; FloatXReg --> Xreg; (Q) -> (P), I+1 times' );
-    writln( #9'LIQ 0x'+IntToHex(FloatXReg,2) );
-    writln( #9'LII 7'); // 8 bytes
-    writln( #9'MVW');
+    EmitInst('LP', '0x10', 'FloatXReg --> Xreg; (Q) -> (P), I+1 times');
+    EmitInst('LIQ', '0x'+IntToHex(FloatXReg,2));
+    EmitInst('LII', '7');
+    EmitInst('MVW');
     // Floating point addition
-    writln( #9'CALL 0x10C2 ; Xreg + Yreg -> Xreg ( PC-1403 only? )');
-    writln( #9'LP 0x'+IntToHex(FloatXReg,2)+' ; Xreg --> FloatXReg; (Q) -> (P), I+1 times' );
-    writln( #9'LIQ 0x10' );
-    writln( #9'LII 7'); // 8 bytes
-    writln( #9'MVW');
+    EmitInst('CALL', '0x10C2', 'Xreg + Yreg -> Xreg ( PC-1403 only? )');
+    EmitInst('LP', '0x'+IntToHex(FloatXReg,2), 'Xreg --> FloatXReg; (Q) -> (P), I+1 times');
+    EmitInst('LIQ', '0x10');
+    EmitInst('LII', '7');
+    EmitInst('MVW');
   end else
   begin
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'LP'#9'3');
-    writln(#9'ADM'#9#9'; Addition');
-    writln(#9'EXAB');
+    EmitInst('LP', '3');
+    EmitInstComment('ADM', 'Addition');
+    EmitInst('EXAB');
   end;
 end;
 
@@ -1571,45 +1641,45 @@ procedure PopSub;
 begin
   if optype = word then
   begin
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM');
-    writln(#9'POP');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'EXAM');
-    writln(#9'LP'#9'0');
-    writln(#9'EXAM');
-    writln(#9'POP');
+    EmitInst('EXAM');
+    EmitInst('LP', '0');
+    EmitInst('EXAM');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'EXAM');
-    writln(#9'SBB'#9#9'; Subtraction');
-    writln(#9'LP'#9'1');
-    writln(#9'LDM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'0');
-    writln(#9'LDM');
+    EmitInst('EXAM');
+    EmitInstComment('SBB', 'Subtraction');
+    EmitInst('LP', '1');
+    EmitInst('LDM');
+    EmitInst('EXAB');
+    EmitInst('LP', '0');
+    EmitInst('LDM');
   end else if optype = floatp then
   begin
-    writln(#9'; PopSub float');
+    EmitComment('PopSub float');
     PopFloat;
-    writln( #9'LP 0x10 ; FloatXReg --> Xreg; (Q) -> (P), I+1 times' );
-    writln( #9'LIQ 0x'+IntToHex(FloatXReg,2) );
-    writln( #9'LII 7'); // 8 bytes
-    writln( #9'MVW');
+    EmitInst('LP', '0x10', 'FloatXReg --> Xreg; (Q) -> (P), I+1 times');
+    EmitInst('LIQ', '0x'+IntToHex(FloatXReg,2));
+    EmitInst('LII', '7');
+    EmitInst('MVW');
     // Floating point subtraction
-    writln( #9'CALL 0x10D8 ; Yreg - Xreg -> Xreg ( PC-1403 only? )');
-    writln( #9'LP 0x'+IntToHex(FloatXReg,2)+' ; Xreg --> FloatXReg; (Q) -> (P), I+1 times' );
-    writln( #9'LIQ 0x10' );
-    writln( #9'LII 7'); // 8 bytes
-    writln( #9'MVW');
+    EmitInst('CALL', '0x10D8', 'Yreg - Xreg -> Xreg ( PC-1403 only? )');
+    EmitInst('LP', '0x'+IntToHex(FloatXReg,2), 'Xreg --> FloatXReg; (Q) -> (P), I+1 times');
+    EmitInst('LIQ', '0x10');
+    EmitInst('LII', '7');
+    EmitInst('MVW');
   end else
   begin
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'LP'#9'3');
-    writln(#9'EXAB');
-    writln(#9'SBM'#9#9'; Subtraction');
-    writln(#9'EXAB');
+    EmitInst('LP', '3');
+    EmitInst('EXAB');
+    EmitInstComment('SBM', 'Subtraction');
+    EmitInst('EXAB');
   end;
 end;
 {--------------------------------------------------------------}
@@ -1622,38 +1692,38 @@ procedure PopMul;
 begin
   if optype = word then
   begin
-    writln(#9'LP'#9'0');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM');
-    writln(#9'POP');
+    EmitInst('LP', '0');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_MUL16'#9'; Multiplication');
+    EmitInst('CALL', 'LIB_MUL16', 'Multiplication');
     addlib(MUL16);
   end else if optype = floatp then
   begin
-    writln(#9'; PopMul float');
+    EmitComment('PopMul float');
     PopFloat;
-    writln( #9'LP 0x10 ; FloatXReg --> Xreg; (Q) -> (P), I+1 times' );
-    writln( #9'LIQ 0x'+IntToHex(FloatXReg,2) );
-    writln( #9'LII 7'); // 8 bytes
-    writln( #9'MVW');
+    EmitInst('LP', '0x10', 'FloatXReg --> Xreg; (Q) -> (P), I+1 times');
+    EmitInst('LIQ', '0x'+IntToHex(FloatXReg,2));
+    EmitInst('LII', '7');
+    EmitInst('MVW');
     // Floating point multiplication
-    writln( #9'CALL 0x10E1 ; Yreg * Xreg -> Xreg ( PC-1403 only? )');
-    writln( #9'LP 0x'+IntToHex(FloatXReg,2)+' ; Xreg --> FloatXReg; (Q) -> (P), I+1 times' );
-    writln( #9'LIQ 0x10' );
-    writln( #9'LII 7'); // 8 bytes
-    writln( #9'MVW');
+    EmitInst('CALL', '0x10E1', 'Yreg * Xreg -> Xreg ( PC-1403 only? )');
+    EmitInst('LP', '0x'+IntToHex(FloatXReg,2), 'Xreg --> FloatXReg; (Q) -> (P), I+1 times');
+    EmitInst('LIQ', '0x10');
+    EmitInst('LII', '7');
+    EmitInst('MVW');
   end else
   begin
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_MUL8'#9'; Multiplication');
+    EmitInst('CALL', 'LIB_MUL8', 'Multiplication');
     addlib(MUL8);
   end;
 end;
@@ -1666,39 +1736,39 @@ begin
   // TODO - HANDLE RUNTIME ERRORS! (EG. DIV BY ZERO)
   if optype = word then
   begin
-    // 16 bit: B:A = B:A / J:I
-    writln(#9'LP'#9'0');
-    writln(#9'EXAM'); // A -> I
-    writln(#9'EXAB');
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM'); // B -> J
-    writln(#9'POP');
+    EmitComment ( '16 bit division B:A / J:I -> B:A' );
+    EmitInst('LP', '0');
+    EmitInst('EXAM');  // A -> I
+    EmitInst('EXAB');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');  // B -> J
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_DIV16'#9'; Division'); // Carry set on error
+    EmitInst('CALL', 'LIB_DIV16', 'Division');
     addlib(DIV16);
   end else if optype = floatp then
   begin
-    writln(#9'; PopDiv float');
+    EmitComment('PopDiv float');
     PopFloat;
-    writln( #9'LP 0x10 ; FloatXReg --> Xreg; (Q) -> (P), I+1 times' );
-    writeln( #9'LIQ 0x'+IntToHex(FloatXReg,2) );
-    writeln( #9'LII 7'); // 8 bytes
-    writeln( #9'MVW');
+    EmitInst('LP', '0x10', 'FloatXReg --> Xreg; (Q) -> (P), I+1 times');
+    EmitInst('LIQ', '0x'+IntToHex(FloatXReg,2));
+    EmitInst('LII', '7');
+    EmitInst('MVW');
     // Floating point division
-    writeln( #9'CALL 0x10EA ; Yreg / Xreg -> Xreg ( PC-1403 only? )');
-    writln( #9'LP 0x'+IntToHex(FloatXReg,2)+' ; Xreg --> FloatXReg; (Q) -> (P), I+1 times' );
-    writln( #9'LIQ 0x10' );
-    writln( #9'LII 7'); // 8 bytes
-    writln( #9'MVW');
+    EmitInst('CALL', '0x10EA', 'Yreg / Xreg -> Xreg ( PC-1403 only? )');
+    EmitInst('LP', '0x'+IntToHex(FloatXReg,2), 'Xreg --> FloatXReg; (Q) -> (P), I+1 times');
+    EmitInst('LIQ', '0x10');
+    EmitInst('LII', '7');
+    EmitInst('MVW');
   end else
   begin
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_DIV8'#9'; Division');
+    EmitInst('CALL', 'LIB_DIV8', 'Division');
     addlib(DIVMOD8);
   end;
 end;

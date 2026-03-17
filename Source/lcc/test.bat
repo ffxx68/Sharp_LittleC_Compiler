@@ -70,6 +70,8 @@ call :RUN_TEST "Array" "Array"
 call :RUN_TEST "bounce" "bounce"
 call :RUN_TEST "Loop" "Loop"
 call :RUN_TEST "Math" "Math"
+call :RUN_TEST "pointer" "pointer"
+
 
 :ALL_DONE
 echo.

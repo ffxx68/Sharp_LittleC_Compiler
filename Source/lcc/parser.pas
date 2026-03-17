@@ -1162,56 +1162,15 @@ begin
                                         error('This var ('+s+') is not a pointer!');
                                 if varlist[varfound].xram then
                                 begin
-                                        CodeGen.EmitInst('LP', '4', 'XL');
-                                        CodeGen.EmitInst('EXAM');
-                                        CodeGen.EmitInst('LP', '5', 'XH');
-                                        CodeGen.EmitInst('EXAB');
-                                        CodeGen.EmitInst('EXAM');
-                                        CodeGen.EmitInst('DX');
-                                        if varlist[varfound].pnttyp <> 'word' then
-                                        begin
-                                                CodeGen.EmitInst('IXL', '', 'Load content *'+s);
-                                        end else
-                                        begin
-                                                CodeGen.EmitInst('IXL', '', 'Load content LB *'+s);
-                                                CodeGen.EmitInst('EXAB');
-                                                CodeGen.EmitInst('IXL', '', 'Load content HB *'+s);
-                                                CodeGen.EmitInst('EXAB');
-                                        end;
+                                        CodeGen.LoadPointerContentXram(varlist[varfound].pnttyp, s);
                                 end else
                                 begin
-                                        // LIP
-                                        CodeGen.EmitInst('STP', '', 'Set P');
-                                        if varlist[varfound].pnttyp <> 'word' then
-                                        begin
-                                                CodeGen.EmitInst('LDM', '', 'Load content *'+s);
-                                        end else
-                                        begin
-                                                CodeGen.EmitInst('LDM', '', 'Load content LB *'+s);
-                                                CodeGen.EmitInst('EXAB');
-                                                CodeGen.EmitInst('INCP');
-                                                CodeGen.EmitInst('LDM', '', 'Load content HB *'+s);
-                                                CodeGen.EmitInst('EXAB');
-                                        end;
+                                        CodeGen.LoadPointerContentReg(varlist[varfound].pnttyp, s);
                                 end;
                         end else
                         if pointer = ADR then
                         begin
-                                if varlist[varfound].xram then
-                                begin
-                                        if varlist[varfound].address = -1 then
-                                        begin
-                                                CodeGen.EmitInst('LIA', 'LB('+s+')', '&'+s);
-                                                CodeGen.EmitInst('LIB', 'HB('+s+')', '&'+s);
-                                        end else
-                                        begin
-                                                CodeGen.EmitInst('LIA', 'LB('+inttostr(varlist[varfound].address)+')', '&'+s);
-                                                CodeGen.EmitInst('LIB', 'HB('+inttostr(varlist[varfound].address)+')', '&'+s);
-                                        end;
-                                end else
-                                begin
-                                        CodeGen.EmitInst('LIA', inttostr(varlist[varfound].address), '&'+s);
-                                end;
+                                CodeGen.LoadAddressOf(varlist[varfound].address, s, varlist[varfound].xram);
                         end else
                                 LoadVariable(s);
                 end else if findproc(s) then
