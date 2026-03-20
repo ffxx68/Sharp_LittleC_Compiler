@@ -346,7 +346,7 @@ Phase 4 — Reduce Parser: separate syntax from emission (4-6 days)
 **Step 4.1.11 — Fix "Possible Stack corruption!" and Float Store/Load functions**
 
 - Preexisting issue (not caused by refactor)
-- Issue verified in Demos\Array for example
+- Issue fixed in Demos\Array (parser.pas:1724-1727), but persisting in Demos\16bitdiv
 - Need to add proper stack cleanup before procedure RTN
 - Update `removelocvars` or add cleanup in `Block` procedure ?
 - Make the fix in 'main' branch first, then re-generate the *reference* 'lcc.exe'
