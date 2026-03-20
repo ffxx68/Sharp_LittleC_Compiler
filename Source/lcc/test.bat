@@ -51,12 +51,7 @@ if %ERRORLEVEL% neq 0 (
 )
 echo [BUILD] Success.
 
-REM --- PREPARAZIONE AMBIENTE TEST ---
-if exist "%TEST_BASE_DIR%" (
-    echo [CLEAN] Removing old test dir...
-    rmdir /s /q "%TEST_BASE_DIR%"
-)
-mkdir "%TEST_BASE_DIR%"
+
 
 REM --- ESECUZIONE TEST ---
 if not "%~1"=="" (
@@ -106,13 +101,15 @@ set /a "TOTAL_TESTS+=1"
 
 echo.
 echo ------------------------------------------
-echo TEST: %SRC_NAME%
+echo TEST: "%SRC_NAME%"
 echo ------------------------------------------
 
+REM --- PREPARAZIONE AMBIENTE TEST ---
+echo [SETUP] Recreating test dir...
+if exist "%CURRENT_TEST_DIR%" (
+    rmdir /s /q "%CURRENT_TEST_DIR%"
+)
 mkdir "%CURRENT_TEST_DIR%"
-
-REM Copia sorgenti
-echo [SETUP] Creating test dir for %SRC_NAME%...
 copy "%DEMOS_DIR%\%SRC_NAME%\main.c" "%CURRENT_TEST_DIR%\main.c" >nul
 if exist "%DEMOS_DIR%\%SRC_NAME%\*.h" copy "%DEMOS_DIR%\%SRC_NAME%\*.h" "%CURRENT_TEST_DIR%\" >nul
 
