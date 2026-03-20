@@ -955,7 +955,7 @@ var s, lb: string;
 var f: float;
 begin
 
-    if optype = floatp then
+    if optype = otFloat then
     begin
         f := mathparse ( n, 0 );
         if not (f = 0) then
@@ -975,7 +975,7 @@ begin
           writln( #9'FILM' );
         end;
     end else
-    if optype = word then
+    if optype = otWord then
     begin
         writln( #9'LIA'#9'LB('+n+')'#9'; Load word constant LB');
         writln( #9'LIB'#9'HB('+n+')'#9'; Load word constant HB');
@@ -1038,15 +1038,15 @@ begin
                             writln( #9'LIDP'#9+name+#9'; Load variable '+name);
                     writln( #9'LDD');
                 end;
-                if optype = floatp then
+                if optype = otFloat then
                    // TO DO -casting ?
                    Error ( 'Unsupported load float to byte' );
-                if optype = word then
+                if optype = otWord then
                    // cast byte to word
                    writln( #9'LIB'#9'0');
             end else if (typ='word') then
             begin
-                if optype = floatp then
+                if optype = otFloat then
                    // TO DO - casting ?
                    Error ( 'Unsupported load float to word' );
                 if not xr then
@@ -1091,7 +1091,7 @@ begin
                 end;
             end else if (typ='float') then
             begin
-                if not ( optype = floatp ) then
+                if not ( optype = otFloat ) then
                    Error ( 'Unsupported load other types to float' );
                 if not xr then
                 begin
@@ -1322,7 +1322,7 @@ begin
   end
   else if IsDigit(Look) then
   begin
-    if optype = floatp then
+    if optype = otFloat then
         LoadConstant(GetFloat)
     else
         LoadConstant(GetNumber);
@@ -1512,7 +1512,7 @@ begin
                 if find_text(varlist[i].varname, tok) > 0 then
                         if (varlist[i].typ = 'word')
                         or ( ( varlist[i].pointer ) and (varlist[i].pnttyp = 'word') ) then
-                           optype := word;
+                           optype := otWord;
         i := 1;
         while i < length(Tok) do
         begin
@@ -1572,11 +1572,11 @@ begin
             begin
                 if ( not varlist[varfound].pointer and (varlist[varfound].typ = 'word') )
                 or ( varlist[varfound].pointer and (varlist[varfound].pnttyp = 'word') ) then
-                        optype := word;
+                        optype := otWord;
             end else
-            if varlist[varfound].typ = 'word' then optype := word
-            else if varlist[varfound].typ = 'float' then optype := floatp
-            else optype := byte;
+            if varlist[varfound].typ = 'word' then optype := otWord
+            else if varlist[varfound].typ = 'float' then optype := otFloat
+            else optype := otByte;
         end else
             error('Var '+name+' not declared!');
         s := '';
@@ -1641,7 +1641,7 @@ begin
                         if ( not varlist[i].pointer and (varlist[i].typ = 'word') )
                         or ( varlist[i].pointer and (varlist[i].typ = 'float') )
                         or ( varlist[i].pointer and (varlist[i].pnttyp = 'word') ) then
-                                optype := word;
+                                optype := otWord;
                         fv := true;
                 end;
 
@@ -1722,8 +1722,8 @@ begin
 				end;
 		end;
 		if s <> '' then begin
-			writln(#9'POP'#9'; bilanciamento indice array');
-			dec(pushcnt);
+            writln(#9'POP'#9'; pop array index');
+            dec(pushcnt);
 		end;
 end;
 {--------------------------------------------------------------}
@@ -1967,9 +1967,9 @@ begin
                 Rd(Look, tok); tok := trim(tok);
                 //isword := proclist[currproc].returnisword;
                 if ( proclist[currproc].returntype = 'byte' )
-                or ( proclist[currproc].returntype = 'char' ) then optype := byte
-                else if proclist[currproc].returntype = 'word' then optype := word
-                else if proclist[currproc].returntype = 'float' then optype := floatp;
+                or ( proclist[currproc].returntype = 'char' ) then optype := otByte
+                else if proclist[currproc].returntype = 'word' then optype := otWord
+                else if proclist[currproc].returntype = 'float' then optype := otFloat;
                 Expression;
         end;
         writln( #9'RTN'#9#9'; end of ' + proclist[currproc].procname);
@@ -2176,15 +2176,15 @@ begin
                                    or ( ProcList[ProcFound].partyp[c] = 'byte') then
                                 begin
                                     isword := false; inc(a);
-                                    optype := byte;
+                                    optype := otByte;
                                 end else if ProcList[ProcFound].partyp[c] = 'word' then
                                 begin
                                     isword := true; inc(a, 2);
-                                    optype := word;
+                                    optype := otWord;
                                 end else if ProcList[ProcFound].partyp[c] = 'float' then
                                 begin
                                     isword := false; inc(a, 8);
-                                    optype := floatp;
+                                    optype := otFloat;
                                 end;
                                 Expression;
                                 writln( #9'; '+ProcList[ProcFound].parname[c]+' ('+ProcList[ProcFound].partyp[c]+')'  );
@@ -2232,19 +2232,19 @@ begin
                                 (ProcList[ProcFound].loctyp[c] = 'byte')) then
                             begin
                                 isword := false;
-                                optype := byte;
+                                optype := otByte;
                                 inc(a);
                                 inc(aa);
                             end else if ProcList[ProcFound].loctyp[c] = 'word' then
                             begin
                                 isword := true;
-                                optype := word;
+                                optype := otWord;
                                 inc(a, 2);
                                 inc(aa, 2);
                             end else if ProcList[ProcFound].loctyp[c] = 'float' then
                             begin
                                 isword := false;
-                                optype := floatp;
+                                optype := otFloat;
                                 inc(a, 8);
                                 inc(aa, 8);
                             end;
@@ -2555,7 +2555,7 @@ begin
                     begin
                             Error ( 'Float return value unsupported (yet)' );
                             rettyp := name2;
-                            optype := floatp;
+                            optype := otFloat;
                             Name := ExtrWord(Tok);
                             hasret := true;
                     end else
@@ -2563,14 +2563,14 @@ begin
                     begin
                             rettyp := name2;
                             isword := true;
-                            optype := word;
+                            optype := otWord;
                             Name := ExtrWord(Tok);
                             hasret := true;
                     end else
                     if (name2 = 'char') or (name2 = 'byte') then
                     begin
                             rettyp := name2;
-                            optype := byte;
+                            optype := otByte;
                             Name := ExtrWord(Tok);
                             hasret := true;
                     end else
