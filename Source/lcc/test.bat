@@ -112,6 +112,7 @@ echo ------------------------------------------
 mkdir "%CURRENT_TEST_DIR%"
 
 REM Copia sorgenti
+echo [SETUP] Creating test dir for %SRC_NAME%...
 copy "%DEMOS_DIR%\%SRC_NAME%\main.c" "%CURRENT_TEST_DIR%\main.c" >nul
 if exist "%DEMOS_DIR%\%SRC_NAME%\*.h" copy "%DEMOS_DIR%\%SRC_NAME%\*.h" "%CURRENT_TEST_DIR%\" >nul
 
