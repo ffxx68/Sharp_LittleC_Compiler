@@ -347,6 +347,10 @@ Phase 4 — Reduce Parser: separate syntax from emission (4-6 days)
 
 -   **Fix "Possible Stack corruption!" warning** (preexisting issue, not caused by refactor)
 
+*NOTE* - Make the fix in 'main' branch first, and re-generate the *reference* 'lcc.exe',
+then merge to `refactor_modular` branch.
+Regression validation with 'test.bat' after the fix, in `refactor_modular` -> NO_DIFF
+
 ```
 -   Float local variables allocated with PUSH are not deallocated with POP before RTN
 -   Issue exists in original compiler (verified in reference_bounce.asm.old)
@@ -359,8 +363,6 @@ Phase 4 — Reduce Parser: separate syntax from emission (4-6 days)
 -   `StoreFloatToLocal` — loop with PUSH×8
 -   `StoreFloatToXram` — LIDP + LP + LII 7 + EXWD
 -   `LoadFloatFromReg/Local/Xram`
--   Update parser.pas float handling
--   Verify: NO_DIFF
 
 **Step 4.1.12 — Stack management functions** Create in `CodeGen.pas`:
 
