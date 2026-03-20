@@ -1663,64 +1663,68 @@ begin
                 Expression;
         end;
 	if p = 0 then
-                StoreVariable(Name)
-        else if p = REF then
-        begin
-                if findvar(Name) then
-                begin
-                        if varlist[varfound].pnttyp <> 'word' then
-                        begin
-                                writln(#9'PUSH'); inc(pushcnt);
-                        end else
-                        begin
-                                writln(#9'PUSH'); inc(pushcnt);
-                                writln(#9'EXAB');
-                                writln(#9'PUSH'); inc(pushcnt);
-                        end;
-                        LoadVariable(name);
-                        if not varlist[varfound].Pointer then
-                                        error('This var ('+name+') is not a pointer!');
-                        if varlist[varfound].xram then
-                        begin
-                                        writln(#9'LP'#9'6'#9'; YL');
-                                        writln(#9'EXAM');
-                                        writln(#9'LP'#9'7'#9'; YH');
-                                        writln(#9'EXAB');
-                                        writln(#9'EXAM');
-                                        writln(#9'DY');
-                                        if varlist[varfound].pnttyp <> 'word' then
-                                        begin
-                                                writln(#9'POP'); dec(pushcnt);
-                                                writln(#9'IYS'#9#9'; Store content *'+s);
-                                        end else
-                                        begin
-                                                writln(#9'POP'); dec(pushcnt);
-                                                writln(#9'EXAB');
-                                                writln(#9'POP'); dec(pushcnt);
-                                                writln(#9'IYS'#9#9'; Store content LB *'+s);
-                                                writln(#9'EXAB');
-                                                writln(#9'IYS'#9#9'; Store content HB *'+s);
-                                        end;
-                        end else
-                        begin
-                                        // LIP
-                                        writln(#9'STP'#9#9'; Set P');
-                                        if varlist[varfound].pnttyp <> 'word' then
-                                        begin
-                                                writln(#9'POP'); dec(pushcnt);
-                                                writln(#9'EXAM'#9#9'; Store content *'+s);
-                                        end else
-                                        begin
-                                                writln(#9'POP'); dec(pushcnt);
-                                                writln(#9'EXAB');
-                                                writln(#9'POP'); dec(pushcnt);
-                                                writln(#9'EXAM'#9#9'; Store content LB *'+s);
-                                                writln(#9'EXAB');
-                                                writln(#9'EXAM'#9#9'; Store content HB *'+s);
-                                        end;
-                        end;
-                end;
-        end;
+				StoreVariable(Name)
+		else if p = REF then
+		begin
+				if findvar(Name) then
+				begin
+						if varlist[varfound].pnttyp <> 'word' then
+						begin
+								writln(#9'PUSH'); inc(pushcnt);
+						end else
+						begin
+								writln(#9'PUSH'); inc(pushcnt);
+								writln(#9'EXAB');
+								writln(#9'PUSH'); inc(pushcnt);
+						end;
+						LoadVariable(name);
+						if not varlist[varfound].Pointer then
+										error('This var ('+name+') is not a pointer!');
+						if varlist[varfound].xram then
+						begin
+										writln(#9'LP'#9'6'#9'; YL');
+										writln(#9'EXAM');
+										writln(#9'LP'#9'7'#9'; YH');
+										writln(#9'EXAB');
+										writln(#9'EXAM');
+										writln(#9'DY');
+										if varlist[varfound].pnttyp <> 'word' then
+										begin
+												writln(#9'POP'); dec(pushcnt);
+												writln(#9'IYS'#9#9'; Store content *'+s);
+										end else
+										begin
+												writln(#9'POP'); dec(pushcnt);
+												writln(#9'EXAB');
+												writln(#9'POP'); dec(pushcnt);
+												writln(#9'IYS'#9#9'; Store content LB *'+s);
+												writln(#9'EXAB');
+												writln(#9'IYS'#9#9'; Store content HB *'+s);
+										end;
+						end else
+						begin
+										// LIP
+										writln(#9'STP'#9#9'; Set P');
+										if varlist[varfound].pnttyp <> 'word' then
+										begin
+												writln(#9'POP'); dec(pushcnt);
+												writln(#9'EXAM'#9#9'; Store content *'+s);
+										end else
+										begin
+												writln(#9'POP'); dec(pushcnt);
+												writln(#9'EXAB');
+												writln(#9'POP'); dec(pushcnt);
+												writln(#9'EXAM'#9#9'; Store content LB *'+s);
+												writln(#9'EXAB');
+												writln(#9'EXAM'#9#9'; Store content HB *'+s);
+										end;
+						end;
+				end;
+		end;
+		if s <> '' then begin
+			writln(#9'POP'#9'; bilanciamento indice array');
+			dec(pushcnt);
+		end;
 end;
 {--------------------------------------------------------------}
 

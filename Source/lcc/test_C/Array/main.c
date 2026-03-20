@@ -10,5 +10,5 @@ char xram g[12] = "Hi there!";
 
 main()
 {
-	a[0] = b[0] + e[a[1]];
+	a[0] = b[0] + e[a[b[1]+f[1]] + f[2]];
 }
