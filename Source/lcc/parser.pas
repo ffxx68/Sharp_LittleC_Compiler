@@ -1174,6 +1174,51 @@ begin
                         writln( #9'ADB');
                         writln( #9'IXL'); // X -> DP; DP+1 -> DP, X; (DP) -> A
                 end;
+            end else if (typ='word') then
+            begin
+                // word array: index needs to be multiplied by 2
+                if not xr then
+                begin
+                        writln( #9'RC');
+                        writln( #9'SL'#9#9'; index*2 for word array');
+                        writln( #9'LII'#9+inttostr(adr)+#9'; Load array element from '+name);
+                        writln( #9'LP'#9'0');
+                        writln( #9'ADM');
+                        writln( #9'EXAM');
+                        writln( #9'STP');
+                        writln( #9'LDM'#9#9'; HB');
+                        writln( #9'EXAB');
+                        writln( #9'DECP');
+                        writln( #9'LDM'#9#9'; LB');
+                end else
+                begin
+                        writln( #9'RC');
+                        writln( #9'SL'#9#9'; index*2 for word array');
+                        writln( #9'PUSH'#9#9'; Load array element from '+name); inc(pushcnt);
+                        writln( #9'LP'#9'5'#9'; HB of address');
+                        if adr <> -1 then
+                        begin
+                                writln( #9'LIA'#9'HB('+inttostr(adr)+'-1)');
+                                writln( #9'EXAM');
+                                writln( #9'LP'#9'4'#9'; LB');
+                                writln( #9'LIA'#9'LB('+inttostr(adr)+'-1)');
+                        end else
+                        begin
+                                writln( #9'LIA'#9'HB('+name+'-1)');
+                                writln( #9'EXAM');
+                                writln( #9'LP'#9'4'#9'; LB');
+                                writln( #9'LIA'#9'LB('+name+'-1)');
+                        end;
+                        writln( #9'EXAM');
+                        writln( #9'POP'); dec(pushcnt);
+                        writln( #9'LIB'#9'0');
+                        writln( #9'ADB');
+                        writln( #9'DX');
+                        writln( #9'IXL'#9#9'; HB');
+                        writln( #9'EXAB');
+                        writln( #9'IXL'#9#9'; LB');
+                        writln( #9'EXAB');
+                end;
             end else if (typ='float') then
             begin
                 Error ( 'Float array loading not supported yet ' );
@@ -1721,10 +1766,7 @@ begin
 						end;
 				end;
 		end;
-		if s <> '' then begin
-            writln(#9'POP'#9'; pop array index');
-            dec(pushcnt);
-		end;
+        // Note: array index POP is handled inside StoreVariable for array access
 end;
 {--------------------------------------------------------------}
 

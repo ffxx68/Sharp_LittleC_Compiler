@@ -343,15 +343,16 @@ Phase 4 — Reduce Parser: separate syntax from emission (4-6 days)
 -   Update `Factor` procedure in parser.pas
 -   Verify: NO_DIFF ✅
 
-**Step 4.1.11 — Fix "Possible Stack corruption!" and Float Store/Load functions**
+**Step 4.1.11 — Fix "Possible Stack corruption!" warning** ✅
 
-- Preexisting issue (not caused by refactor)
-- Issue fixed in Demos\Array (parser.pas:1724-1727), but persisting in Demos\16bitdiv
-- Need to add proper stack cleanup before procedure RTN
-- Update `removelocvars` or add cleanup in `Block` procedure ?
-- Make the fix in 'main' branch first, then re-generate the *reference* 'lcc.exe'
-- Then, merge fix to `refactor_modular` branch.
-- Regression validation with `test.bat` after the merge -> NO_DIFF ?
+- Root cause identified: duplicate POP in Assignment procedure for array element access
+- In `Assignment` (parser.pas), lines 1724-1727 had an extra `POP ; pop array index` that was already handled inside `StoreVariable`
+- Fix: Removed the duplicate POP block since `StoreVariable` already manages the array index POP internally
+- Also added missing `LoadVariable` support for word array XRAM access (lines 1177-1221)
+- Verified: 16bitdiv demo now compiles without "Possible Stack corruption!" warning
+- Note: Array demo still has a separate issue with word array XRAM expression parsing (not stack-related)
+- `lcc.exe` in root updated with fix
+- Regression validation: 16bitdiv passes ✅
 
 **Step 4.1.12 — Stack management functions** Create in `CodeGen.pas`:
 
@@ -378,8 +379,91 @@ Phase 4 — Reduce Parser: separate syntax from emission (4-6 days)
 -   When `adr < 64`, use `LP`; otherwise use `LIP`
     
 -   All changes must be verified incrementally with `test.bat` → NO_DIFF against `reference_bounce.asm`
+
+---
+
+### Task 4.2: Fixing compiler issues
+
+This task addresses preexisting compiler bugs discovered during refactoring.
+
+**Step 4.2.1 — Fix word array XRAM expression parsing**
+
+**Problem description:**
+In the Array demo, the expression `a[0] = b[0] + e[1]` (where `e` is `word xram e[100]`) does not generate correct code for `e[1]`. 
+
+**Symptoms:**
+- The compiler generates `LIA e [1] ; Load byte constant e [1]` treating the entire `e[1]` as a literal string constant
+- No array access code is generated for `e[1]` (no RC, SL, address calculation, IXL sequence)
+- The addition `+ e[1]` is completely missing from the output
+
+**Root cause analysis:**
+1. In `Assignment` procedure, `forml` contains the right-hand side expression `b[0]+e[1]`
+2. The `find_text()` check at lines 1683-1690 finds `e` in `forml` and sets `fv := true`
+3. However, `Expression` is then called with the current `Look`/`tok` state which may have been modified
+4. The `Factor` procedure (lines 1375-1383) should detect array access when `Look = '['`, but this detection fails for the second term in an addition
+5. When `Add` procedure calls `Term` → `Factor`, the parser state may not correctly position `Look` at the start of `e[1]`
+
+**Files involved:**
+- `parser.pas`: `Assignment`, `Expression`, `Add`, `Term`, `Factor` procedures
+- `scanner.pas`: `GetName`, token handling
+
+**Proposed fix approach:**
+1. Add debug logging to trace parser state during expression evaluation
+2. Verify that after `Rd(Look, tok)` in `Add`, the `Look` character is correctly positioned at `e`
+3. Check if `GetName` correctly extracts `e` and leaves `Look` at `[`
+4. Ensure `LoadVariable` for word array XRAM (lines 1177-1221) is being reached
+
+**Test case:**
+```c
+#org 33000
+char a[6], b[7];
+word xram e[100];
+main() {
+    a[0] = b[0] + e[1];
+}
+```
+
+**Expected assembly output (partial):**
+```asm
+; Load b[0]
+LIB     14      ; array b address
+LP      3
+ADM
+EXAB
+STP
+LDM             ; b[0] value in A
+
+PUSH            ; save b[0] for addition
+
+; Load e[1] - word array XRAM
+LIA     1       ; index
+RC
+SL              ; index*2 for word array
+PUSH
+LP      5       ; HB of address
+LIA     HB(e-1)
+EXAM
+LP      4       ; LB
+LIA     LB(e-1)
+EXAM
+POP
+LIB     0
+ADB
+DX
+IXL             ; HB of e[1]
+EXAB
+IXL             ; LB of e[1]
+EXAB
+
+; PopAdd - add b[0] + e[1]
+...
+```
+
+**Verification:** `test.bat Array` → NO_DIFF after fix
+
+---
     
--   Task 4.2: consider introducing an AST (optional) for complex expressions.
+-   Task 4.3: consider introducing an AST (optional) for complex expressions.
     
 -   Verification: generated asm is semantically identical - Verify: NO_DIFF
     
