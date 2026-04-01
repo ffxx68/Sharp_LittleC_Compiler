@@ -100,7 +100,7 @@ procedure varfarr(Value: RawByteString; size: integer; nm: string);
 procedure varreg(Value, adr, size: integer; nm: string);
 procedure varrarr(Value: RawByteString; adr, size: integer; nm, typ: string);
 
-type OpTypes = (byte, word, floatp);
+type OpTypes = (otByte, otWord, otFloat);
 
 
 var
@@ -980,7 +980,7 @@ end;
 
 procedure CompEqual;
 begin
-  if optype = word then
+  if optype = otWord then
   begin
     EmitInst('LP', '0');
     EmitInst('EXAM');
@@ -1016,7 +1016,7 @@ end;
 
 procedure CompNotEqual;
 begin
-  if optype = word then
+  if optype = otWord then
   begin
     EmitInst('LP', '0');
     EmitInst('EXAM');
@@ -1052,7 +1052,7 @@ end;
 
 procedure CompGrOrEq;
 begin
-  if optype = word then
+  if optype = otWord then
   begin
     EmitInst('LP', '0');
     EmitInst('EXAM');
@@ -1089,7 +1089,7 @@ end;
 
 procedure CompSmOrEq;
 begin
-  if optype = word then
+  if optype = otWord then
   begin
     EmitInst('LP', '0');
     EmitInst('EXAM');
@@ -1125,7 +1125,7 @@ end;
 
 procedure CompGreater;
 begin
-  if optype = word then
+  if optype = otWord then
   begin
     EmitInst('LP', '0');
     EmitInst('EXAM');
@@ -1160,7 +1160,7 @@ end;
 
 procedure CompSmaller;
 begin
-  if optype = word then
+  if optype = otWord then
   begin
     EmitInst('LP', '0');
     EmitInst('EXAM');
@@ -1233,7 +1233,7 @@ end;
 
 procedure NotIt;
 begin
-  if optype = word then
+  if optype = otWord then
   begin
     EmitInst('LP', '1');
     EmitInst('ORIM', '255');
@@ -1253,7 +1253,7 @@ begin
     EmitInstComment('SBM', 'Negate');
     EmitInst('EXAB');
   end;
-{    if optype = word then
+{    if optype = otWord then
     begin
         EmitInst('LP', '0');
         EmitInst('EXAM');
@@ -1286,7 +1286,7 @@ end;
 
 procedure Negate;
 begin
-  if optype = word then
+  if optype = otWord then
   begin
     EmitInst('LP', '1');
     EmitInst('ORIM', '255');
@@ -1298,7 +1298,7 @@ begin
     EmitInst('EXAB');
     EmitInst('LP', '0');
     EmitInst('LDM');
-  end else if optype = floatp then
+  end else if optype = otFloat then
   begin
     EmitComment('TO-DO? Negate a floating point');
   end else
@@ -1317,7 +1317,7 @@ end;
 
 procedure PopOr;
 begin
-  if optype = word then
+  if optype = otWord then
   begin
     EmitInst('LP', '0');
     EmitInst('EXAM');
@@ -1336,7 +1336,7 @@ begin
     EmitInst('LP', '1');
     EmitInst('EXAM');
     EmitInst('EXAB');
-  end else if optype = floatp then
+  end else if optype = otFloat then
   begin
     EmitComment('!!! USUPPORTED Floating-point OR');
   end else
@@ -1355,7 +1355,7 @@ end;
 
 procedure PopXor;
 begin
-  if optype = word then
+  if optype = otWord then
   begin
     EmitInst('LP', '0');
     EmitInst('EXAM');
@@ -1370,7 +1370,7 @@ begin
     EmitInst('CALL', 'LIB_XOR16', 'XOR');
     addlib(XOR16);
     addlib(XOR8);
-  end else if optype = floatp then
+  end else if optype = otFloat then
   begin
     EmitComment('!!! UNSUPPORTED Floating-point XOR');
   end else
@@ -1390,7 +1390,7 @@ end;
 
 procedure PopSL;
 begin
-  if optype = word then
+  if optype = otWord then
   begin
     EmitInst('LP', '0');
     EmitInst('EXAM');
@@ -1404,7 +1404,7 @@ begin
     Dec(pushcnt);
     EmitInst('CALL', 'LIB_SL16', 'Shift left');
     addlib(SL16);
-  end else if optype = floatp then
+  end else if optype = otFloat then
   begin
     EmitComment('!!! UNSUPPORTED Floating-point Shift');
   end
@@ -1425,7 +1425,7 @@ end;
 
 procedure PopSR;
 begin
-  if optype = word then
+  if optype = otWord then
   begin
     EmitInst('LP', '0');
     EmitInst('EXAM');
@@ -1439,7 +1439,7 @@ begin
     Dec(pushcnt);
     EmitInst('CALL', 'LIB_SR16', 'Shift right');
     addlib(SR16);
-  end else if optype = floatp then
+  end else if optype = otFloat then
   begin
     EmitComment('!!! UNSUPPORTED Floating-point Shift');
   end else begin
@@ -1458,7 +1458,7 @@ end;
 
 procedure PopMod;
 begin
-  if optype = word then
+  if optype = otWord then
   begin
     EmitInst('LP', '0');
     EmitInst('EXAM');
@@ -1473,7 +1473,7 @@ begin
     EmitInst('CALL', 'LIB_MOD16', 'Modulo');
     addlib(MOD16);
   end
-  else if optype = floatp then
+  else if optype = otFloat then
   begin
     EmitComment('TO DO - Float Modulo');
   end else
@@ -1494,7 +1494,7 @@ end;
 
 procedure PopAnd;
 begin
-  if optype = word then
+  if optype = otWord then
   begin
     EmitInst('LP', '0');
     EmitInst('EXAM');
@@ -1513,7 +1513,7 @@ begin
     EmitInst('LP', '1');
     EmitInst('EXAM');
     EmitInst('EXAB');
-  end else if optype = floatp then
+  end else if optype = otFloat then
   begin
     EmitComment('!!! UNSUPPORTED Floating-point AND');
   end else
@@ -1548,7 +1548,7 @@ end;
 procedure Push;
 var lb: String;
 begin
-  if optype = word then
+  if optype = otWord then
   begin
     EmitInst('PUSH', '', 'word (A, then B)');
     Inc(pushcnt);
@@ -1556,7 +1556,7 @@ begin
     EmitInst('PUSH');
     Inc(pushcnt);
   end
-  else if optype = floatp then
+  else if optype = otFloat then
   begin
     EmitInst('LP', '0x'+IntToHex(FloatXReg,2), 'float');
     EmitInst('LIJ', '0x08');
@@ -1588,7 +1588,7 @@ end;
 
 procedure PopAdd;
 begin
-  if optype = word then
+  if optype = otWord then
   begin
     EmitInst('LP', '0');
     EmitInst('EXAM');
@@ -1608,7 +1608,7 @@ begin
     EmitInst('LP', '0');
     EmitInst('LDM');
   end
-  else if optype = floatp then
+  else if optype = otFloat then
   begin
     EmitComment('PopAdd float');
     PopFloat;
@@ -1639,7 +1639,7 @@ end;
 
 procedure PopSub;
 begin
-  if optype = word then
+  if optype = otWord then
   begin
     EmitInst('LP', '1');
     EmitInst('EXAM');
@@ -1657,7 +1657,7 @@ begin
     EmitInst('EXAB');
     EmitInst('LP', '0');
     EmitInst('LDM');
-  end else if optype = floatp then
+  end else if optype = otFloat then
   begin
     EmitComment('PopSub float');
     PopFloat;
@@ -1690,7 +1690,7 @@ end;
 
 procedure PopMul;
 begin
-  if optype = word then
+  if optype = otWord then
   begin
     EmitInst('LP', '0');
     EmitInst('EXAM');
@@ -1704,7 +1704,7 @@ begin
     Dec(pushcnt);
     EmitInst('CALL', 'LIB_MUL16', 'Multiplication');
     addlib(MUL16);
-  end else if optype = floatp then
+  end else if optype = otFloat then
   begin
     EmitComment('PopMul float');
     PopFloat;
@@ -1734,7 +1734,7 @@ end;
 procedure PopDiv;
 begin
   // TODO - HANDLE RUNTIME ERRORS! (EG. DIV BY ZERO)
-  if optype = word then
+  if optype = otWord then
   begin
     EmitComment ( '16 bit division B:A / J:I -> B:A' );
     EmitInst('LP', '0');
@@ -1749,7 +1749,7 @@ begin
     Dec(pushcnt);
     EmitInst('CALL', 'LIB_DIV16', 'Division');
     addlib(DIV16);
-  end else if optype = floatp then
+  end else if optype = otFloat then
   begin
     EmitComment('PopDiv float');
     PopFloat;
