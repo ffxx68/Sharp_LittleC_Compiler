@@ -68,6 +68,10 @@ procedure LoadPointerContentXram(const pnttyp, name: string);
 procedure LoadPointerContentReg(const pnttyp, name: string);
 procedure LoadAddressOf(adr: integer; const name: string; isXram: boolean);
 
+// Stack management functions (Task 4.1.12)
+procedure AllocStackSpace(bytes: integer);
+procedure FreeStackSpace(bytes: integer; hasReturn, isWord: boolean);
+
 procedure CompSmOrEq;
 procedure CompGrOrEq;
 procedure CompGreater;
@@ -161,7 +165,10 @@ end;
 
 procedure EmitInst(const inst, operand, comment: string);
 begin
-  WritLn(#9 + inst + #9 + operand + #9 + '; ' + comment);
+  if operand = '' then
+    WritLn(#9 + inst + ' ; ' + comment)
+  else
+    WritLn(#9 + inst + #9 + operand + #9 + '; ' + comment);
 end;
 
 procedure EmitInstComment(const inst, comment: string);
@@ -1770,6 +1777,81 @@ begin
     Dec(pushcnt);
     EmitInst('CALL', 'LIB_DIV8', 'Division');
     addlib(DIVMOD8);
+  end;
+end;
+{--------------------------------------------------------------}
+
+
+{--------------------------------------------------------------}
+{ Stack management functions (Task 4.1.12) }
+
+{ Allocate 'bytes' bytes on the stack.
+  If bytes < 8: emit PUSH x bytes (each increments pushcnt).
+  Otherwise: use R-register decrement via LP/EXAM/LDR/SBIA/STR/EXAM. }
+procedure AllocStackSpace(bytes: integer);
+var c: integer;
+begin
+  if bytes < 8 then
+  begin
+    for c := 1 to bytes do
+    begin
+      EmitInst('PUSH');
+      Inc(pushcnt);
+    end;
+  end else
+  begin
+    EmitInst('LP',   '0');
+    EmitInst('EXAM');
+    EmitInst('LDR');
+    EmitInst('SBIA', IntToStr(bytes));
+    Inc(pushcnt, bytes);
+    EmitInst('STR');
+    EmitInst('EXAM');
+  end;
+end;
+
+{ Restore 'bytes' bytes from the stack after a procedure call.
+  isWord  → word return value in A:B (LP/EXAM/LDR/ADIA/STR/EXAM)
+  hasReturn (and not isWord) → byte return value in A (EXAB/LDR/ADIA/STR/EXAB)
+  neither → no return value; use POP x n (n<4) or LDR/ADIA/STR }
+procedure FreeStackSpace(bytes: integer; hasReturn, isWord: boolean);
+var i: integer;
+begin
+  EmitComment('restore stack pointer');
+  if isWord then
+  begin
+    EmitInst('LP',   '0');
+    EmitInst('EXAM');
+    EmitInst('LDR');
+    EmitInst('ADIA', IntToStr(bytes));
+    Dec(pushcnt, bytes);
+    EmitInst('STR');
+    EmitInst('EXAM');
+  end else if hasReturn then
+  begin
+    EmitInst('EXAB');
+    EmitInst('LDR');
+    EmitInst('ADIA', IntToStr(bytes));
+    Dec(pushcnt, bytes);
+    EmitInst('STR');
+    EmitInst('EXAB');
+  end else
+  begin
+    // no return value — we can overwrite A
+    if bytes < 4 then
+    begin
+      for i := 1 to bytes do
+      begin
+        EmitInst('POP');
+        Dec(pushcnt);
+      end;
+    end else
+    begin
+      EmitInst('LDR');
+      EmitInst('ADIA', IntToStr(bytes));
+      Dec(pushcnt, bytes);
+      EmitInst('STR');
+    end;
   end;
 end;
 {--------------------------------------------------------------}

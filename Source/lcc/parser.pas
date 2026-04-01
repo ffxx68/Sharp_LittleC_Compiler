@@ -2205,7 +2205,7 @@ begin
                 if proclist[procfound].parcnt > 0 then
                 begin
                         //delete(s, 1, 1); s := trim(s);
-                        writln( #9'; pushing parameters on stack...');
+                        EmitComment('pushing parameters on stack...');
                         c := 0;
                         repeat
                                 Rd(Look, Tok); tok := trim(tok);// + ',';
@@ -2229,7 +2229,7 @@ begin
                                     optype := otFloat;
                                 end;
                                 Expression;
-                                writln( #9'; '+ProcList[ProcFound].parname[c]+' ('+ProcList[ProcFound].partyp[c]+')'  );
+                                EmitComment(ProcList[ProcFound].parname[c]+' ('+ProcList[ProcFound].partyp[c]+')');
                                 Push;
                                 inc(c);
                                 if c > ProcList[ProcFound].ParCnt then
@@ -2265,8 +2265,8 @@ begin
                 // allocating locals too on stack
                 if proclist[procfound].loccnt > 0 then
                 begin
-                    writln( ' ' );
-                    writln( #9'; reserving stack (R recalc)...');
+                    EmitBlankLine;
+                    EmitComment('reserving stack (R recalc)...');
                     aa := 0;
                     for c := 0 to proclist[procfound].loccnt - 1 do
                     begin
@@ -2290,7 +2290,7 @@ begin
                                 inc(a, 8);
                                 inc(aa, 8);
                             end;
-                            writln( #9'; '+ProcList[ProcFound].locname[c]+' ('+ProcList[ProcFound].loctyp[c]+')'  );
+                            EmitComment(ProcList[ProcFound].locname[c]+' ('+ProcList[ProcFound].loctyp[c]+')');
                             // Push         // see optimization below
 
                             {if findvar(ProcList[ProcFound].locname[c]) then
@@ -2300,58 +2300,19 @@ begin
                                 error('Parameter error!'); }
                     end;
                      // allocating room on stack pointer... either via 'push', or R decrement
-                     if aa < 8 then
-                       for c := 1 to aa do
-                          begin writln( #9'PUSH'); inc(pushcnt); end
-                     else
-                        begin
-                          writln( #9'LP'#9'0');
-                          writln( #9'EXAM');
-                          writln( #9'LDR');
-                          writln( #9'SBIA'#9+inttostr(aa)); inc(pushcnt, aa);
-                          writln( #9'STR');
-                          writln( #9'EXAM');
-                        end;
+                     AllocStackSpace(aa);
                 end;
 
                 // call the routine
-                writln( ' ' );
-                writln( #9'CALL'#9+name);
+                EmitBlankLine;
+                EmitInst('CALL', name);
 
                 if a > 0 then
                 begin
-                    writln( ' ' );
-                    writln( #9'; restore stack pointer');
+                    EmitBlankLine;
                     if ( proclist[procfound].returntype = 'float' ) then
                        Error ( 'Float return handling not implemented!');
-                    if ( proclist[procfound].returnisword ) then
-                    begin
-                            writln( #9'LP'#9'0');
-                            writln( #9'EXAM');
-                            writln( #9'LDR');
-                            writln( #9'ADIA'#9+inttostr(a)); dec(pushcnt, a);
-                            writln( #9'STR');
-                            writln( #9'EXAM');
-                    end else
-                    if proclist[procfound].hasreturn then
-                    begin
-                            writln( #9'EXAB');
-                            writln( #9'LDR');
-                            writln( #9'ADIA'#9+inttostr(a)); dec(pushcnt, a);
-                            writln( #9'STR');
-                            writln( #9'EXAB');
-                    end else
-                    begin  // no return value (we can overwrite A)
-                        if a < 4 then  // optimize for size
-                            for i := 1 to a do
-                                begin writln( #9'POP'); dec(pushcnt); end
-                        else
-                        begin
-                            writln( #9'LDR');
-                            writln( #9'ADIA'#9+inttostr(a)); dec(pushcnt, a);
-                            writln( #9'STR');
-                        end;
-                    end;
+                    FreeStackSpace(a, proclist[procfound].hasreturn, proclist[procfound].returnisword);
                 end;
 //              tok := s;
                 rd(look, tok);

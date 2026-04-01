@@ -345,21 +345,25 @@ Phase 4 — Reduce Parser: separate syntax from emission (4-6 days)
 
 **Step 4.1.11 — Fix "Possible Stack corruption!" warning** ✅
 
-- Root cause identified: duplicate POP in Assignment procedure for array element access
-- In `Assignment` (parser.pas), lines 1724-1727 had an extra `POP ; pop array index` that was already handled inside `StoreVariable`
-- Fix: Removed the duplicate POP block since `StoreVariable` already manages the array index POP internally
-- Also added missing `LoadVariable` support for word array XRAM access (lines 1177-1221)
-- Verified: 16bitdiv demo now compiles without "Possible Stack corruption!" warning
-- Note: Array demo still has a separate issue with word array XRAM expression parsing (not stack-related)
-- `lcc.exe` in root updated with fix
-- Regression validation: 16bitdiv passes ✅
+-   Root cause identified: duplicate POP in Assignment procedure for array element access
+-   In `Assignment` (parser.pas), lines 1724-1727 had an extra `POP ; pop array index` that was already handled inside `StoreVariable`
+-   Fix: Removed the duplicate POP block since `StoreVariable` already manages the array index POP internally
+-   Also added missing `LoadVariable` support for word array XRAM access (lines 1177-1221)
+-   Verified: 16bitdiv demo now compiles without "Possible Stack corruption!" warning
+-   Note: Array demo still has a separate issue with word array XRAM expression parsing (not stack-related)
+-   `lcc.exe` in root updated with fix
+-   Regression validation: 16bitdiv passes ✅
 
-**Step 4.1.12 — Stack management functions** Create in `CodeGen.pas`:
+**Step 4.1.12 — Stack management functions** ✅
 
--   `AllocStackSpace(bytes: integer; var pushcnt: integer)` — if <8: PUSH×n, else: LP 0 + EXAM + LDR + SBIA + STR + EXAM
--   `FreeStackSpace(bytes: integer; var pushcnt: integer; hasReturn, isWord: boolean)` — various patterns based on return type
--   Update `ProcCall` in parser.pas
--   Verify: NO_DIFF
+-   Created in `CodeGen.pas`:
+    -   `AllocStackSpace(bytes: integer)` — if <8: PUSH×n, else: LP 0 + EXAM + LDR + SBIA + STR + EXAM
+    -   `FreeStackSpace(bytes: integer; hasReturn, isWord: boolean)` — various patterns based on return type (isWord → LP/EXAM/LDR/ADIA/STR/EXAM; hasReturn → EXAB/LDR/ADIA/STR/EXAB; no return → POP×n or LDR/ADIA/STR)
+-   Updated `ProcCall` in parser.pas: replaced all raw writln emission blocks with `AllocStackSpace`, `FreeStackSpace`, `EmitInst`, `EmitComment`, `EmitBlankLine`
+-   Fixed `EmitInst(inst, operand, comment)` to use space (not tab) when operand is empty, matching reference format
+-   Fixed all `EmitComment` calls that incorrectly included a leading `; ` prefix (double semicolon issue)
+-   Note: `pushcnt` is global in CodeGen.pas — not passed as parameter
+-   Verify: `test.bat` → **NO_DIFF** ✅ (all 6 demos: 16bitdiv, Array, bounce, Loop, Math, pointer)
 
 **Step 4.1.13 — Increment/Decrement register functions** Create in `CodeGen.pas`:
 
@@ -379,6 +383,7 @@ Phase 4 — Reduce Parser: separate syntax from emission (4-6 days)
 -   When `adr < 64`, use `LP`; otherwise use `LIP`
     
 -   All changes must be verified incrementally with `test.bat` → NO_DIFF against `reference_bounce.asm`
+    
 
 ---
 
@@ -388,32 +393,36 @@ This task addresses preexisting compiler bugs discovered during refactoring.
 
 **Step 4.2.1 — Fix word array XRAM expression parsing**
 
-**Problem description:**
-In the Array demo, the expression `a[0] = b[0] + e[1]` (where `e` is `word xram e[100]`) does not generate correct code for `e[1]`. 
+**Problem description:** In the Array demo, the expression `a[0] = b[0] + e[1]` (where `e` is `word xram e[100]`) does not generate correct code for `e[1]`.
 
 **Symptoms:**
-- The compiler generates `LIA e [1] ; Load byte constant e [1]` treating the entire `e[1]` as a literal string constant
-- No array access code is generated for `e[1]` (no RC, SL, address calculation, IXL sequence)
-- The addition `+ e[1]` is completely missing from the output
+
+-   The compiler generates `LIA e [1] ; Load byte constant e [1]` treating the entire `e[1]` as a literal string constant
+-   No array access code is generated for `e[1]` (no RC, SL, address calculation, IXL sequence)
+-   The addition `+ e[1]` is completely missing from the output
 
 **Root cause analysis:**
-1. In `Assignment` procedure, `forml` contains the right-hand side expression `b[0]+e[1]`
-2. The `find_text()` check at lines 1683-1690 finds `e` in `forml` and sets `fv := true`
-3. However, `Expression` is then called with the current `Look`/`tok` state which may have been modified
-4. The `Factor` procedure (lines 1375-1383) should detect array access when `Look = '['`, but this detection fails for the second term in an addition
-5. When `Add` procedure calls `Term` → `Factor`, the parser state may not correctly position `Look` at the start of `e[1]`
+
+1.  In `Assignment` procedure, `forml` contains the right-hand side expression `b[0]+e[1]`
+2.  The `find_text()` check at lines 1683-1690 finds `e` in `forml` and sets `fv := true`
+3.  However, `Expression` is then called with the current `Look`/`tok` state which may have been modified
+4.  The `Factor` procedure (lines 1375-1383) should detect array access when `Look = '['`, but this detection fails for the second term in an addition
+5.  When `Add` procedure calls `Term` → `Factor`, the parser state may not correctly position `Look` at the start of `e[1]`
 
 **Files involved:**
-- `parser.pas`: `Assignment`, `Expression`, `Add`, `Term`, `Factor` procedures
-- `scanner.pas`: `GetName`, token handling
+
+-   `parser.pas`: `Assignment`, `Expression`, `Add`, `Term`, `Factor` procedures
+-   `scanner.pas`: `GetName`, token handling
 
 **Proposed fix approach:**
-1. Add debug logging to trace parser state during expression evaluation
-2. Verify that after `Rd(Look, tok)` in `Add`, the `Look` character is correctly positioned at `e`
-3. Check if `GetName` correctly extracts `e` and leaves `Look` at `[`
-4. Ensure `LoadVariable` for word array XRAM (lines 1177-1221) is being reached
+
+1.  Add debug logging to trace parser state during expression evaluation
+2.  Verify that after `Rd(Look, tok)` in `Add`, the `Look` character is correctly positioned at `e`
+3.  Check if `GetName` correctly extracts `e` and leaves `Look` at `[`
+4.  Ensure `LoadVariable` for word array XRAM (lines 1177-1221) is being reached
 
 **Test case:**
+
 ```c
 #org 33000
 char a[6], b[7];
@@ -424,6 +433,7 @@ main() {
 ```
 
 **Expected assembly output (partial):**
+
 ```asm
 ; Load b[0]
 LIB     14      ; array b address
@@ -462,7 +472,7 @@ EXAB
 **Verification:** `test.bat Array` → NO_DIFF after fix
 
 ---
-    
+
 -   Task 4.3: consider introducing an AST (optional) for complex expressions.
     
 -   Verification: generated asm is semantically identical - Verify: NO_DIFF
