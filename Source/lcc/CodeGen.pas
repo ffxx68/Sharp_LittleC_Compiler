@@ -1252,7 +1252,7 @@ begin
   // TODO - HANDLE RUNTIME ERRORS! (EG. DIV BY ZERO)
   if optype = otWord then
   begin
-    writln(#9'16 bit division B:A / J:I -> B:A' );
+    writln(#9'; 16 bit division B:A / J:I -> B:A' );
     writln(#9'LP'#9'0');
     writln(#9'EXAM'); // A -> I
     writln(#9'EXAB');
