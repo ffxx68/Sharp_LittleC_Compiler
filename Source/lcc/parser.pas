@@ -1,4 +1,4 @@
-﻿//{$MODE DELPHI}
+//{$MODE DELPHI}
 {--------------------------------------------------------------}
 unit Parser;
 
@@ -8,7 +8,7 @@ unit Parser;
 
 {--------------------------------------------------------------}
 interface
-uses Input, Scanner, Lexer, Errors, CodeGen, Output, sysutils, calcunit, math, SymbolTable, Semantic;
+uses Input, Scanner, Errors, CodeGen, Output, sysutils, calcunit, math;
 
 procedure FirstScan(filen: string);
 procedure SecondScan(filen: string);
@@ -29,8 +29,7 @@ type
         address, locproc: integer;
         size, initn: integer;
         initf: Float;
-        Typ, PntTyp: string;
-        inits: RawByteString;
+        Typ, PntTyp, inits: string;
         end;
 
 type
@@ -64,16 +63,15 @@ var VarList: Array [0..1000] of VarEntry;
 
 // Build a string of bytes in the Sharp floating point BCD format
 // Numbers from -9.999999999 x 10^99 to 9.999999999 x 10^99 can be represented
-{$H-}  // Use ShortString to preserve binary bytes
 function SharpBCD(x: Float): String;
 var
   m: Float ;
   i, e, c: integer;
+  d: string;
 begin
-  Result := '';
+
   if x=0.0 then begin
-      SetLength(Result, 8);
-      FillChar(Result[1], 8, 0);
+      for i := 1 to 8 do Result := Result + chr(0);
       exit;
   end else
       e := round(Log10(abs(x)));
@@ -82,6 +80,12 @@ begin
      Error ( 'Float OUT OF RANGE :' + FloatToStr ( x ) );
 
   m := abs(x/intpower(10.0, e - 10 ));
+  {if sign(e) = 1 then
+  begin
+      e := e - 1;
+      m := m * 10;
+  end;
+  }
 
   Result := '';
   c := 0;
@@ -97,67 +101,30 @@ begin
   end;
 
   // mantissa sign
+  // Zero is used when the mantissa is positive
+  // Eight is used when the mantissa is negative.
   if sign(x) = -1 then c := 8
   else c := 0;
 
   // exponent
+  // The most significant digit is zero for positive numbers.
+  // Negative numbers are represented using a 100-complement.
+  //   "901" ( 10E-99 ) to "099" (10E99)
   if sign(e) = -1 then
   begin
        e := e + 100;
-       Result := chr(trunc ( e mod 10 ) * 16 + c) + Result;
+       Result := chr ( trunc ( e mod 10 ) * 16 + c ) + Result;
        c := 9 * 16;
   end else
   begin
-       Result := chr(trunc ( e mod 10 ) * 16 + c) + Result;
+       Result := chr ( trunc ( e mod 10 ) * 16 + c ) + Result;
        c := 0;
   end;
   e := trunc (e / 10);
-  Result := chr(c + trunc ( e mod 10 )) + Result;
-end;
-{$H+}  // Restore AnsiString/LongString mode
-
-// Conversion helpers for SymbolTable sync
-function VarEntryToTVarInfo(const ve: VarEntry): TVarInfo;
-begin
-  Result.VarName := ve.VarName;
-  Result.Xram := ve.Xram;
-  Result.At := ve.At;
-  Result.Arr := ve.Arr;
-  Result.Local := ve.Local;
-  Result.Pointer := ve.Pointer;
-  Result.Address := ve.address;
-  Result.LocProc := ve.locproc;
-  Result.Size := ve.size;
-  Result.InitN := ve.initn;
-  Result.InitF := ve.initf;
-  Result.Typ := ve.Typ;
-  Result.PntTyp := ve.PntTyp;
-  Result.Inits := ve.inits;
+  Result := chr ( c + trunc ( e mod 10 ) ) + Result;
 end;
 
-function ProcEntryToTProcInfo(const pe: ProcEntry): TProcInfo;
-var i: integer;
-begin
-  Result.ProcName := pe.ProcName;
-  Result.ProcCode := pe.ProcCode;
-  Result.HasReturn := pe.hasreturn;
-  Result.ReturnIsWord := pe.ReturnIsWord;
-  Result.ReturnType := pe.ReturnType;
-  Result.Params := pe.Params;
-  Result.ParCnt := pe.ParCnt;
-  for i := 0 to 20 do
-  begin
-    Result.ParName[i] := pe.ParName[i];
-    Result.ParTyp[i] := pe.ParTyp[i];
-  end;
-  Result.LocCnt := pe.LocCnt;
-  for i := 0 to 20 do
-  begin
-    Result.LocName[i] := pe.LocName[i];
-    Result.LocTyp[i] := pe.LocTyp[i];
-  end;
-  Result.IsCalled := pe.IsCalled;
-end;
+
 
 function mathparse(s: string; w: integer): Float;
 var i, p, k: integer;
@@ -178,7 +145,6 @@ begin
 end;
 
 begin
-        k := 0;
         if pos('''', s) > 0 then
         begin
                 i := 1;
@@ -279,31 +245,32 @@ end;
 
 procedure printvarlist;
 var i, j, c, initn, adr, size, lproc: integer;
-    s, name, typ: string;
-    inits: RawByteString;
+    s, name, typ, inits: string;
+    initf: Float;
     xr, arr, loc: boolean;
 begin
         writeln;
         writeln('VARIABLES DECLARED:');
         writeln;
-        for i:=0 to SymbolTable.GetVarCount-1 do
+        for i:=0 to varcount-1 do
         begin
-                name := SymbolTable.GetVarInfo(i).varname;
-                typ := SymbolTable.GetVarInfo(i).typ;
-                xr := SymbolTable.GetVarInfo(i).xram;
-                arr := SymbolTable.GetVarInfo(i).arr;
-                adr := SymbolTable.GetVarInfo(i).address;
-                size := SymbolTable.GetVarInfo(i).size;
-                initn := SymbolTable.GetVarInfo(i).initn;
-                inits := SymbolTable.GetVarInfo(i).inits;
-                if SymbolTable.GetVarInfo(i).pointer then s:='*' else s:='';
-                loc := SymbolTable.GetVarInfo(i).local;
-                lproc := SymbolTable.GetVarInfo(i).locproc;
+                name := Varlist[i].varname;
+                typ := varlist[i].typ;
+                xr := varlist[i].xram;
+                arr := varlist[i].arr;
+                adr := varlist[i].address;
+                size := varlist[i].size;
+                initn := varlist[i].initn;
+                initf := varlist[i].initf;
+                inits := varlist[i].inits;
+                if varlist[i].pointer then s:='*' else s:='';
+                loc := varlist[i].local;
+                lproc := varlist[i].locproc;
 
                 write('VAR ',i+1,': ');
                 write(s+name,', TYP: ',typ,', ADR: ',adr,', XRAM: ');
                 if xr then write('yes, LOCAL: ') else write('no, LOCAL: ');
-                if loc then s := SymbolTable.GetProcInfo(lproc).ProcName;
+                if loc then s := ProcList[lproc].ProcName;
                 if loc then write('yes, FUNC: '+s+', SIZE: ') else write('no, SIZE: ');
                 write(size);
                 if initn <> -1 then
@@ -365,32 +332,71 @@ begin
         writeln;
         writeln('PROCEDURES DECLARED:');
         writeln;
-        for i:=0 to SymbolTable.GetProcCount-1 do
+        for i:=0 to proccount-1 do
         begin
                 write('PROC ',i+1,': ');
-                write(SymbolTable.GetProcInfo(i).procname);//,', CODE: ',proclist[i].proccode);
-                if SymbolTable.GetProcInfo(i).hasreturn then
+                write(Proclist[i].procname);//,', CODE: ',proclist[i].proccode);
+                if Proclist[i].hasreturn then
                 begin
-                  write(', RETURNS: ', SymbolTable.GetProcInfo(i).returntype);
-                  {if SymbolTable.GetProcInfo(i).returnisword then write('word') else write('byte');}
+                  write(', RETURNS: ', Proclist[i].returntype);
+                  {if Proclist[i].returnisword then write('word') else write('byte');}
                 end;
-                if SymbolTable.GetProcInfo(i).parcnt > 0 then writeln(', PARAMS: ',SymbolTable.GetProcInfo(i).params) else writeln;
+                if Proclist[i].parcnt > 0 then writeln(', PARAMS: ',Proclist[i].params) else writeln;
         end;
         writeln;
 end;
+
+
+{--------------------------------------------------------------}
+{ Test if variable is at address }
+
+function IsVarAtAdr(adr, size: integer): boolean;
+var i: integer;
+begin
+        result := false;
+        VarFound := -1;
+        if adr = -1 then exit;
+{        for i:=adr to adr+size-1 do
+                if memimg[i] <> -1 then
+                begin
+                        IsVarAtAdr := true;
+                        VarFound := i;
+                        break;
+                end;
+}
+        for i := 0 to VarCount - 1 do
+            begin
+              // check whether two ranges [x1:x2] and [y1:y2] overlap
+              //
+              // The only time the ranges DON'T overlap is when
+              // the end of one range is before the beginning of the other.
+              //
+              // So (in C syntax), we want    !(x2 < y1 || x1 > y2)
+              // which is equivalent to        x2 >= y1 && x1 <= y2
+              if ( (adr + size >= VarList[i].address)
+              and  (adr < VarList[i].address + VarList[i].size) ) then
+              begin
+                      result := true;
+                      VarFound := i;
+                      break;
+              end;
+            end;
+end;
+
 
 {--------------------------------------------------------------}
 { Allocate Variable Declaration }
 
 function AllocVar(xr, at: boolean; size, adr: integer): integer;
+var s: string;
 begin
         if not xr then
         begin
                 if at then
                 begin
                         result := adr;
-                        if SymbolTable.IsVarAtAdr(result, size, VarFound) then
-                           Error('Overlapping with '+SymbolTable.GetVarInfo(VarFound).varname+'!');
+                        if IsVarAtAdr(result, size) then
+                           Error('Overlapping with '+VarList[VarFound].varname+'!');
                         { begin
                                 if VarList[VarFound].at then
                                 begin
@@ -399,7 +405,7 @@ begin
                                 end;
                                 VarList[VarFound].address := VarPos;
                                 inc(VarPos, VarList[VarFound].size);
-                                if size = 2 then if SymbolTable.IsVarAtAdr(result
+                                if size = 2 then if IsVarAtAdr(result
                                    //+1
                                    , size) then
                                 begin
@@ -417,7 +423,7 @@ begin
                 end else
                 begin
                      // look for first free position
-                     while SymbolTable.IsVarAtAdr(VarPos, size) do
+                     while IsVarAtAdr(VarPos, size) do
                           inc(VarPos);//, VarList[VarFound].size);
                      result := VarPos;
                      inc(VarPos, size);
@@ -449,8 +455,8 @@ end;
 { Add Variable Declaration }
 
 procedure AddVar(t, typ: string; xr, pnt, loc: boolean);
-var s, litem: string;
-    temp, arsize, temp_len: integer;
+var s, litem, bcd: string;
+    temp, arsize: integer;
     b: char;
 begin
         s := ExtrWord(t);
@@ -539,60 +545,43 @@ begin
                 if Loc then error('Local vars can''t have init values!'); // why?
                 if Pnt then error('Pointers can''t have init values!');
                 delete(t, 1, 1);
-                VarList[VarCount].inits := '';
-
-                // FIX for FPC 3.x UTF-8 codepage issue (bug 4.1.9b regression):
-                // String concatenation with AnsiChar(byte_value) where byte_value > 127
-                // causes corruption due to UTF-8 conversion (e.g., 232 -> 63).
-                // Solution: Use {$H-} to force ShortString mode + SetLength with direct
-                // chr() assignment instead of concatenation to preserve raw binary bytes.
-                // Tested: byte array {1, 0xE8} now correctly stores as {1, 232} not {1, 63}.
-                {$H-}  // Use ShortString to preserve binary bytes in array initializers
                 if VarList[VarCount].arr then
                 begin // array
                   if(typ = 'char') then
                   begin
-                          t := trim(t); delete(t, 1, 1); t := trim(t); delete(t, length(t), 1);
+                          delete(t, 1, 1); delete(t, length(t), 1);
                           //VarList[VarCount].inits := stringparse(t, size);
-                          VarList[VarCount].inits := t+AnsiChar(0);
+                          VarList[VarCount].inits := t+chr(0);
                           VarList[VarCount].initn := 0;
                           VarList[VarCount].initf := 0;
                   end else if VarList[VarCount].arr and (typ = 'byte') then
                   begin
-                          t := trim(t); delete(t, 1, 1); t := trim(t); delete(t, length(t), 1);
+                          delete(t, 1, 2); delete(t, length(t), 1);
                           t := t + ',';
                           litem := ExtrList(t);
-                          temp_len := 0;
                           repeat
-                                  temp := trunc(mathparse(litem, 8));
-                                  // Direct assignment via SetLength + chr() avoids string concatenation
-                                  // which would trigger UTF-8 conversion for bytes > 127
-                                  inc(temp_len);
-                                  SetLength(VarList[VarCount].inits, temp_len);
-                                  VarList[VarCount].inits[temp_len] := chr(temp);
+                                  VarList[VarCount].inits := VarList[VarCount].inits
+                                                          + chr(trunc(mathparse(litem, 8)));
                                   litem := ExtrList(t);
                           until litem = '';
                           VarList[VarCount].initn := 0;
                           VarList[VarCount].initf := 0;
                   end else if VarList[VarCount].arr and (typ = 'word') then
                   begin
-                          t := trim(t); delete(t, 1, 1); t := trim(t); delete(t, length(t), 1);
+                          delete(t, 1, 2); delete(t, length(t), 1);
                           t := t + ',';
                           litem := ExtrList(t);
-                          temp_len := 0;
                           repeat
-                                  // Same technique as byte array: direct assignment to avoid concatenation
-                                  temp_len := temp_len + 2;
-                                  SetLength(VarList[VarCount].inits, temp_len);
-                                  VarList[VarCount].inits[temp_len-1] := chr(trunc(mathparse(litem+'/256', 8)));
-                                  VarList[VarCount].inits[temp_len] := chr(trunc(mathparse(litem+'%256', 8)));
+                                  VarList[VarCount].inits := VarList[VarCount].inits
+                                                          + chr(trunc(mathparse(litem+'/256', 8)))
+                                                          + chr(trunc(mathparse(litem+'%256', 8)));
                                   litem := ExtrList(t);
                           until litem = '';
                           VarList[VarCount].initn := 0;
                           VarList[VarCount].initf := 0;
                   end else if VarList[VarCount].arr and (typ = 'float') then
                   begin
-                       t := trim(t); delete(t, 1, 1); t := trim(t); delete(t, length(t), 1);
+                       delete(t, 1, 2); delete(t, length(t), 1);
                        t := t + ',';
                        litem := ExtrList(t);
                        VarList[VarCount].inits := '';
@@ -607,7 +596,6 @@ begin
                        VarList[VarCount].initf := 0;
                   end
                 end else
-                {$H+}  // Restore AnsiString/LongString mode
                 begin // not an array
                    if not ( typ = 'float' ) then
                    begin
@@ -654,8 +642,6 @@ begin
         writeln(VarList[VarCount].address);
 }
 
-        // Sync with SymbolTable
-        SymbolTable.AddVar(VarEntryToTVarInfo(VarList[VarCount]));
         inc(VarCount);
 
 end;
@@ -665,8 +651,17 @@ end;
 { Find Procedure Declaration }
 
 function FindProc(t: string): boolean;
+var i: integer;
 begin
-        result := SymbolTable.FindProc(t, ProcFound);
+        result := false;
+        for i := 0 to ProcCount - 1 do
+        if lowercase(ProcList[i].ProcName) = lowercase(t) then
+        begin
+              //writeln('Proc found: ' + t);
+              result := true;
+              ProcFound := i;
+              exit;
+        end;
 end;
 
 
@@ -687,8 +682,6 @@ begin
                 ProcList[ProcCount].ReturnType := rt;
                 ProcList[ProcCount].ReturnIsWord := wd;
                 ProcList[ProcCount].IsCalled := false;
-                // Sync with SymbolTable
-                SymbolTable.AddProc(ProcEntryToTProcInfo(ProcList[ProcCount]));
                 inc(ProcCount);
                 //writeln('Proc add: NAME: <' + s + '>');
         end else
@@ -727,11 +720,11 @@ begin
 
         if not FindVar(Name) then error('Variable not defined: '+name);
 
-        typ := VarList[varfound].typ;
-        adr := VarList[varfound].address;
-        loc := VarList[varfound].local;
-        arr := VarList[varfound].arr;
-        xr := VarList[varfound].xram;
+        typ := varlist[varfound].typ;
+        adr := varlist[varfound].address;
+        loc := varlist[varfound].local;
+        arr := varlist[varfound].arr;
+        xr := varlist[varfound].xram;
 
         if not arr then
         begin
@@ -740,21 +733,73 @@ begin
 //                if isword then
 //                        writln(#9'EXAB'#9#9'; Store only HB in byte var!');
                 if not xr then
+                begin
                     if not loc then
-                        CodeGen.StoreByteToReg(adr, name)
-                    else // Local char or byte
-                        CodeGen.StoreByteToLocal(adr, name)
-                else
-                    CodeGen.StoreByteToXram(adr, name);
+                    begin
+                        if adr <= 63 then
+                            writln(#9'LP'#9+inttostr(adr)+#9'; Store result in '+name)
+                        else
+                            writln(#9'LIP'#9+inttostr(adr)+#9'; Store result in '+name);
+                        writln(#9'EXAM');
+                    end else
+                    begin // Local char or byte
+                        writln(#9'EXAB'); // temp save A (value to store) to B
+                        writln(#9'LDR');  // get stack ptr R to A
+                        writln(#9'ADIA'#9+inttostr(adr+2+pushcnt)); // add relative address
+                        writln(#9'STP'); // move result to P (absolute address)
+                        writln(#9'EXAB'); // restore A
+                        writln(#9'EXAM'#9#9'; Store result in '+name); // store value to P location
+                    end;
+                end else
+                begin
+                        if adr <> -1 then
+                                writln( #9'LIDP'#9+inttostr(adr)+#9'; Store result in '+name)
+                        else
+                                writln( #9'LIDP'#9+name+#9'; Store result in '+name);
+                        writln( #9'STD')
+                end ;
             end else if (typ='word') then
             begin
                 if not xr then
+                begin
                     if not loc then
-                        CodeGen.StoreWordToReg(adr, name)
-                    else // Local word
-                        CodeGen.StoreWordToLocal(adr, name)
-                else
-                    CodeGen.StoreWordToXram(adr, name);
+                    begin
+                        if adr < 64 then
+                                writln( #9'LP'#9+inttostr(adr)+#9'; Store 16bit variable '+name)
+                        else
+                                writln( #9'LIP'#9+inttostr(adr)+#9'; Store 16bit variable '+name);
+                        writln( #9'EXAM'#9#9'; LB');
+                        writln( #9'EXAB');
+                        writln( #9'INCP'#9#9'; HB');
+                        writln( #9'EXAM');
+                    end else
+                    begin // Local word
+                        writln(#9'PUSH'); inc(pushcnt); // temp save A
+                        writln(#9'LDR');  // we overwrite A here !!!
+                        writln(#9'ADIA'#9+inttostr(adr+2+pushcnt)); //adr + size + pushcnt
+                        writln(#9'STP');
+                        writln(#9'POP'); dec(pushcnt); // restore A
+                        writln(#9'EXAM'#9'; LB - Store result in '+name);
+                        writln(#9'EXAB');
+                        writln(#9'DECP');
+                        writln(#9'EXAM'#9'; HB');
+                    end;
+                end else
+                begin
+                        if adr <> -1 then
+                                writln( #9'LIDP'#9+inttostr(adr)+#9'; Store 16bit variable '+name)
+                        else
+                                writln( #9'LIDP'#9+name+#9'; Store 16bit variable '+name);
+                        writln( #9'STD'#9#9'; LB');
+                        writln( #9'EXAB');
+                        if (adr <> -1) and ((adr + 1) div 256 = adr div 256) then
+                                writln( #9'LIDL'#9'LB('+inttostr(adr)+'+1)')
+                        else if adr <> -1 then
+                                writln( #9'LIDP'#9+inttostr(adr)+'+1')
+                        else
+                                writln( #9'LIDP'#9+name+'+1'); // PASM doesn't parse "name + 1" !!!
+                        writln( #9'STD'#9#9'; HB');
+                end;
             end else if (typ='float') then
             begin // value is in temporary storage point 'FloatXReg'
                 if not xr then
@@ -762,48 +807,48 @@ begin
                     if loc then
                     begin
                         // a local variable is reverse-orderd in stack
-                        CodeGen.EmitBlankLine;
-                        CodeGen.EmitComment('Store FloatXReg onto local-float variable, reversed');
+                        writln('');
+                        writln(#9'; Store FloatXReg onto local-float variable, reversed');
                         // to:
-                        CodeGen.EmitInst('LDR'); // R -> A
-                        CodeGen.EmitInst('EXAB'); // save R in B first
-                        CodeGen.EmitInst('LDR'); // R -> A
-                        CodeGen.EmitInst('ADIA', inttostr(adr+2+pushcnt+2), 'to: '+name+' end + 2');
-                        CodeGen.EmitInst('STR'); // now R points to the local variable start addr
+                        writln(#9'LDR'); // R -> A
+                        writln(#9'EXAB'); // save R in B first
+                        writln(#9'LDR'); // R -> A
+                        writln(#9'ADIA'#9+inttostr(adr+2+pushcnt+2)+#9'; to: '+name+' end + 2');
+                        writln(#9'STR'); // now R points to the local variable start addr
                         // from:
-                        CodeGen.EmitInst('LIP', '0x'+IntToHex(FloatXReg,2), 'from: primary float reg addr');
+                        writln(#9'LIP 0x'+IntToHex(FloatXReg,2)+#9'; from: primary float reg addr' );
                         // loop 8 times
-                        CodeGen.EmitInst('LIJ', '8');
+                        writln(#9'LIJ 8');
                         lb := NewLabel;
                         PostLabel(lb);
                         // move using LDM+PUSH
-                        CodeGen.EmitInst('LDM'); // (P) -> A
-                        CodeGen.EmitInst('PUSH'); inc(pushcnt);
-                        CodeGen.EmitInst('INCP');
-                        CodeGen.EmitInst('DECJ');
-                        CodeGen.EmitInst('JRNZM', lb);
-                        CodeGen.EmitInst('EXAB'); // restore R
-                        CodeGen.EmitInst('STR'); // A -> R
+                        writln(#9'LDM'); // (P) -> A
+                        writln(#9'PUSH'); inc(pushcnt);
+                        writln(#9'INCP');
+                        writln(#9'DECJ');
+                        writln(#9'JRNZM '+lb);
+                        writln(#9'EXAB'); // restore R
+                        writln(#9'STR'); // A -> R
                     end else
                     begin // not local
                         if adr < 64 then
-                             CodeGen.EmitInst('LP', '0x'+IntToHex(adr,2), 'store float var '+name)
+                             writln( #9'LP'#9'0x'+IntToHex(adr,2)+#9'; store float var '+name )
                         else
-                             CodeGen.EmitInst('LIP', '0x'+IntToHex(adr,2), 'store float var '+name);
+                             writln( #9'LIP'#9'0x'+IntToHex(adr,2)+#9'; store float var '+name );
                         // store value to variable
-                        CodeGen.EmitInst('LIQ', '0x'+IntToHex(FloatXReg,2), 'from temp float reg');
-                        CodeGen.EmitInst('LII', '7');
-                        CodeGen.EmitInst('MVW', '', '(FloatXReg) -> (P), 8 bytes');
+                        writln( #9'LIQ 0x'+IntToHex(FloatXReg,2)+#9'; from temp float reg' );
+                        writln( #9'LII 7');
+                        writln( #9'MVW ; (FloatXReg) -> (P), 8 bytes');
                     end;
                 end else
                 begin // destination: xram or code space
                     if adr <> -1 then
-                       CodeGen.EmitInst('LIDP', '0x'+inttohex(adr,4), 'Store float var '+name)
+                       writln( #9'LIDP'#9+'0x'+inttohex(adr,4)+#9'; Store float var '+name )
                     else
-                       CodeGen.EmitInst('LIDP', name, 'store var '+name);
-                    CodeGen.EmitInst('LP', '0x'+IntToHex(FloatXReg,2), 'temp float reg');
-                    CodeGen.EmitInst('LII', '7');
-                    CodeGen.EmitInst('EXWD', '', '(DP) <-> (FloatXReg), 8 bytes');
+                       writln( #9'LIDP'#9+name+#9'; store var '+name );
+                    writln( #9'LP 0x'+IntToHex(FloatXReg,2)+' ; temp float reg' );
+                    writln( #9'LII 7');
+                    writln( #9'EXWD ; (DP) <-> (FloatXReg), 8 bytes' );
                 end;
             end ;
         end else
@@ -813,15 +858,85 @@ begin
             if (typ='char') or (typ='byte') then
             begin
                 if not xr then
-                    CodeGen.StoreArrayByteToReg(adr, name)
-                else
-                    CodeGen.StoreArrayByteToXram(adr, name);
+                begin
+                        writln( #9'LIB'#9+inttostr(adr)+#9'; Store array element from '+name);
+                        writln( #9'LP'#9'3');
+                        writln( #9'ADM');
+                        writln( #9'EXAB');
+                        writln( #9'STP');
+                        writln( #9'POP'); dec(pushcnt);
+                        writln( #9'EXAM');
+                end else
+                begin
+                        writln( #9'PUSH'#9#9'; Store array element from '+name); inc(pushcnt);
+                        writln( #9'LP'#9'7'#9'; HB of address');
+                        if adr <> -1 then
+                        begin
+                                writln( #9'LIA'#9'HB('+inttostr(adr)+'-1)');
+                                writln( #9'EXAM');
+                                writln( #9'LP'#9'6'#9'; LB');
+                                writln( #9'LIA'#9'LB('+inttostr(adr)+'-1)');
+                        end else
+                        begin
+                                writln( #9'LIA'#9'HB('+name+'-1)');
+                                writln( #9'EXAM');
+                                writln( #9'LP'#9'6'#9'; LB');
+                                writln( #9'LIA'#9'LB('+name+'-1)');
+                        end;
+                        writln( #9'EXAM');
+                        writln( #9'POP'); dec(pushcnt);
+                        writln( #9'LIB'#9'0');
+                        writln( #9'ADB');
+                        writln( #9'POP'); dec(pushcnt);
+                        writln( #9'IYS');
+                end;
             end else if (typ='word') then
             begin
                 if not xr then
-                    CodeGen.StoreArrayWordToReg(adr, name)
-                else
-                    CodeGen.StoreArrayWordToXram(adr, name);
+                begin
+                        writln( #9'RC');
+                        writln( #9'SL');
+                        writln( #9'LII'#9+inttostr(adr)+#9'; Store array element from '+name);
+                        writln( #9'LP'#9'0');
+                        writln( #9'ADM');
+                        writln( #9'EXAM');
+                        writln( #9'STP');
+                        writln( #9'INCP');
+                        writln( #9'POP'); dec(pushcnt);
+                        writln( #9'EXAM');
+                        writln( #9'DECP');
+                        writln( #9'POP'); dec(pushcnt);
+                        writln( #9'EXAM');
+                end else
+                begin
+                        writln( #9'RC');
+                        writln( #9'SL');
+                        writln( #9'PUSH'#9#9'; Store array element from '+name); inc(pushcnt);
+                        writln( #9'LP'#9'7'#9'; HB of address');
+                        if adr <> -1 then
+                        begin
+                                writln( #9'LIA'#9'HB('+inttostr(adr)+'-1)');
+                                writln( #9'EXAM');
+                                writln( #9'LP'#9'6'#9'; LB');
+                                writln( #9'LIA'#9'LB('+inttostr(adr)+'-1)');
+                        end else
+                        begin
+                                writln( #9'LIA'#9'HB('+name+'-1)');
+                                writln( #9'EXAM');
+                                writln( #9'LP'#9'6'#9'; LB');
+                                writln( #9'LIA'#9'LB('+name+'-1)');
+                        end;
+                        writln( #9'EXAM');
+                        writln( #9'POP'); dec(pushcnt);
+                        writln( #9'LIB'#9'0');
+                        writln( #9'ADB');
+                        writln( #9'POP'); dec(pushcnt);
+                        writln( #9'EXAB');
+                        writln( #9'POP'); dec(pushcnt);
+                        writln( #9'IYS');
+                        writln( #9'EXAB');
+                        writln( #9'IYS');
+                end;
             end else if (typ='float') then
             begin
                  Error ( 'Float array storing unsupported yet ');
@@ -835,12 +950,12 @@ end;
 { Load the Primary Register with a Constant }
 
 procedure LoadConstant(n: string);
+var i, c: integer;
 var s, lb: string;
 var f: float;
-var idx: integer;
 begin
 
-    if optype = floatp then
+    if optype = otFloat then
     begin
         f := mathparse ( n, 0 );
         if not (f = 0) then
@@ -848,28 +963,29 @@ begin
           s := SharpBCD ( f );
           lb := 'C_'+NewLabel;
           varfcode ( s, lb );
-          CodeGen.EmitInst('LIDP', lb, 'Load floating-point constant: '+n);
-          CodeGen.EmitInst('LP', '0x'+IntToHex(FloatXReg,2), 'temporary store point');
-          CodeGen.EmitInst('LII', '07');
-          CodeGen.EmitInst('MVWD');
+          writln( #9'LIDP'#9+lb+' ; Load floating-point constant: '+n );
+          writln( #9'LP'#9'0x'+IntToHex(FloatXReg,2)+' ; temporary store point' );
+          writln( #9'LII 07');
+          writln( #9'MVWD' );
         end else
         begin
-          CodeGen.EmitInst('LIA', '00');
-          CodeGen.EmitInst('LP', '0x'+IntToHex(FloatXReg,2), 'temporary store point');
-          CodeGen.EmitInst('LII', '07');
-          CodeGen.EmitInst('FILM');
+          writln( #9'LIA 00');
+          writln( #9'LP'#9'0x'+IntToHex(FloatXReg,2)+' ; temporary store point' );
+          writln( #9'LII 07');
+          writln( #9'FILM' );
         end;
     end else
-    if optype = word then
+    if optype = otWord then
     begin
-        CodeGen.EmitInst('LIA', 'LB('+n+')', 'Load word constant LB');
-        CodeGen.EmitInst('LIB', 'HB('+n+')', 'Load word constant HB');
+        writln( #9'LIA'#9'LB('+n+')'#9'; Load word constant LB');
+        writln( #9'LIB'#9'HB('+n+')'#9'; Load word constant HB');
     end else
     begin
+        val(n, i, c);
 	{ if (c = 0) and (i = 0) then
-                CodeGen.EmitInst('RA', '', 'Load 0')
+                writln( #9'RA'#9#9'; Load 0')
         else      }
-                CodeGen.EmitInst('LIA', n, 'Load byte constant '+n);
+                writln( #9'LIA'#9+n+#9'; Load byte constant '+n);
     end;
 end;
 
@@ -897,84 +1013,130 @@ begin
             if (typ='char') or (typ='byte') then
             begin
                 if not xr then
+                begin
                     if not loc then
-                        CodeGen.LoadByteFromReg(adr, name)
-                    else // Local char or byte
-                        CodeGen.LoadByteFromLocal(adr, name)
-                else begin
+                    begin
+                        if adr < 64 then
+                                writln( #9'LP'#9+inttostr(adr)+#9'; Load variable '+name)
+                        else
+                                writln( #9'LIP'#9+inttostr(adr)+#9'; Load variable '+name);
+                        writln( #9'LDM');
+                    end else
+                    begin // Local char or byte
+                        writln(#9'LDR');
+                        writln(#9'ADIA'#9+inttostr(adr+2+pushcnt));
+                        writln(#9'STP');
+                        writln(#9'LDM'#9#9'; Load variable '+name);
+                    end;
+                end else
+                begin
                     if loc then
                        Error ( 'Xram Local loading Unsupported' );
-                    CodeGen.LoadByteFromXram(adr, name);
+                    if adr <> -1 then
+                            writln( #9'LIDP'#9+inttostr(adr)+#9'; Load variable '+name)
+                    else
+                            writln( #9'LIDP'#9+name+#9'; Load variable '+name);
+                    writln( #9'LDD');
                 end;
-                if optype = floatp then
+                if optype = otFloat then
                    // TO DO -casting ?
                    Error ( 'Unsupported load float to byte' );
-                if optype = word then
+                if optype = otWord then
                    // cast byte to word
-                   CodeGen.EmitInst('LIB', '0');
+                   writln( #9'LIB'#9'0');
             end else if (typ='word') then
             begin
-                if optype = floatp then
+                if optype = otFloat then
                    // TO DO - casting ?
                    Error ( 'Unsupported load float to word' );
                 if not xr then
+                begin
                     if not loc then
-                        CodeGen.LoadWordFromReg(adr, name)
-                    else // Local word
-                        CodeGen.LoadWordFromLocal(adr, name)
-                else begin
+                    begin
+                        if adr < 64 then
+                                writln( #9'LP'#9+inttostr(adr+1)+#9'; Load 16bit variable '+name)
+                        else
+                                writln( #9'LIP'#9+inttostr(adr+1)+#9'; Load 16bit variable '+name);
+                        writln(#9'LDM'#9#9'; HB');
+                        writln(#9'EXAB');
+                        writln(#9'DECP'#9#9'; LB');
+                        writln(#9'LDM');
+                    end else
+                    begin // Local word
+                        writln(#9'LDR');
+                        writln(#9'ADIA'#9+inttostr(adr+1+pushcnt));
+                        writln(#9'STP');
+                        writln(#9'LDM'#9'; HB - Load variable '+name);
+                        writln(#9'EXAB');
+                        writln(#9'INCP');
+                        writln(#9'LDM'#9'; LB');
+                    end;
+                end else
+                begin
                     if loc then
                        Error ( 'Unsupported Xram local load' );
-                    CodeGen.LoadWordFromXram(adr, name);
+                    if adr <> -1 then
+                            writln( #9'LIDP'#9+inttostr(adr+1)+#9'; Load 16bit variable '+name)
+                    else
+                            writln( #9'LIDP'#9+name+'+1'#9'; Load 16bit variable '+name);
+                    writln( #9'LDD'#9#9'; HB');
+                    writln( #9'EXAB');
+                    if (adr <> -1) and ((adr + 1) div 256 = adr div 256) then
+                            writln( #9'LIDL'#9'LB('+inttostr(adr)+')')
+                    else if adr <> -1 then
+                            writln( #9'LIDP'#9+inttostr(adr))
+                    else
+                            writln( #9'LIDP'#9+name);
+                    writln( #9'LDD'#9#9'; LB');
                 end;
             end else if (typ='float') then
             begin
-                if not ( optype = floatp ) then
+                if not ( optype = otFloat ) then
                    Error ( 'Unsupported load other types to float' );
                 if not xr then
                 begin
                     if not loc then
                     begin
-                        CodeGen.EmitInst('LIQ', '0x'+IntToHex(adr,2), 'from here');
-                        CodeGen.EmitInst('LP', '0x'+IntToHex(FloatXReg,2), 'to temporary store');
-                        CodeGen.EmitInst('LII', '7');
-                        CodeGen.EmitInst('MVW', '', '(Q) -> (FloatXReg), 8 bytes');
+                        writln(#9'LIQ 0x'+IntToHex(adr,2)+#9'; from here');
+                        writln(#9'LP'#9'0x'+IntToHex(FloatXReg,2)+#9'; to temporary store' );
+                        writln(#9'LII 7');
+                        writln(#9'MVW ; (Q) -> (FloatXReg), 8 bytes');
                     end
                     else begin
                         // a local variable is reverse-ordered on stack
-                        CodeGen.EmitBlankLine;
-                        CodeGen.EmitComment('Load local-float var into FloatXReg, reversed');
-                        CodeGen.EmitInst('LDR');  // R -> A
-                        CodeGen.EmitInst('EXAB'); // save R in B, first
+                        writln(#9'');
+                        writln(#9'; Load local-float var into FloatXReg, reversed');
+                        writln(#9'LDR');  // R -> A
+                        writln(#9'EXAB'); // save R in B, first
                         // from:
-                        CodeGen.EmitInst('LDR'); // R -> A
-                        CodeGen.EmitInst('ADIA', inttostr(adr+pushcnt+2-7), 'from: '+name+' offset');
-                        CodeGen.EmitInst('STR'); // now R points to the local variable start addr
+                        writln(#9'LDR'); // R -> A
+                        writln(#9'ADIA'#9+inttostr(adr+pushcnt+2-7)+#9'; from: '+name+' offset');
+                        writln(#9'STR'); // now R points to the local variable start addr
                         // to:
-                        CodeGen.EmitInst('LIP', '0x'+IntToHex(FloatXReg+7,2), 'to: primary float reg end addr');
+                        writln(#9'LIP 0x'+IntToHex(FloatXReg+7,2)+#9'; to: primary float reg end addr' );
                         // loop 8 times
-                        CodeGen.EmitInst('LIJ', '8', 'move 8 bytes');
+                        writln(#9'LIJ 8'#9'; move 8 bytes');
                         lb := NewLabel;
                         PostLabel(lb);
                         // move using POP+EXAM
-                        CodeGen.EmitInst('POP'); dec(pushcnt);
-                        CodeGen.EmitInst('EXAM'); // A <-> (P), I times (1)
-                        CodeGen.EmitInst('DECP');
-                        CodeGen.EmitInst('DECJ');
-                        CodeGen.EmitInst('JRNZM', lb);
-                        CodeGen.EmitInst('EXAB'); // restore R
-                        CodeGen.EmitInst('STR'); // A -> R
+                        writln(#9'POP'); dec(pushcnt);
+                        writln(#9'EXAM'); // A <-> (P), I times (1)
+                        writln(#9'DECP');
+                        writln(#9'DECJ');
+                        writln(#9'JRNZM '+lb);
+                        writln(#9'EXAB'); // restore R
+                        writln(#9'STR'); // A -> R
                     end;
                 end else begin
                     if loc then
                        Error ( 'Unsupported Xram Local loading' );
                     if adr <> -1 then
-                       CodeGen.EmitInst('LIDP', '0x'+inttohex(adr,4), 'Load variable '+name)
+                       writln( #9'LIDP'#9+'0x'+inttohex(adr,4)+#9'; Load variable '+name)
                     else
-                       CodeGen.EmitInst('LIDP', name+'+1', 'Load variable '+name);
-                    CodeGen.EmitInst('LP', '0x'+inttohex(FloatXReg,2), 'to temporary store');
-                    CodeGen.EmitInst('LII', '07');
-                    CodeGen.EmitInst('MVWD', '', '(DP) -> (P), I+1 times');
+                       writln( #9'LIDP'#9+name+'+1'#9'; Load variable '+name);
+                    writln(#9'LP'#9'0x'+inttohex(FloatXReg,2)+' ; to temporary store' );
+                    writln(#9'LII 07');
+                    writln(#9'MVWD ; (DP) -> (P), I+1 times' );
                 end;
             end;
         end else
@@ -982,19 +1144,85 @@ begin
             if (typ='char') or (typ='byte') then
             begin
                 if not xr then
-                    CodeGen.LoadArrayByteFromReg(adr, name)
-                else
-                    CodeGen.LoadArrayByteFromXram(adr, name);
+                begin
+                        writln( #9'LIB'#9+inttostr(adr)+#9'; Load array element from '+name);
+                        writln( #9'LP'#9'3');
+                        writln( #9'ADM');
+                        writln( #9'EXAB');
+                        writln( #9'STP');
+                        writln( #9'LDM');
+                end else
+                begin
+                        writln( #9'PUSH'#9#9'; Load array element from '+name); inc(pushcnt);
+                        writln( #9'LP'#9'5'#9'; HB of address');
+                        if adr <> -1 then
+                        begin
+                                writln( #9'LIA'#9'HB('+inttostr(adr)+'-1)');
+                                writln( #9'EXAM');
+                                writln( #9'LP'#9'4'#9'; LB');
+                                writln( #9'LIA'#9'LB('+inttostr(adr)+'-1)');
+                        end else
+                        begin
+                                writln( #9'LIA'#9'HB('+name+'-1)');
+                                writln( #9'EXAM');
+                                writln( #9'LP'#9'4'#9'; LB');
+                                writln( #9'LIA'#9'LB('+name+'-1)');
+                        end;
+                        writln( #9'EXAM');
+                        writln( #9'POP'); dec(pushcnt);
+                        writln( #9'LIB'#9'0');
+                        writln( #9'ADB');
+                        writln( #9'IXL'); // X -> DP; DP+1 -> DP, X; (DP) -> A
+                end;
             end else if (typ='word') then
             begin
+                // word array: index needs to be multiplied by 2
                 if not xr then
-                    CodeGen.LoadArrayWordFromReg(adr, name)
-                else
-                    CodeGen.LoadArrayWordFromXram(adr, name);
+                begin
+                        writln( #9'RC');
+                        writln( #9'SL'#9#9'; index*2 for word array');
+                        writln( #9'LII'#9+inttostr(adr)+#9'; Load array element from '+name);
+                        writln( #9'LP'#9'0');
+                        writln( #9'ADM');
+                        writln( #9'EXAM');
+                        writln( #9'STP');
+                        writln( #9'LDM'#9#9'; HB');
+                        writln( #9'EXAB');
+                        writln( #9'DECP');
+                        writln( #9'LDM'#9#9'; LB');
+                end else
+                begin
+                        writln( #9'RC');
+                        writln( #9'SL'#9#9'; index*2 for word array');
+                        writln( #9'PUSH'#9#9'; Load array element from '+name); inc(pushcnt);
+                        writln( #9'LP'#9'5'#9'; HB of address');
+                        if adr <> -1 then
+                        begin
+                                writln( #9'LIA'#9'HB('+inttostr(adr)+'-1)');
+                                writln( #9'EXAM');
+                                writln( #9'LP'#9'4'#9'; LB');
+                                writln( #9'LIA'#9'LB('+inttostr(adr)+'-1)');
+                        end else
+                        begin
+                                writln( #9'LIA'#9'HB('+name+'-1)');
+                                writln( #9'EXAM');
+                                writln( #9'LP'#9'4'#9'; LB');
+                                writln( #9'LIA'#9'LB('+name+'-1)');
+                        end;
+                        writln( #9'EXAM');
+                        writln( #9'POP'); dec(pushcnt);
+                        writln( #9'LIB'#9'0');
+                        writln( #9'ADB');
+                        writln( #9'DX');
+                        writln( #9'IXL'#9#9'; HB');
+                        writln( #9'EXAB');
+                        writln( #9'IXL'#9#9'; LB');
+                        writln( #9'EXAB');
+                end;
             end else if (typ='float') then
             begin
-                 Error ( 'Float array loading not supported yet ' );
-            end ;
+                Error ( 'Float array loading not supported yet ' );
+            end;
         end;
 end;
 
@@ -1139,14 +1367,14 @@ begin
   end
   else if IsDigit(Look) then
   begin
-    if optype = floatp then
-        LoadConstant(Lexer.GetFloat)
+    if optype = otFloat then
+        LoadConstant(GetFloat)
     else
-        LoadConstant(Lexer.GetNumber);
+        LoadConstant(GetNumber);
   end
   else if IsAlpha(Look)then
   begin
-                s := Lexer.GetName;
+                s := GetName;
                 if Look = '[' then
                 begin
                         Rd(Look, Tok); tok := trim(tok);
@@ -1162,15 +1390,56 @@ begin
                                         error('This var ('+s+') is not a pointer!');
                                 if varlist[varfound].xram then
                                 begin
-                                        CodeGen.LoadPointerContentXram(varlist[varfound].pnttyp, s);
+                                        writln(#9'LP'#9'4'#9'; XL');
+                                        writln(#9'EXAM');
+                                        writln(#9'LP'#9'5'#9'; XH');
+                                        writln(#9'EXAB');
+                                        writln(#9'EXAM');
+                                        writln(#9'DX');
+                                        if varlist[varfound].pnttyp <> 'word' then
+                                        begin
+                                                writln(#9'IXL'#9#9'; Load content *'+s);
+                                        end else
+                                        begin
+                                                writln(#9'IXL'#9#9'; Load content LB *'+s);
+                                                writln(#9'EXAB');
+                                                writln(#9'IXL'#9#9'; Load content HB *'+s);
+                                                writln(#9'EXAB');
+                                        end;
                                 end else
                                 begin
-                                        CodeGen.LoadPointerContentReg(varlist[varfound].pnttyp, s);
+                                        // LIP
+                                        writln(#9'STP'#9#9'; Set P');
+                                        if varlist[varfound].pnttyp <> 'word' then
+                                        begin
+                                                writln(#9'LDM'#9#9'; Load content *'+s);
+                                        end else
+                                        begin
+                                                writln(#9'LDM'#9#9'; Load content LB *'+s);
+                                                writln(#9'EXAB');
+                                                writln(#9'INCP');
+                                                writln(#9'LDM'#9#9'; Load content HB *'+s);
+                                                writln(#9'EXAB');
+                                        end;
                                 end;
                         end else
                         if pointer = ADR then
                         begin
-                                CodeGen.LoadAddressOf(varlist[varfound].address, s, varlist[varfound].xram);
+                                if varlist[varfound].xram then
+                                begin
+                                        if varlist[varfound].address = -1 then
+                                        begin
+                                                writln(#9'LIA'#9'LB('+s+')'#9'; &'+s);
+                                                writln(#9'LIB'#9'HB('+s+')'#9'; &'+s);
+                                        end else
+                                        begin
+                                                writln(#9'LIA'#9'LB('+inttostr(varlist[varfound].address)+')'#9'; &'+s);
+                                                writln(#9'LIB'#9'HB('+inttostr(varlist[varfound].address)+')'#9'; &'+s);
+                                        end;
+                                end else
+                                begin
+                                        writln(#9'LIA'#9+inttostr(varlist[varfound].address)+#9'; &'+s);
+                                end;
                         end else
                                 LoadVariable(s);
                 end else if findproc(s) then
@@ -1206,7 +1475,7 @@ begin
                                 Push;
                             end;
                         end;
-                        CodeGen.EmitInst('CALL', s, 'Procedure call');
+                        writln( #9'CALL'#9+s+#9'; Procedure call');
                         Rd(Look, Tok); tok := trim(tok);
                 end;  }
 	end else
@@ -1288,7 +1557,7 @@ begin
                 if find_text(varlist[i].varname, tok) > 0 then
                         if (varlist[i].typ = 'word')
                         or ( ( varlist[i].pointer ) and (varlist[i].pnttyp = 'word') ) then
-                           optype := word;
+                           optype := otWord;
         i := 1;
         while i < length(Tok) do
         begin
@@ -1311,9 +1580,9 @@ begin
         while IsAddop(Look) do  begin
 		case Look of
 			'+': Add;
-			'-' : Subtract;
-			'|' : _Or;
-                        '~' : _Xor;
+			'-': Subtract;
+			'|': _Or;
+                        '~': _Xor;
 			SR:  ShiftR;
 			SL:  ShiftL;
                 end;
@@ -1341,18 +1610,18 @@ begin
                 delete(tok, 1, 1); tok := trim(tok);
         end;
         Rd(Look, Tok); tok := trim(tok);
-        Name := Lexer.GetName;
+        Name := GetName;
         if findvar(name) then
         begin
             if p = REF then
             begin
                 if ( not varlist[varfound].pointer and (varlist[varfound].typ = 'word') )
                 or ( varlist[varfound].pointer and (varlist[varfound].pnttyp = 'word') ) then
-                        optype := word;
+                        optype := otWord;
             end else
-            if varlist[varfound].typ = 'word' then optype := word
-            else if varlist[varfound].typ = 'float' then optype := floatp
-            else optype := byte;
+            if varlist[varfound].typ = 'word' then optype := otWord
+            else if varlist[varfound].typ = 'float' then optype := otFloat
+            else optype := otByte;
         end else
             error('Var '+name+' not declared!');
         s := '';
@@ -1375,25 +1644,25 @@ begin
                         if findvar(name)
                         and ((varlist[varfound].typ = 'char') or (varlist[varfound].typ = 'byte')) then
                         begin
-                                if look = '+' then CodeGen.EmitComment(name+'++') else CodeGen.EmitComment(name+'--');
+                                if look = '+' then writln(#9'; '+name+'++') else writln(#9'; '+name+'--');
                                 if ( not(varlist[varfound].Local)
                                 and ( varlist[varfound].address<12 )
                                 and ( varlist[varfound].address>=0 ) ) then
                                 begin
                                   a := varlist[varfound].address;
-                                  if a = 0 then begin if Look='+' then CodeGen.EmitInst('INCI') else CodeGen.EmitInst('DECI'); end
-                                  else if a = 1 then begin if Look='+' then CodeGen.EmitInst('INCJ') else CodeGen.EmitInst('DECJ'); end
-                                  else if a = 2 then begin if Look='+' then CodeGen.EmitInst('INCA') else CodeGen.EmitInst('DECA'); end
-                                  else if a = 3 then begin if Look='+' then CodeGen.EmitInst('INCB') else CodeGen.EmitInst('DECB'); end
-                                  else if a = 8 then begin if Look='+' then CodeGen.EmitInst('INCK') else CodeGen.EmitInst('DECK'); end
-                                  else if a = 9 then begin if Look='+' then CodeGen.EmitInst('INCL') else CodeGen.EmitInst('DECL'); end
-                                  else if a = 10 then begin if Look='+' then CodeGen.EmitInst('INCM') else CodeGen.EmitInst('DECM'); end
-                                  else if a = 11 then begin if Look='+' then CodeGen.EmitInst('INCN') else CodeGen.EmitInst('DECN'); end
+                                  if a = 0 then begin if Look='+' then writln(#9'INCI') else writln(#9'DECI'); end
+                                  else if a = 1 then begin if Look='+' then writln(#9'INCJ') else writln(#9'DECJ'); end
+                                  else if a = 2 then begin if Look='+' then writln(#9'INCA') else writln(#9'DECA'); end
+                                  else if a = 3 then begin if Look='+' then writln(#9'INCB') else writln(#9'DECB'); end
+                                  else if a = 8 then begin if Look='+' then writln(#9'INCK') else writln(#9'DECK'); end
+                                  else if a = 9 then begin if Look='+' then writln(#9'INCL') else writln(#9'DECL'); end
+                                  else if a = 10 then begin if Look='+' then writln(#9'INCM') else writln(#9'DECM'); end
+                                  else if a = 11 then begin if Look='+' then writln(#9'INCN') else writln(#9'DECN'); end
                                 end
                                 else
                                 begin
                                         Loadvariable(name);
-                                        if Look = '+' then CodeGen.EmitInst('INCA') else CodeGen.EmitInst('DECA');
+                                        if Look = '+' then writln(#9'INCA') else writln(#9'DECA');
                                         storevariable(name);
                                 end;
                                 exit;
@@ -1417,7 +1686,7 @@ begin
                         if ( not varlist[i].pointer and (varlist[i].typ = 'word') )
                         or ( varlist[i].pointer and (varlist[i].typ = 'float') )
                         or ( varlist[i].pointer and (varlist[i].pnttyp = 'word') ) then
-                                optype := word;
+                                optype := otWord;
                         fv := true;
                 end;
 
@@ -1439,64 +1708,65 @@ begin
                 Expression;
         end;
 	if p = 0 then
-                StoreVariable(Name)
-        else if p = REF then
-        begin
-                if findvar(Name) then
-                begin
-                        if varlist[varfound].pnttyp <> 'word' then
-                        begin
-                                CodeGen.EmitInst('PUSH'); inc(pushcnt);
-                        end else
-                        begin
-                                CodeGen.EmitInst('PUSH'); inc(pushcnt);
-                                CodeGen.EmitInst('EXAB');
-                                CodeGen.EmitInst('PUSH'); inc(pushcnt);
-                        end;
-                        LoadVariable(name);
-                        if not varlist[varfound].Pointer then
-                                        error('This var ('+name+') is not a pointer!');
-                        if varlist[varfound].xram then
-                        begin
-                                        CodeGen.EmitInst('LP', '6', 'YL');
-                                        CodeGen.EmitInst('EXAM');
-                                        CodeGen.EmitInst('LP', '7', 'YH');
-                                        CodeGen.EmitInst('EXAB');
-                                        CodeGen.EmitInst('EXAM');
-                                        CodeGen.EmitInst('DY');
-                                        if varlist[varfound].pnttyp <> 'word' then
-                                        begin
-                                                CodeGen.EmitInst('POP'); dec(pushcnt);
-                                                CodeGen.EmitInst('IYS', '', 'Store content *'+s);
-                                        end else
-                                        begin
-                                                CodeGen.EmitInst('POP'); dec(pushcnt);
-                                                CodeGen.EmitInst('EXAB');
-                                                CodeGen.EmitInst('POP'); dec(pushcnt);
-                                                CodeGen.EmitInst('IYS', '', 'Store content LB *'+s);
-                                                CodeGen.EmitInst('EXAB');
-                                                CodeGen.EmitInst('IYS', '', 'Store content HB *'+s);
-                                        end;
-                        end else
-                        begin
-                                        // LIP
-                                        CodeGen.EmitInst('STP', '', 'Set P');
-                                        if varlist[varfound].pnttyp <> 'word' then
-                                        begin
-                                                CodeGen.EmitInst('POP'); dec(pushcnt);
-                                                CodeGen.EmitInst('EXAM', '', 'Store content *'+s);
-                                        end else
-                                        begin
-                                                CodeGen.EmitInst('POP'); dec(pushcnt);
-                                                CodeGen.EmitInst('EXAB');
-                                                CodeGen.EmitInst('POP'); dec(pushcnt);
-                                                CodeGen.EmitInst('EXAM', '', 'Store content LB *'+s);
-                                                CodeGen.EmitInst('EXAB');
-                                                CodeGen.EmitInst('EXAM', '', 'Store content HB *'+s);
-                                        end;
-                        end;
-                end;
-        end;
+				StoreVariable(Name)
+		else if p = REF then
+		begin
+				if findvar(Name) then
+				begin
+						if varlist[varfound].pnttyp <> 'word' then
+						begin
+								writln(#9'PUSH'); inc(pushcnt);
+						end else
+						begin
+								writln(#9'PUSH'); inc(pushcnt);
+								writln(#9'EXAB');
+								writln(#9'PUSH'); inc(pushcnt);
+						end;
+						LoadVariable(name);
+						if not varlist[varfound].Pointer then
+										error('This var ('+name+') is not a pointer!');
+						if varlist[varfound].xram then
+						begin
+										writln(#9'LP'#9'6'#9'; YL');
+										writln(#9'EXAM');
+										writln(#9'LP'#9'7'#9'; YH');
+										writln(#9'EXAB');
+										writln(#9'EXAM');
+										writln(#9'DY');
+										if varlist[varfound].pnttyp <> 'word' then
+										begin
+												writln(#9'POP'); dec(pushcnt);
+												writln(#9'IYS'#9#9'; Store content *'+s);
+										end else
+										begin
+												writln(#9'POP'); dec(pushcnt);
+												writln(#9'EXAB');
+												writln(#9'POP'); dec(pushcnt);
+												writln(#9'IYS'#9#9'; Store content LB *'+s);
+												writln(#9'EXAB');
+												writln(#9'IYS'#9#9'; Store content HB *'+s);
+										end;
+						end else
+						begin
+										// LIP
+										writln(#9'STP'#9#9'; Set P');
+										if varlist[varfound].pnttyp <> 'word' then
+										begin
+												writln(#9'POP'); dec(pushcnt);
+												writln(#9'EXAM'#9#9'; Store content *'+s);
+										end else
+										begin
+												writln(#9'POP'); dec(pushcnt);
+												writln(#9'EXAB');
+												writln(#9'POP'); dec(pushcnt);
+												writln(#9'EXAM'#9#9'; Store content LB *'+s);
+												writln(#9'EXAB');
+												writln(#9'EXAM'#9#9'; Store content HB *'+s);
+										end;
+						end;
+				end;
+		end;
+        // Note: array index POP is handled inside StoreVariable for array access
 end;
 {--------------------------------------------------------------}
 
@@ -1614,14 +1884,13 @@ var L1, temp: string;
     iselse: boolean;
 begin
         delete(tok, 1, 7); tok := trim(tok);
-        CodeGen.EmitComment('Switch');
+        writln(#9'; Switch');
         Rd(Look, tok); tok:=trim(tok);
         Expression;
-        CodeGen.EmitInst('CASE');
+        writln(#9'CASE');
         iselse := false;
         repeat
-                
-                Lexer.GetToken(MODESTR, dummy);
+                getToken(MODESTR, dummy);
                 temp := extrcust(tok, ':'); tok:=trim(tok);
                 if tok <> '' then
                 begin
@@ -1633,18 +1902,18 @@ begin
                 if pos('else', tok) > 0 then
                         iselse := true;
                 L1 := NewLabel;
-                CodeGen.EmitInst(tok, L1);
+                writln(#9 + tok + #9 + L1);
                 outfile := false;
-                PostLabel(L1);
+                writln('  ' + L1 + ':');
                 block;
-                CodeGen.EmitInst('RTN');
-                CodeGen.EmitBlankLine;
+                writln(#9 + 'RTN');
+                writln('');
                 outfile := true;
         until trim(dummy)[1] = '}';
         if not iselse then
-                CodeGen.EmitInst('ELSE:', 'EOP');
-        CodeGen.EmitInst('ENDCASE');
-        CodeGen.EmitComment('End switch');
+                writln( #9'ELSE:'#9+'EOP');
+        writln(#9'ENDCASE');
+        writln(#9'; End switch');
 end;
 
 
@@ -1654,8 +1923,8 @@ end;
 procedure DoIf;
 var L1, L2: string;
 begin
-        CodeGen.EmitComment('If block: Boolean expression');
-        CodeGen.EmitBlankLine;
+        writln( #9'; If block: Boolean expression');
+        writln('');
         delete(Tok, 1, 4);
         BoolExpression;
         if tok <> '' then
@@ -1665,14 +1934,13 @@ begin
         end;
         L1 := NewLabel; L2 := L1;
         BranchAbsFalse(L1);   // potentially large jump
-        CodeGen.EmitBlankLine;
-        CodeGen.EmitComment('If expression = true');
+        writln('');
+        writln( #9'; If expression = true');
         Block;
 
         if copy(dummy, 1, 4) = 'else' then
         begin
-                
-                Lexer.GetToken(MODESTR, dummy); delete(tok, 1, 4); tok:=trim(tok);
+                getToken(MODESTR, dummy); delete(tok, 1, 4); tok:=trim(tok);
                 if tok <> '' then
                 begin
                         dummy := tok + ';}' + dummy;
@@ -1681,10 +1949,10 @@ begin
                 L2 := NewLabel;
                 BranchAbs(L2);   // potentially large jump
                 PostLabel(L1);
-                CodeGen.EmitComment('If expression = false');
+                writln( #9'; If expression = false');
                 Block;
         end;
-        CodeGen.EmitComment('End of if');
+        writln( #9'; End of if');
         PostLabel(L2);
 end;
 {-------------------------------------------------------------}
@@ -1696,8 +1964,8 @@ end;
 procedure DoGoto;
 begin
         delete(tok, 1, 5); tok := trim(tok);
-        CodeGen.EmitInst('RJMP', tok, 'Goto');
-        CodeGen.EmitBlankLine;
+        writln( #9'RJMP'#9+tok+#9'; Goto');
+        writln('');
 end;
 {-------------------------------------------------------------}
 
@@ -1710,9 +1978,8 @@ begin
         delete(tok, 1, 6); tok := trim(tok);
         if findvar(tok) or findproc(tok) then
                 error(tok+': This label name is already used!');
-        CodeGen.EmitBlankLine;
-        PostLabel(tok);
-        CodeGen.EmitComment('User label');
+        writln('');
+        writln( '  '+tok+':'#9'; User label');
 end;
 {-------------------------------------------------------------}
 
@@ -1723,10 +1990,10 @@ end;
 procedure DoBreak;
 begin
         if InnerLoop = 'loop' then
-                CodeGen.EmitInst('LEAVE', '', 'Break')
+                writln( #9'LEAVE'#9#9'; Break')
         else
-                CodeGen.EmitInst('RJMP', ExitLabel, 'Break');
-        CodeGen.EmitBlankLine;
+                writln( #9'RJMP'#9+ExitLabel+#9'; Break');
+        writln('');
 end;
 {-------------------------------------------------------------}
 
@@ -1740,15 +2007,15 @@ begin
         if tok <> '' then
         begin
                 Rd(Look, tok); tok := trim(tok);
-                //isword := SymbolTable.GetProcInfo(currproc).returnisword;
-                if ( SymbolTable.GetProcInfo(currproc).returntype = 'byte' )
-                or ( SymbolTable.GetProcInfo(currproc).returntype = 'char' ) then optype := byte
-                else if SymbolTable.GetProcInfo(currproc).returntype = 'word' then optype := word
-                else if SymbolTable.GetProcInfo(currproc).returntype = 'float' then optype := floatp;
+                //isword := proclist[currproc].returnisword;
+                if ( proclist[currproc].returntype = 'byte' )
+                or ( proclist[currproc].returntype = 'char' ) then optype := otByte
+                else if proclist[currproc].returntype = 'word' then optype := otWord
+                else if proclist[currproc].returntype = 'float' then optype := otFloat;
                 Expression;
         end;
-        CodeGen.EmitInst('RTN', '', 'end of ' + SymbolTable.GetProcInfo(currproc).procname);
-        CodeGen.EmitBlankLine;
+        writln( #9'RTN'#9#9'; end of ' + proclist[currproc].procname);
+        writln('');
 end;
 {-------------------------------------------------------------}
 
@@ -1763,10 +2030,10 @@ begin
         L1 := NewLabel;
         L2 := NewLabel;
         ExitLabel := L2;
-        CodeGen.EmitComment('Loop');
-        CodeGen.EmitBlankLine;
-        delete(tok, 1, 6); tok := trim(tok);
-        Rd(Look, Tok); tok := trim(tok);
+        writln( #9'; Loop');
+        writln('');
+        delete(tok, 1, 6); tok := trim(tok); //delete(tok, length(tok), 1);
+	      Rd(Look, Tok); tok := trim(tok);
         Expression;
         isword := false;
         Push; dec(pushcnt);
@@ -1777,9 +2044,9 @@ begin
                 inc(level);
         end;
         Block;
-        CodeGen.EmitInst('LOOP', L1);
+        writln( #9'LOOP'#9+L1);
         PostLabel(L2);
-        CodeGen.EmitComment('End of loop');
+        writln( #9'; End of loop');
 end;
 {-------------------------------------------------------------}
 
@@ -1794,22 +2061,22 @@ begin
         L1 := NewLabel;
         L2 := NewLabel;
         ExitLabel := L2;
-        CodeGen.EmitComment('While');
-        CodeGen.EmitBlankLine;
+        writln( #9'; While');
+        writln('');
         PostLabel(L1);
         delete(Tok, 1, 7); //delete(Tok, length(Tok), 1);
         BoolExpression;
         BranchAbsFalse(L2); // potentially large jump
-        CodeGen.EmitComment('While expression = true');
+        writln( #9'; While expression = true');
         if tok <> '' then
         begin
                 dummy := tok + ';}' + dummy;
                 inc(level);
         end;
         Block;
-        CodeGen.EmitInst('RJMP', L1);
+        writln( #9'RJMP'#9+L1);
         PostLabel(L2);
-        CodeGen.EmitComment('End of while');
+        writln( #9'; End of while');
 end;
 {-------------------------------------------------------------}
 
@@ -1822,18 +2089,18 @@ var L1, L2, temp: string;
 begin
         InnerLoop := 'for';
         delete(tok, 1, 5);
-        CodeGen.EmitComment('For loop');
+        writln( #9'; For loop');
         Assignment;
         L1 := NewLabel;
         L2 := NewLabel;
         ExitLabel := L2;
         PostLabel(L1);
-        Lexer.GetToken(MODESTR, dummy);
+        getToken(MODESTR, dummy);
         BoolExpression;
         BranchAbsFalse(L2); // potentially large jump
         if trim(dummy)[1] <> ')' then
         begin
-                Lexer.GetToken(MODESTR, dummy);
+                getToken(MODESTR, dummy);
                 if tok[length(tok)] = ')' then
                 begin
                         delete(tok, length(tok), 1);
@@ -1850,7 +2117,7 @@ begin
                 end;
         end else
         begin
-                Lexer.GetToken(MODESTR, dummy);
+                getToken(MODESTR, dummy);
                 if tok <> ')' then
                 begin
                         delete(tok, 1, 1); tok := trim(tok);
@@ -1860,15 +2127,12 @@ begin
         end;
 
         block;
-        CodeGen.EmitInst('RJMP', L1);
+        writln( #9'RJMP'#9+L1);
         PostLabel(L2);
-        CodeGen.EmitComment('End of for');
+        writln( #9'; End of for');
 end;
 {-------------------------------------------------------------}
 
-
-{-------------------------------------------------------------}
-{ Load Statement }
 
 procedure DoLoad;
 begin
@@ -1876,20 +2140,15 @@ begin
         rd(look, tok);
         expression;
 end;
-{-------------------------------------------------------------}
 
-
-{-------------------------------------------------------------}
-{ Save Statement }
 
 procedure DoSave;
 var name: string;
 begin
         delete(tok, 1, 5);
-        name := Lexer.GetName;
+        name := getname;
         storevariable(name);
 end;
-{-------------------------------------------------------------}
 
 
 {-------------------------------------------------------------}
@@ -1902,10 +2161,10 @@ begin
         L1 := NewLabel;
         L2 := NewLabel;
         ExitLabel := L2;
-        CodeGen.EmitComment('Do..while');
-        CodeGen.EmitBlankLine;
+        writln( #9'; Do..while');
+        writln('');
         PostLabel(L1);
-//        Lexer.GetToken(MODESTR, dummy);
+//        GetToken(MODESTR, dummy);
         extrword(tok); tok := trim(tok);
         if tok <> '' then
         begin
@@ -1913,14 +2172,14 @@ begin
                 inc(level);
         end;
         Block;
-        Lexer.GetToken(MODESTR, dummy);
+        getToken(MODESTR, dummy);
         delete(Tok, 1, 7); delete(Tok, length(Tok), 1);
         BoolExpression;
         BranchFalse(L2);
-        CodeGen.EmitComment('While expression = true');
-        CodeGen.EmitInst('RJMP', L1);
+        writln( #9'; While expression = true');
+        writln( #9'RJMP'#9+L1);
         PostLabel(L2);
-        CodeGen.EmitComment('End of do..while');
+        writln( #9'; End of do..while');
 end;
 {-------------------------------------------------------------}
 
@@ -1931,7 +2190,6 @@ end;
 procedure ProcCall;
 var i, c, a, aa: integer;
     name: string;
-    proc: TProcInfo;
 begin
         if tok = '' then exit;
         name := extrword(tok);
@@ -1941,45 +2199,44 @@ begin
         Rd(Look, Tok); tok := trim(tok);
         if findproc(name) then
         begin
-                proc := SymbolTable.GetProcInfo(procfound);
                 proclist[procfound].IsCalled := true;
 
                 // calculating and pushing parameters on stack
-                if proc.parcnt > 0 then
+                if proclist[procfound].parcnt > 0 then
                 begin
                         //delete(s, 1, 1); s := trim(s);
-                        CodeGen.EmitComment('pushing parameters on stack...');
+                        writln( #9'; pushing parameters on stack...');
                         c := 0;
                         repeat
                                 Rd(Look, Tok); tok := trim(tok);// + ',';
-                                {if findvar(proc.parname[c]) then
+                                {if findvar(ProcList[ProcFound].parname[c]) then
                                 begin
                                     varlist[varfound].address := a;
                                 end else
                                     error('Parameter error!');}
-                                if ( proc.partyp[c] = 'char' )
-                                   or ( proc.partyp[c] = 'byte') then
+                                if ( ProcList[ProcFound].partyp[c] = 'char' )
+                                   or ( ProcList[ProcFound].partyp[c] = 'byte') then
                                 begin
                                     isword := false; inc(a);
-                                    optype := byte;
-                                end else if proc.partyp[c] = 'word' then
+                                    optype := otByte;
+                                end else if ProcList[ProcFound].partyp[c] = 'word' then
                                 begin
                                     isword := true; inc(a, 2);
-                                    optype := word;
-                                end else if proc.partyp[c] = 'float' then
+                                    optype := otWord;
+                                end else if ProcList[ProcFound].partyp[c] = 'float' then
                                 begin
                                     isword := false; inc(a, 8);
-                                    optype := floatp;
+                                    optype := otFloat;
                                 end;
                                 Expression;
-                                CodeGen.EmitComment(proc.parname[c]+' ('+proc.partyp[c]+')');
+                                writln( #9'; '+ProcList[ProcFound].parname[c]+' ('+ProcList[ProcFound].partyp[c]+')'  );
                                 Push;
                                 inc(c);
-                                if c > proc.ParCnt then
-                                    error('Too many parameters for '+proc.ProcName);
+                                if c > ProcList[ProcFound].ParCnt then
+                                    error('Too many parameters for '+ProcList[ProcFound].ProcName);
                         until (Look <> ',');
-                        if c <> proc.ParCnt then
-                                error('Wrong number of parameters for '+proc.ProcName);
+                        if c <> ProcList[ProcFound].ParCnt then
+                                error('Wrong number of parameters for '+ProcList[ProcFound].ProcName);
 {
                         l := extrblock(s);
                         l := trim(l) + ',';
@@ -2006,34 +2263,34 @@ begin
                 end;
 
                 // allocating locals too on stack
-                if proc.loccnt > 0 then
+                if proclist[procfound].loccnt > 0 then
                 begin
-                    CodeGen.EmitBlankLine;
-                    CodeGen.EmitComment('reserving stack (R recalc)...');
+                    writln( ' ' );
+                    writln( #9'; reserving stack (R recalc)...');
                     aa := 0;
-                    for c := 0 to proc.loccnt - 1 do
+                    for c := 0 to proclist[procfound].loccnt - 1 do
                     begin
-                            if ((proc.loctyp[c] = 'char') or
-                                (proc.loctyp[c] = 'byte')) then
+                            if ((ProcList[ProcFound].loctyp[c] = 'char') or
+                                (ProcList[ProcFound].loctyp[c] = 'byte')) then
                             begin
                                 isword := false;
-                                optype := byte;
+                                optype := otByte;
                                 inc(a);
                                 inc(aa);
-                            end else if proc.loctyp[c] = 'word' then
+                            end else if ProcList[ProcFound].loctyp[c] = 'word' then
                             begin
                                 isword := true;
-                                optype := word;
+                                optype := otWord;
                                 inc(a, 2);
                                 inc(aa, 2);
-                            end else if proc.loctyp[c] = 'float' then
+                            end else if ProcList[ProcFound].loctyp[c] = 'float' then
                             begin
                                 isword := false;
-                                optype := floatp;
+                                optype := otFloat;
                                 inc(a, 8);
                                 inc(aa, 8);
                             end;
-                            CodeGen.EmitComment(proc.locname[c]+' ('+proc.loctyp[c]+')');
+                            writln( #9'; '+ProcList[ProcFound].locname[c]+' ('+ProcList[ProcFound].loctyp[c]+')'  );
                             // Push         // see optimization below
 
                             {if findvar(ProcList[ProcFound].locname[c]) then
@@ -2045,54 +2302,54 @@ begin
                      // allocating room on stack pointer... either via 'push', or R decrement
                      if aa < 8 then
                        for c := 1 to aa do
-                          begin CodeGen.EmitInst('PUSH'); inc(pushcnt); end
+                          begin writln( #9'PUSH'); inc(pushcnt); end
                      else
                         begin
-                          CodeGen.EmitInst('LP', '0');
-                          CodeGen.EmitInst('EXAM');
-                          CodeGen.EmitInst('LDR');
-                          CodeGen.EmitInst('SBIA', inttostr(aa)); inc(pushcnt, aa);
-                          CodeGen.EmitInst('STR');
-                          CodeGen.EmitInst('EXAM');
+                          writln( #9'LP'#9'0');
+                          writln( #9'EXAM');
+                          writln( #9'LDR');
+                          writln( #9'SBIA'#9+inttostr(aa)); inc(pushcnt, aa);
+                          writln( #9'STR');
+                          writln( #9'EXAM');
                         end;
                 end;
 
                 // call the routine
-                CodeGen.EmitBlankLine;
-                CodeGen.EmitInst('CALL', name);
+                writln( ' ' );
+                writln( #9'CALL'#9+name);
 
                 if a > 0 then
                 begin
-                    CodeGen.EmitBlankLine;
-                    CodeGen.EmitComment('restore stack pointer');
-                    if ( proc.returntype = 'float' ) then
+                    writln( ' ' );
+                    writln( #9'; restore stack pointer');
+                    if ( proclist[procfound].returntype = 'float' ) then
                        Error ( 'Float return handling not implemented!');
-                    if ( proc.returnisword ) then
+                    if ( proclist[procfound].returnisword ) then
                     begin
-                            CodeGen.EmitInst('LP', '0');
-                            CodeGen.EmitInst('EXAM');
-                            CodeGen.EmitInst('LDR');
-                            CodeGen.EmitInst('ADIA', inttostr(a)); dec(pushcnt, a);
-                            CodeGen.EmitInst('STR');
-                            CodeGen.EmitInst('EXAM');
+                            writln( #9'LP'#9'0');
+                            writln( #9'EXAM');
+                            writln( #9'LDR');
+                            writln( #9'ADIA'#9+inttostr(a)); dec(pushcnt, a);
+                            writln( #9'STR');
+                            writln( #9'EXAM');
                     end else
-                    if proc.hasreturn then
+                    if proclist[procfound].hasreturn then
                     begin
-                            CodeGen.EmitInst('EXAB');
-                            CodeGen.EmitInst('LDR');
-                            CodeGen.EmitInst('ADIA', inttostr(a)); dec(pushcnt, a);
-                            CodeGen.EmitInst('STR');
-                            CodeGen.EmitInst('EXAB');
+                            writln( #9'EXAB');
+                            writln( #9'LDR');
+                            writln( #9'ADIA'#9+inttostr(a)); dec(pushcnt, a);
+                            writln( #9'STR');
+                            writln( #9'EXAB');
                     end else
                     begin  // no return value (we can overwrite A)
                         if a < 4 then  // optimize for size
                             for i := 1 to a do
-                                begin CodeGen.EmitInst('POP'); dec(pushcnt); end
+                                begin writln( #9'POP'); dec(pushcnt); end
                         else
                         begin
-                            CodeGen.EmitInst('LDR');
-                            CodeGen.EmitInst('ADIA', inttostr(a)); dec(pushcnt, a);
-                            CodeGen.EmitInst('STR');
+                            writln( #9'LDR');
+                            writln( #9'ADIA'#9+inttostr(a)); dec(pushcnt, a);
+                            writln( #9'STR');
                         end;
                     end;
                 end;
@@ -2134,7 +2391,7 @@ begin
                 else if ProcList[currproc].loctyp[i] = 'word' then inc(m, 2)
                 else if ((ProcList[currproc].loctyp[i] = 'byte') or
                          (ProcList[currproc].loctyp[i] = 'char')) then inc(m)
-                else Error ('Invalid local var type <' + ProcList[currproc].loctyp[i] + '> in '
+                else Error ('Invalid local var type <' + ProcList[currproc].partyp[i] + '> in '
                      + ProcList[currproc].ProcName );
 
         // calc each local relative address (offset), starting from the end
@@ -2166,6 +2423,7 @@ begin
                 else if ProcList[currproc].loctyp[i] = 'word' then inc(a, 2)
                 else if ((ProcList[currproc].loctyp[i] = 'byte') or
                          (ProcList[currproc].loctyp[i] = 'char')) then inc(a);
+
         end;
 end;
 
@@ -2173,14 +2431,14 @@ end;
 { Parse and Translate a Block }
 
 procedure Block;
-var Name: string;
+var Name, name2: string;
 begin
     repeat
-        
-        Lexer.GetToken(MODESTR, dummy);
+
+        getToken(MODESTR, dummy);
         // The following doesn't allow var names starting with a type name
         // e.g. 'byteX' is confused with 'byte' !
-        // Try using Lexer.GetName(), or ExtrWord() instead?
+        // Try using GetName(), or ExtrWord() instead?
         name := copy(tok, 1, 5);
         if ((trim(name) = 'byte' )
              or (trim(name) = 'char')
@@ -2225,7 +2483,7 @@ begin
                 tok := ExtrCust(dummy, #13);
                 while copy(trim(tok), 1, 7) <> '#endasm' do
                 begin
-                        writln(#9+tok);  // Keep writln for inline assembly
+                        writln( #9+tok);
                         tok := ExtrCust(dummy, #13);
                 end;
           end
@@ -2235,7 +2493,7 @@ begin
                 ProcCall
           else
                 Assignment;
-          CodeGen.EmitBlankLine;
+          writln('');
         end;
         dummy := trim(dummy);
     until (trim(dummy) = '') or (trim(dummy)[1] = '}');
@@ -2292,7 +2550,7 @@ var Name, name2, t, temp, s, rettyp: string;
 begin
         assignfile(f, filen);
         reset(f);
-        Lexer.GetToken(MODEFILE, dummy);
+        GetToken(MODEFILE, dummy);
         while tok <> '' do
         begin
 
@@ -2339,7 +2597,7 @@ begin
                     begin
                             Error ( 'Float return value unsupported (yet)' );
                             rettyp := name2;
-                            optype := floatp;
+                            optype := otFloat;
                             Name := ExtrWord(Tok);
                             hasret := true;
                     end else
@@ -2347,14 +2605,14 @@ begin
                     begin
                             rettyp := name2;
                             isword := true;
-                            optype := word;
+                            optype := otWord;
                             Name := ExtrWord(Tok);
                             hasret := true;
                     end else
                     if (name2 = 'char') or (name2 = 'byte') then
                     begin
                             rettyp := name2;
-                            optype := byte;
+                            optype := otByte;
                             Name := ExtrWord(Tok);
                             hasret := true;
                     end else
@@ -2388,7 +2646,7 @@ begin
                     delete(t, length(t), 1);
                     AddProc(Name, trim(t), temp, i, hasret, isword, rettyp);
             end;
-	    Lexer.GetToken(MODEFILE, dummy);
+	    GetToken(MODEFILE, dummy);
         end;
 
         printvarlist;
@@ -2409,18 +2667,18 @@ procedure SecondScan(filen: string);
 var name, typ, s, s2, s3: string;
     at, arr: boolean;
     i, adr, size, value: integer;
+    fval: float;
     f2: textfile;
 begin
         md := MODESTR;
-        outfile := true;
         assign(f,'temp.asm');
         rewrite(f);
 
         { Write Intro }
-        writln('; pasm file - assemble with pasm!');
-        writln('; Compiled with lcc v1.1');
+        writln( '; pasm file - assemble with pasm!');
+        writln( '; Compiled with lcc v1.1');
         writln('');
-        writln('.ORG'#9+org);
+        writln( '.ORG'#9+org);
         writln('');
 
         { Registry save point }
@@ -2451,16 +2709,17 @@ begin
         end;
 
         { Variables' initializations }
-        for i := 0 to SymbolTable.GetVarCount - 1 do
+        for i := 0 to VarCount - 1 do
         begin
-                adr := SymbolTable.GetVarInfo(i).address;
-                size := SymbolTable.GetVarInfo(i).size;
-                name := SymbolTable.GetVarInfo(i).VarName;
-                value := SymbolTable.GetVarInfo(i).initn;
-                typ := SymbolTable.GetVarInfo(i).typ;
-                at := SymbolTable.GetVarInfo(i).at;
-                arr := SymbolTable.GetVarInfo(i).arr;
-                if SymbolTable.GetVarInfo(i).xram then
+                adr := VarList[i].address;
+                size := VarList[i].size;
+                name := VarList[i].VarName;
+                value := VarList[i].initn;
+                fval := VarList[i].initf;
+                typ := VarList[i].typ;
+                at := VarList[i].at;
+                arr := VarList[i].arr;
+                if VarList[i].xram then
                 begin // xram variables
                         if at then
                         begin
@@ -2468,16 +2727,16 @@ begin
                               if not arr then
                                   varxram(value, adr, size, name)
                               else
-                                  varxarr(SymbolTable.GetVarInfo(i).inits, adr, size, name, typ);
+                                  varxarr(VarList[i].inits, adr, size, name, typ);
                           end else
                           begin // with an init value
                                 // for float, inits is allocated anyway
                               if not arr then
                                  if not (  typ = 'float' ) then varcode(value, adr, size, name)
-                                 else varfcode(SymbolTable.GetVarInfo(i).inits, name)
+                                 else varfcode(VarList[i].inits, name)
                               else
-                                 if not (  typ = 'float' ) then varcarr(SymbolTable.GetVarInfo(i).inits, adr, size, name, typ)
-                                 else varfarr(SymbolTable.GetVarInfo(i).inits, size, name);
+                                 if not (  typ = 'float' ) then varcarr(VarList[i].inits, adr, size, name, typ)
+                                 else varfarr(VarList[i].inits, size, name);
                           end;
                 end else
                 begin // register variables
@@ -2487,7 +2746,7 @@ begin
                                     varreg(value, adr, size, name)
                             else
                             begin
-                                    varrarr(SymbolTable.GetVarInfo(i).inits, adr, size, name, typ);
+                                    varrarr(VarList[i].inits, adr, size, name, typ);
                             end;
                         end;
                 end;
@@ -2500,22 +2759,22 @@ begin
                 if proclist[i].procname = 'main' then
                 begin
                         mainfound := true;
-                        writeln('');
-                        //writeln(#9'CALL'#9'MAIN');
+                        writln('');
+                        //writln(#9'CALL'#9'MAIN');
                         if not nosave then
                         begin
                           tok := 'main ()';
                           ProcCall;
-                          writeln(#9'LP'#9'0');
-                          writeln(#9'LIDP'#9'SREG');
-                          writeln(#9'LII'#9'11');
-                          writeln(#9'MVWD');
-                          writeln(#9'RTN');
-                          writeln('');
-                          writeln('SREG:'#9'.DW 0, 0, 0, 0, 0, 0');
+                          writln(#9'LP'#9'0');
+                          writln(#9'LIDP'#9'SREG');
+                          writln(#9'LII'#9'11');
+                          writln(#9'MVWD');
+                          writln(#9'RTN');
+                          writln('');
+                          writln('SREG:'#9'.DW 0, 0, 0, 0, 0, 0');
                         end;
-                        writeln('');
-                        writeln( 'MAIN:');
+                        writln('');
+                        writln( 'MAIN:');
                         dummy := proclist[i].proccode;
                         currproc := i;
                         Level := 1;
@@ -2524,8 +2783,8 @@ begin
                         if pushcnt <> 0 then
                                 writeln(proclist[i].procname+': Possible Stack corruption!');
                         removelocvars('main');
-                        writeln( ' EOP:'#9'RTN');
-                        writeln('');
+                        writln( ' EOP:'#9'RTN');
+                        writln('');
                         break;
                 end;
         }
@@ -2537,7 +2796,7 @@ begin
                    then
                    begin
                         writln('');
-                        writln(proclist[i].procname+':'#9'; Procedure');
+                        writln( proclist[i].procname+':'#9'; Procedure');
                         dummy := proclist[i].proccode;
                         Level := 1;
                         currproc := i;
@@ -2547,7 +2806,7 @@ begin
                            writeln(proclist[i].procname+': Possible Stack corruption!');
                         removelocvars(proclist[i].procname);
                         if proclist[i].procname = 'main' then
-                           writln(#9'RTN'#9'; end of main');
+                           writln( #9'RTN'#9'; end of main');
                         writln('');
                    end else
                         writln('; Skipping procedure '+ proclist[i].procname +' (never used)');
@@ -2561,8 +2820,8 @@ begin
 
         if (asmcnt > 0) then
                 for i := 0 to asmcnt - 1 do
-                        writln(asmlist[i]);
-        closefile(f);
+                        writln( asmlist[i]);
+        close(f);
 
 
 
@@ -2584,7 +2843,7 @@ begin
         assignfile(f, 'temp.asm');
         rewrite(f);
         writeln(f, asmtext);
-        writeln(f, GetLibText);
+        writeln(f, libtext);
         closefile(f);
 
         // Replace LIA... EXAB to LIB
@@ -2614,6 +2873,7 @@ begin
         end;
         closefile(f2);
         closefile(f);
+
 
         // Replace PUSH LIB... POP to LIB...
         assignfile(f, 'temp2.asm');
@@ -2715,11 +2975,11 @@ begin
                                         writeln(f2, typ);
                                         writeln(f2, s);
                                 end;
-                end else
-                begin
-                        writeln(f2, name);
-                        writeln(f2, s);
-                end;
+                        end else
+                        begin
+                                writeln(f2, name);
+                                writeln(f2, s);
+                        end;
                 end else
                 begin
                         writeln(f2, s);
@@ -2731,7 +2991,7 @@ begin
         // Replace n-- code to DECA
         assignfile(f, 'temp.asm');
         reset(f);
-        assignfile(f2, 'temp2.asm');
+        assignfile(f2, filen);
         rewrite(f2);
         i := 0;
 
@@ -2770,7 +3030,6 @@ begin
                                                 writeln(f2, name); if name<> '' then inc(i);
                                                 writeln(f2, typ); if typ<> '' then inc(i);
                                                 writeln(f2, s2); if s2<> '' then inc(i);
-                                                writeln(f2, s3); if s3<> '' then inc(i);
                                                 writeln(f2, s); if s<> '' then inc(i);
                                         end;
                                 end else
@@ -2792,19 +3051,13 @@ begin
         closefile(f2);
         closefile(f);
 
-        { Copy final output to destination file }
-        if filen <> '' then
-        begin
-                if fileexists(filen) then deletefile(filen);
-                renamefile('temp2.asm', filen);
-        end;
-
         deletefile('temp.asm');
         deletefile('temp2.asm');
 
-        writeln('Complete: ',i,' assembler lines were produced to ', filen, '!');
+        writeln('Complete: ',i,' assembler lines were produced!');
 end;
 {--------------------------------------------------------------}
+
 
 
 begin
@@ -2814,4 +3067,6 @@ begin
         ProcCount := 0;
         VarPos := 8;   // initial variable allocation point
 end.
+
+
 
