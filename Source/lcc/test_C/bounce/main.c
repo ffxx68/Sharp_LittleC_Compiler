@@ -20,7 +20,8 @@ main()
 {
 	bCpos = 50; // initial cursor position
 	bCpos_old = 50;
-
+    bDxBall = 1;
+    bDyBall = 0;
 	bKey1 = 0xFF; // no key
 	bKey2 = 0xFF; // no key
 	bBrk = 0;
@@ -86,7 +87,9 @@ RND_SKIP:
 			// boundary check and direction update
 			if (bTmpX == 0) bDxBall=1;
 			if (bTmpX == 100) bDxBall=0;
+			if (bTmpX>=bCpos && bTmpX<(bCpos+5)) lcd_pset(115, 0, 1); // marker B: X nel range paddle
 			if (bTmpY == 1) {
+				lcd_pset(114, 0, 1); // marker A: passaggio su y==1
 				bDyBall=1;
 				
 				// random inversion of X direction on Y bounce
@@ -95,6 +98,7 @@ RND_SKIP:
 				
 				// check cursor hit and update points
 				if (bTmpX>=bCpos && bTmpX<(bCpos+5)) {
+					lcd_pset(116, 0, 1); // marker C: hit completa (Y+X)
 					bPoints++;
 					if (bPoints > 10) { 
 						bPoints=1;

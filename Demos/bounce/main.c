@@ -10,7 +10,7 @@
 byte xram bKey1, bKey2, bTmpX, bTmpY, bBrk;
 byte xram bCpos, bCpos_old, bLoopNr;
 //byte xram bSnakePos;
-byte xram bPoints;
+byte xram bPntX, bPntY, bPntMode;
 byte xram bDxBall, bDyBall;
 byte xram bRnd;
 //byte xram bXSnake[6] = (0,0,0,0,0,0);
@@ -20,6 +20,8 @@ main()
 {
 	bCpos = 50; // initial cursor position
 	bCpos_old = 50;
+	bDxBall = 1;
+	bDyBall = 0;
 
 	bKey1 = 0xFF; // no key
 	bKey2 = 0xFF; // no key
@@ -28,11 +30,12 @@ main()
 	//bSnakePos = 0;
 	bTmpX = 50; 
 	bTmpY = 7;
+	bPntX = 100;
+	bPntY = 6;
+	bPntMode = 1;
 	//bYSnake[bSnakePos] = bTmpY;
 	//bXSnake[bSnakePos] = bTmpX;
 	bLoopNr = 0;
-	
-	bPoints = 0;
 	
 	lcd_on();
 	lcd_cls(0);
@@ -95,12 +98,16 @@ RND_SKIP:
 				
 				// check cursor hit and update points
 				if (bTmpX>=bCpos && bTmpX<(bCpos+5)) {
-					bPoints++;
-					if (bPoints > 10) { 
-						bPoints=1;
-						lcd_hline(101, 7, 10, 0); 
+					lcd_pset(bPntX, bPntY, bPntMode);
+					bPntX++;
+					if (bPntX > 119) {
+						bPntX=100;
+						bPntY--;
+                        if (bPntY == 0) {
+                            bPntY = 6;
+                            if (bPntMode==1) bPntMode=0; else bPntMode=1;
+                        }
 					}
-					lcd_pset(101+bPoints, 7, 1);
 				}
 			}
 			if (bTmpY == 7) bDyBall=0 ;
