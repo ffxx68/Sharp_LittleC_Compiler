@@ -132,16 +132,18 @@ RUN
 and MAME debugger will stop at the breakpoint, if set, where you can start your tests from. The 'Enter' key will move step-by-step.
 The debugger has the usual 'step' and 'run' commands accessed by the debugger window menu. CPU registries are shown. The internal SC61860 CPU RAM (addresses starting at `0x0000`) can be shown opening a new debugger memory window and selecting the one tagged with `Sharp SC61860 :maincpu/0/m_ram`.
 
-For each new test cycle, rebuild the binary, load it on MAME and restart:
+For each new test cycle, rebuild the binary, load it on MAME and restart the program:
 
 ```
  (cmd)> make [...]\main.c tmp.bin
- (cmd)> copy tmp.bin ..\mame
+ (cmd)> copy tmp.bin [...]\mame
  (debugger) load tmp.bin,e030:maincpu
  (debugger) 'soft reset' (repeat, if device is not responding)
  (Sharp PC) <PRO> mode
  (Sharp PC) RUN
 ```
+
+Replace `[...]` with paths to program source, and mame home.
 
 No need to reenter the POKE or the BASIC program, as MAME soft reset won't wipe memory out.
 
@@ -163,10 +165,10 @@ to open the *Lua* scripting console, where you can load the script with:
 MAME debugger version 0.267 (mame0267)
 Currently targeting pc1403 (Pocket Computer 1403)
 
-[MAME]> dofile ("[path to lcc home]\key.lua") 
+[MAME]> dofile ("[...]\key.lua") 
 ```
 
-You might replace `[path to lcc home]` with your path to the location of LitteC where `key.lua` is found.
+Replace `[...]` with your path to the location of LitteC where `key.lua` is found, or even easier, copy `key.lua` to your mame home beforehand, and no need to add a path.
 
 With the script loaded, the `key()` function can be used to send key strokes from the console directly to the emulated device keyboard.
 
