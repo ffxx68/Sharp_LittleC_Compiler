@@ -345,7 +345,7 @@ begin
   end;
 
   addasm(nm + ':'#9'; Variable ' + nm + ' = (' + s + ')');
-  if (typ = 'char') or (typ = 'char') or (typ = 'float') then
+  if (typ = 'byte') or (typ = 'char') or (typ = 'float') then
     s := #9'.DB'#9 + s
   else if (typ = 'word') then
     s := #9'.DW'#9 + s;

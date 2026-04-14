@@ -386,7 +386,7 @@ Phase 4 — Reduce Parser: separate syntax from emission (4-6 days)
 
 This task addresses preexisting compiler bugs discovered during refactoring.
 
-**Step 4.2.1 — Wrong array init code**
+**Step 4.2.1 — Wrong array init code** ✅
 
 **Problem description:**
 
