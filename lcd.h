@@ -79,15 +79,7 @@ lcd_hline_loop0:
 
 	DECJ    ; e.g. bLen2 = 1 means one dot at position bLcdXpos2+0
 
-    LDR
-	ADIA 5 ; local bLcdXpos2 into A (end position)
-	STP
-	LDM
-	
-	LP	1 ; compare J with A
-	CPMA  
-	JRZP lcd_hline_end  ; done
-	
+	LP	1	; P -> J
 	LDM     ; J -> A
 	LP	4	; Store A to X-low
 	EXAM
@@ -102,6 +94,15 @@ lcd_hline_loop0:
 	; takes, X, Y and K as parameters
 	; note - J, K not changed inside
 	call LCD_LIB_PSET
+
+	LDR
+	ADIA 5 ; local bLcdXpos2 into A
+	STP
+	LDM
+
+	LP	1 ; compare J with bLcdXpos2
+	CPMA
+	JRZP lcd_hline_end  ; done
 
 	JRM lcd_hline_loop0 ; next pixel
 	

@@ -19,10 +19,10 @@ LCD_LIB_PSET_PC1403_LBL0:
 	; calc pixel mask --> A
 	LP 6
 	EXAM ; Yl --> A
-	CPIA 8
+	CPIA 7
 	JRCP LCD_LIB_PSET_PC1403_LBL3
-	; skip overall  if Y > 7
-	RTN 
+	; skip overall  if Y > 6 (7 rows per character: 0-6)
+	RTN
 
 LCD_LIB_PSET_PC1403_LBL3:
 	EXAB ; B keeps Y position 

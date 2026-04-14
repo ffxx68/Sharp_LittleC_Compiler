@@ -386,9 +386,33 @@ Phase 4 — Reduce Parser: separate syntax from emission (4-6 days)
 
 This task addresses preexisting compiler bugs discovered during refactoring.
 
-**Step 4.2.1 — Fix word array XRAM expression parsing**
+**Step 4.2.1 — Wrong array init code**
 
 **Problem description:**
+
+The array definition is malformed in the generated asm.
+
+**Symptoms:**
+
+E.g. this code:
+```
+byte xram bXSnake[4];
+```
+generates this
+```
+bYSnake:	; Variable bYSnake = (0, 0, 0, 0)
+0, 0, 0, 0
+```
+instead of
+```
+bXSnake:	; Variable bXSnake = (0, 0, 0, 0)
+.DB 0, 0, 0, 0
+```
+
+**Step 4.2.2 — Fix word array XRAM expression parsing**
+
+**Problem description:**
+
 In the Array demo, the expression `a[0] = b[0] + e[1]` (where `e` is `word xram e[100]`) does not generate correct code for `e[1]`. 
 
 **Symptoms:**
@@ -466,7 +490,9 @@ EXAB
 -   Task 4.3: consider introducing an AST (optional) for complex expressions.
     
 -   Verification: generated asm is semantically identical - Verify: NO_DIFF
-    
+
+
+
 
 Phase 5 — Backend and optimizations (2-3 days)
 
