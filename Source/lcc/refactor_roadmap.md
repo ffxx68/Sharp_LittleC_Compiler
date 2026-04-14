@@ -121,18 +121,14 @@ For each component I list responsibilities, minimal API, dependencies and priori
 -   Priority: Medium.
 
 ---
-
-## Concrete ordered tasks (incremental iterations)
-
-Each item is designed to be small and verifiable.
-
-Phase 0 — Preparation (0.5 day)
+# Phase 0 — Preparation
 
 -   Task 0.1: create a git branch for the refactor.
 -   Task 0.2: run baseline build (compile `Source/lcc`) and save the output.
 -   Task 0.3: generate and save reference ASM (copy original `tmp.asm` -> `Source/lcc/reference_bounce.asm`) — used as regression reference for future tests.
 
-Phase 1 — Extract `Lexer` (2 days)
+---
+# Phase 1 — Extract `Lexer`
 
 -   Task 1.1: create `Lexer.pas` that re-exports the public functions from `scanner.pas` (GetToken, GetName...).
 -   Task 1.2: replace direct uses in the `parser` with `Lexer` (use wrappers to keep compatibility).
@@ -143,9 +139,10 @@ Phase 1 — Extract `Lexer` (2 days)
 
 -   Verification: build OK, run tokenization test on a demo file (generated `test_Cbouncetmp.asm` matches `reference_bounce.asm`).
 
-Phase 2 — Extract `SymbolTable` and `Semantic` (3 days)
+---
+# Phase 2 — Extract `SymbolTable` and `Semantic`
 
--   Task 2.1: create `SymbolTable.pas` and move VarList/ProcList, Find/Add/Alloc. (COMPLETED)
+## Task 2.1: create `SymbolTable.pas` and move VarList/ProcList, Find/Add/Alloc. (COMPLETED)
 
 ```
 -    Created initial `Source/lcc/SymbolTable.pas` (minimal stub) and then a fuller implementation with Var/Proc API (FindVar, AddVar, AllocVar, GetVar/GetProc accessors).
@@ -162,7 +159,7 @@ Phase 2 — Extract `SymbolTable` and `Semantic` (3 days)
 -   Note: Local arrays `VarList`, `ProcList`, `VarCount`, `ProcCount` still exist in `parser.pas` for write operations during parsing. These will be fully removed in a future refactor phase.
 ```
 
--   Task 2.2: create `Semantic.pas` for vardecl/repadr/checks. (COMPLETED)
+##  Task 2.2: create `Semantic.pas` for vardecl/repadr/checks. (COMPLETED)
 
 ```
 -    Created `Source/lcc/Semantic.pas` with `VarDecl` and `RepAdr` functions.
@@ -174,9 +171,10 @@ Phase 2 — Extract `SymbolTable` and `Semantic` (3 days)
 
 -   Verification: `FirstScan` produces var/proc tables identical to the baseline.
 
-Phase 3 — Refactor `CodeGen` + `Output` (3 days)
+---
+# Phase 3 — Refactor `CodeGen` + `Output`
 
--   Task 3.1: add `EmitInst` in CodeGen and use `Output.Emit` instead of direct `writeln`. (COMPLETE)
+## Task 3.1: add `EmitInst` in CodeGen and use `Output.Emit` instead of direct `writeln`. (COMPLETE)
 
 ```
 -    Created `EmitInst` family of functions in `CodeGen.pas`:
@@ -211,7 +209,7 @@ Phase 3 — Refactor `CodeGen` + `Output` (3 days)
     -   Remaining ~150 `writln` in CodeGen.pas deferred to incremental future refactoring (still functional)
 ```
 
--   Task 3.2: consolidate `addlib` and `libtext` handling into `CodeGen` -> `Output`. (COMPLETE)
+## Task 3.2: consolidate `addlib` and `libtext` handling into `CodeGen` -> `Output`. (COMPLETE)
 
 ```
 -    Created library text management API in `Output.pas`:
@@ -227,9 +225,10 @@ Phase 3 — Refactor `CodeGen` + `Output` (3 days)
 -   Verification: `SecondScan` generates functional asm; build OK. ✅
 -   **Phase 3 COMPLETE** ✅
 
-Phase 4 — Reduce Parser: separate syntax from emission (4-6 days)
+---
+# Phase 4 — Reduce Parser: separate syntax from emission
 
--   Task 4.1: Create high-level CodeGen functions to replace repetitive EmitInst blocks in parser.pas (~341 calls)
+##  Task 4.1: Create high-level CodeGen functions to replace repetitive EmitInst blocks in parser.pas (~341 calls)
 
 ```
 **Step 4.1.1 — Store functions for global variables in registers** ✅ Create in `CodeGen.pas`:
@@ -386,8 +385,7 @@ Phase 4 — Reduce Parser: separate syntax from emission (4-6 days)
     
 
 ---
-
-### Task 4.2: Fixing compiler issues
+## Task 4.2: Fixing compiler issues
 
 This task addresses preexisting compiler bugs discovered during refactoring.
 
@@ -413,6 +411,17 @@ instead of
 ```
 bXSnake:	; Variable bXSnake = (0, 0, 0, 0)
 .DB 0, 0, 0, 0
+```
+
+**Root cause analysis:**
+
+Bug in CodeGen.pas, procedure `varcarr`:
+```pascal
+if (typ = 'char') or (typ = 'char') or (typ = 'float') then
+```
+fixed to 
+```pascal
+if (typ = 'byte') or (typ = 'char') or (typ = 'float') then
 ```
 
 **Step 4.2.2 — Fix word array XRAM expression parsing**
@@ -495,32 +504,42 @@ EXAB
 ...
 ```
 
-**Verification:** `test.bat Array` → NO_DIFF after fix
+
+**Step 4.2.3 — Complete fix to "Possible Stack corruption!" warning**
+
+**Problem description:**
+
+The "Possible Stack corruption!" warning is caused by unbalanced PUSH/POP instructions.
+Fix 4.1.1 possibily incomplete.
+
+**Symptoms:**
+
+The warning appears during compilation of the Array demo, for example.
+
 
 ---
 
--   Task 4.3: consider introducing an AST (optional) for complex expressions.
+## Task 4.3: consider introducing an AST (optional) for complex expressions.
     
 -   Verification: generated asm is semantically identical - Verify: NO_DIFF
-    
 
-Phase 5 — Backend and optimizations (2-3 days)
+---
+# Phase 5 — Backend and optimizations
 
 -   Task 5.1: extract optimization logic (temp -> temp2 passes) into `Backend.pas`.
 -   Task 5.2: create tests for optimizations (input with known pattern => expected output).
 -   Verification: optimizations preserve equivalence and do not introduce regressions.
 
-Phase 6 — Hardening, cleanup, docs and tests (2 days)
+---
+# Phase 6 — Hardening, cleanup, docs and tests
 
 -   Task 6.1: remove duplicates (`parser` vs `parser_new`) after verification and consolidation.
 -   Task 6.2: update README, add small scripts/CI for automated tests.
 -   Verification: build + smoke tests green.
 
-Estimated total: ~14-18 working days.
-
 ---
 
-## Main risks and mitigations
+# Main risks and mitigations
 
 -   Risk: API breakage because many functions rely on globals — Mitigation: create identical wrappers and move functionality progressively.
 -   Risk: Differences between `parser.pas` and `parser_new.pas` — Mitigation: compare outputs using a test suite and choose the best base.
@@ -528,7 +547,7 @@ Estimated total: ~14-18 working days.
 
 ---
 
-## Practical development suggestions
+# Practical development suggestions
 
 -   Make frequent, small commits for each extraction ("extract Lexer", "extract SymbolTable").
 -   Add a small harness that runs `lcc` over a list of demos and compares the generated asm with reference files (regression tests).
@@ -536,7 +555,7 @@ Estimated total: ~14-18 working days.
 
 ---
 
-## Quality checklist (Quality Gates)
+# Quality checklist (Quality Gates)
 
 -   Build: compile the whole `Source/lcc` after each phase — PASS.
 -   Lint/Typecheck: check warnings and resolve them — preferably PASS with no critical warnings.
@@ -545,7 +564,7 @@ Estimated total: ~14-18 working days.
 
 ---
 
-## Acceptance criteria
+# Acceptance criteria
 
 -   All new units compile without errors with FPC/Delphi.
 -   The external behavior of `lcc` on reference demos remains equivalent (assembler output is assemblable with `pasm`).
@@ -554,7 +573,7 @@ Estimated total: ~14-18 working days.
 
 ---
 
-## Quick stub unit examples (first-step implementations)
+# Quick stub unit examples (first-step implementations)
 
 `Lexer.pas` (suggested interface):
 
@@ -595,12 +614,6 @@ implementation
 end.
 ```
 
----
-
-## Recommended next steps (immediately)
-
-1.  Confirm I can create the branch and start implementing `Lexer.pas` as a wrapper of `scanner.pas` (I can run and compile afterwards).
-2.  Alternatively, I can immediately generate the stub files (`Lexer.pas` and `SymbolTable.pas`) and perform a minimal compilation test.
 
 ---
 
