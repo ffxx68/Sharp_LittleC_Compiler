@@ -384,13 +384,36 @@ For each component I list responsibilities, minimal API, dependencies and priori
 -   All changes must be verified incrementally with `test.bat` → NO_DIFF against `reference_bounce.asm`
     
 
+
 ---
-## Task 4.2: Fixing compiler issues
+
+## Task 4.3: Complete the migration of the ~385 residual `writln` in parser.pas
+
+**Current status:** ~385 active `writln` in `parser.pas` + 8 in `CodeGen.pas`.
+These are concentrated in:
+-   `StoreVariable` (~80 writtn): store byte/word/float for register, local, xram, array
+-   `LoadVariable` (~60 writln): loading variables
+-   `Assignment` (~40 writln): optimized increment/decrement (INC*/DEC*)
+-   Control flow: `DoIf`, `DoWhile`, `DoFor`, `DoLoop`, `DoDoWhile`, `Switch`, `DoReturn`, `DoBreak`, `DoGoto`, `DoLabel` (~60 writln)
+-   `Expression` (~5 writln): shift operator comments
+-   `ProcCall`, `Block`, `SecondScan` (~140 writln): procedure call, prologue/epilogue, final output
+
+**Goal:** eliminate direct `writln` in `parser.pas`, using only `CodeGen.EmitInst`/`EmitComment`/`PostLabel` and high-level CodeGen functions.
+
+**Prerequisite for porting**: as long as the parser emits inline ASM, it's not possible to separate the frontend from the backend.
+
+-   Verification: `test.bat` → NO_DIFF
+
+
+
+---
+## Task 4.4: Fixing compiler issues
 
 This task addresses preexisting compiler bugs discovered during refactoring.
 
+*Possibly not required if embracing the Flex/Bison rewrite (Phases 5 on)*
 
-**Step 4.2.1 — Wrong array init code**  ✅
+**Step 4.4.1 — Wrong array init code**  ✅
 
 **Problem description:**
 
@@ -419,12 +442,12 @@ Bug in CodeGen.pas, procedure `varcarr`:
 ```pascal
 if (typ = 'char') or (typ = 'char') or (typ = 'float') then
 ```
-fixed to 
+fixed to
 ```pascal
 if (typ = 'byte') or (typ = 'char') or (typ = 'float') then
 ```
 
-**Step 4.2.2 — Fix word array XRAM expression parsing**
+**Step 4.4.2 — Fix word array XRAM expression parsing**
 
 **Problem description:**
 
@@ -505,7 +528,7 @@ EXAB
 ```
 
 
-**Step 4.2.3 — Complete fix to "Possible Stack corruption!" warning**
+**Step 4.4.3 — Complete fix to "Possible Stack corruption!" warning**
 
 **Problem description:**
 
@@ -516,107 +539,433 @@ Fix 4.1.1 possibily incomplete.
 
 The warning appears during compilation of the Array demo, for example.
 
+---
+# Phase 5 — Introduction of AST and frontend/backend separation
+
+Motivation: the current parser is a syntax-directed translator — it emits code during parsing. To replace the frontend with a standard C frontend (Flex/Bison) we need an intermediate AST that completely decouples parsing from codegen.
+
+> Change of direction compared to littleC: the goal is NOT to replicate littleC's idiosyncrasies (non-standard operator precedence, `loop`, `switch` with custom semantics, etc.) but to converge toward a subset of the C89/C99 standard, within the limits of the SC61860 platform. Existing littleC programs may require minimal adjustments to compile with the new frontend.
+
+## Task 5.1: Define the target C subset
+
+Write `Docs/sc61860_c_subset.md`: the specification of the language accepted by the new compiler.
+
+Supported standard C constructs (target):
+
+| Area | Supported | Platform notes |
+|------|-----------|----------------|
+| Types `char`, `unsigned char` | ✅ | 8 bit, always unsigned on SC61860 |
+| Types `int`, `unsigned int` | ✅ | 16 bit (= littleC `word`) |
+| Type `long` | ❌ | 32 bit not practical (too slow, little RAM) |
+| Type `float` | ✅ | Sharp BCD, 8 bytes, via library |
+| `void` | ✅ | For functions without return (littleC forbids this — to be fixed) |
+| `const` | ✅ | Useful for code-space data |
+| `signed`/`unsigned` | ✅ | littleC has no signed — to be added |
+| Pointers | ✅ | 16 bit; pointers as parameters (littleC does not support) |
+| One-dimensional arrays | ✅ | Max 256 bytes / 128 words (HW limit) |
+| `struct` | ✅ | Fundamental for idiomatic C code |
+| `union` | ⚠️ | Possible but low priority |
+| `enum` | ✅ | Simple: integer constants |
+| `typedef` | ✅ | Type aliases, no runtime cost |
+| `if`/`else` | ✅ | Standard |
+| `while`, `do..while` | ✅ | Standard |
+| `for` (3 expressions) | ✅ | Standard (littleC executes step before body — bug) |
+| `switch`/`case`/`break`/`default` | ✅ | Standard C semantics (littleC has different semantics) |
+| `break`, `continue` | ✅ | `continue` is missing in littleC |
+| `return` | ✅ | Standard |
+| `goto`/label | ✅ | Standard C label (`label:` not `label name;`) |
+| Ternary operator `?:` | ✅ | Missing in littleC |
+| Compound assignment `+= -= ...` | ✅ | Already in littleC |
+| `++`/`--` prefix and postfix | ✅ | littleC has only postfix |
+| Standard C operator precedence | ✅ | littleC has inverted precedence — to be fixed |
+| Preprocessor `#include #define #ifdef #else #endif` | ✅ | Handled by `lcpp`, add `#else` |
+| `#pragma org(addr)` | ✅ | Portable substitute for `#org` |
+| Inline assembly `__asm { ... }` | ✅ | Substitute for `#asm..#endasm`, more standard syntax |
+
+Deprecated littleC constructs (not carried forward):
+
+| littleC construct | C standard substitute |
+|-------------------|----------------------|
+| `loop(n) { ... }` | `for (int i=0; i<=n; i++) { ... }` |
+| `switch` with `value: proc()` | `switch(x) { case V: proc(); break; }` |
+| `label name;` | `name:` (C standard label) |
+| `byte`/`word`/`char` as type keywords | `unsigned char` / `unsigned int` / `char` (with convenience typedef) |
+| `at` / `xram` in declarators | `__at(addr)` / `__xram` attribute (or `#pragma`) |
+| `#org`, `#pc`, `#nosave` | `#pragma org(addr)`, `#pragma pc(addr)`, `#pragma nosave` |
+| Names that cannot start with a type | No restriction (parser fix) |
+
+Platform-specific extensions (attributes starting with `__`):
+
+```c
+// Variable allocated to a fixed CPU register address
+unsigned char __at(8) pbuf;
+
+// Variable in external RAM (XRAM)
+__xram unsigned int baspnt;
+__xram __at(0xFFD7) unsigned int baspnt;  // with address
+
+// Inline assembly
+__asm {
+    LIA  0x42
+    LP   8
+    EXAM
+}
+
+// Configuration pragmas
+#pragma org(33000)
+#pragma nosave
+```
+
+## Task 5.2: Define AST nodes (standard C)
+
+Create `ast.h` with nodes that reflect the C grammar, not littleC's grammar:
+
+| Node | Main fields |
+|------|-------------|
+| `TranslationUnit` | `decls[]` (top-level declarations) |
+| `VarDecl` | `type`, `name`, `init`, `attrs` (`__at`, `__xram`) |
+| `FuncDecl` | `retType`, `name`, `params[]`, `body` |
+| `ParamDecl` | `type`, `name` |
+| `StructDecl` | `tag`, `members[]` |
+| `EnumDecl` | `tag`, `values[]` |
+| `TypedefDecl` | `type`, `alias` |
+| `CompoundStmt` | `items[]` (decls + stmts, like C99) |
+| `IfStmt` | `cond`, `then`, `else` |
+| `WhileStmt` | `cond`, `body` |
+| `DoWhileStmt` | `body`, `cond` |
+| `ForStmt` | `init`, `cond`, `step`, `body` |
+| `SwitchStmt` | `expr`, `body` (with `CaseLabel`/`DefaultLabel`) |
+| `ReturnStmt` | `expr` (optional) |
+| `BreakStmt` | — |
+| `ContinueStmt` | — |
+| `GotoStmt` | `label` |
+| `LabelStmt` | `name`, `stmt` |
+| `ExprStmt` | `expr` |
+| `AsmStmt` | `code` |
+| `BinaryExpr` | `op`, `left`, `right` |
+| `UnaryExpr` | `op`, `operand`, `prefix` |
+| `TernaryExpr` | `cond`, `then`, `else` |
+| `CastExpr` | `type`, `expr` |
+| `CallExpr` | `func`, `args[]` |
+| `IndexExpr` | `array`, `index` |
+| `MemberExpr` | `obj`, `field`, `isArrow` |
+| `IdentExpr` | `name` |
+| `ConstExpr` | `value`, `type` |
+| `SizeofExpr` | `type` or `expr` |
+| `AddrOfExpr` | `operand` |
+| `DerefExpr` | `operand` |
+
+## Task 5.3: Document formal BNF grammar
+
+Write `Docs/sc61860_c_grammar.y` (directly in Bison-compatible format):
+
+- Start from simplified C89 grammar (e.g. K&R Appendix A or `c99.y` by Jutta Degener).
+- Remove unsupported constructs (`long`, `double`, `volatile`, `register`, multi-dimensional arrays, function pointers, variadic `...`).
+- Add platform extensions (`__at`, `__xram`, `__asm`).
+- Use **standard C** operator precedence — not littleC's precedence.
+
+## Task 5.4: Prototype AST in Pascal (validation)
+
+- Implement `AST.pas` with the records/classes of Task 5.2.
+- Modify a single parser procedure (e.g. `DoIf`) to produce an AST node + a tree-walker that emits the same code.
+- Verification: `test.bat` → NO_DIFF on at least the `If` test.
+- Purpose: validate that the AST → codegen architecture can produce identical output before rewriting everything in C.
+
+---
+# Phase 6 — Backend: extract peephole optimizer
+
+## Task 6.1: Extract optimizations from `SecondScan` into `Backend.pas`
+
+The current optimizations in `SecondScan` (lines ~2800-3020 of `parser.pas`) are textual passes on temporary files:
+
+| Step | Pattern → Replacement |
+|------|-----------------------|
+| 1 | `EXAB; EXAB` → remove |
+| 2 | `LIA x; EXAB` → `LIB x` |
+| 3 | `PUSH; LIB x; POP` → `LIB x` |
+| 4 | `LIB 1; LP 3; ADM; EXAB` → `INCA` |
+| 5 | `LIB 1; LP 3; EXAB; SBM; EXAB` → `DECA` |
+
+Extract into testable functions: `OptimizeDoubleEXAB()`, `OptimizeLIAtoLIB()`, `OptimizeRedundantPUSHPOP()`, `OptimizeIncDec()`.
+
+## Task 6.2: Unit tests for each peephole optimization pattern
+
+- Verification: `test.bat` → NO_DIFF
+
+---
+# Phase 7 — New C compiler in Flex/Bison
+
+Prerequisites: BNF grammar (Task 5.3), AST validated (Task 5.4), backend decoupled, peephole extracted.
+
+> From this phase the work is on a new C codebase (`Source/C/lcc2/`), parallel to the Pascal one. The Pascal compiler stays functional as reference for regression tests.
+
+## Task 7.1: Project setup in C
+
+- Create `Source/C/lcc2/` with structure:
+    ```
+    lcc2/
+    ├── Makefile          (or CMakeLists.txt)
+    ├── ast.h             (AST nodes from Task 5.2)
+    ├── ast.c             (node allocators/destructors)
+    ├── lexer.l           (Flex)
+    ├── parser.y          (Bison)
+    ├── symtab.h / .c     (symbol table)
+    ├── codegen.h / .c    (SC61860 backend)
+    ├── peephole.h / .c   (optimizations)
+    ├── output.h / .c     (ASM accumulation and writing)
+    ├── platform.h        (platform constants: register addresses, stack layout)
+    └── main.c
+    ```
+- Toolchain: `gcc` (MinGW on Windows), `flex`, `bison`
+- Build: `make` produces `lcc2.exe`
+
+## Task 7.2: Flex lexer (`lexer.l`)
+
+C standard tokens + platform extensions:
+
+```
+/* keywords C */
+auto break case char const continue default do else enum
+extern float for goto if int long register return short
+signed sizeof static struct switch typedef union unsigned void volatile while
+
+/* platform keywords */
+__at __xram __asm
+
+/* pragma */
+#pragma
+
+/* multi-char operators */
+++ -- << >> <= >= == != && || += -= *= /= %= <<= >>= &= |= ^= -> ?:
+
+/* literals */
+INTEGER_CONST    [0-9]+ | 0x[0-9a-fA-F]+ | 0b[01]+
+FLOAT_CONST      [0-9]+\.[0-9]*
+CHAR_CONST       '.'  | '\n' | '\0' etc.
+STRING_CONST     "..."
+IDENTIFIER       [a-zA-Z_][a-zA-Z0-9_]*
+```
+
+Keywords that are not supported (`long`, `volatile`, `register`, etc.) are recognized by the lexer but generate a semantic error in the parser ("unsupported on this platform").
+
+## Task 7.3: Bison parser (`parser.y`)
+
+Start from simplified C89 grammar. Semantic actions build the AST (`ast.h`).
+
+Precedence rules — **standard C**:
+```bison
+%right '=' ASSIGN_OP
+%right '?' ':'
+%left  OR_OP           /* || */
+%left  AND_OP          /* && */
+%left  '|' 
+%left  '^'
+%left  '&'
+%left  EQ_OP NE_OP
+%left  '<' '>' LE_OP GE_OP
+%left  SHL_OP SHR_OP
+%left  '+' '-'
+%left  '*' '/' '%'
+%right UNARY            /* ! ~ ++ -- * & (type) sizeof */
+%left  POSTFIX          /* () [] . -> ++ -- */
+```
+
+Main productions:
+- `translation_unit → external_declaration*`
+- `external_declaration → function_definition | declaration`
+- `declaration → type_specifier declarator_list ';'`
+- `function_definition → type_specifier declarator compound_statement`
+- `compound_statement → '{' block_item* '}'`
+- `block_item → declaration | statement`
+- `statement → if | while | do_while | for | switch | return | break | continue | goto | labeled | expr_stmt | compound | asm_stmt`
+
+Platform extensions handled as attributes:
+```bison
+attribute_specifier: __AT '(' constant_expression ')'
+                   | __XRAM
+                   ;
+```
+
+## Task 7.4: SC61860 backend — tree-walker (`codegen.c`)
+
+Translate `CodeGen.pas` (~1900 lines) into C. The API is already stabilized by Phase 4.1.x:
+
+```c
+// Emission
+void emit_inst(const char *inst);
+void emit_inst_op(const char *inst, const char *operand);
+void emit_inst_op_comment(const char *inst, const char *operand, const char *comment);
+void emit_comment(const char *comment);
+void emit_label(const char *label);
+char *new_label(void);
+
+// Store/Load (already defined in Phase 4)
+void store_byte_to_reg(int addr, const char *name);
+void store_word_to_reg(int addr, const char *name);
+void store_byte_to_local(int addr, const char *name);
+// ... etc.
+
+// Entry point: walks the AST
+void codegen(TranslationUnit *tu);
+```
+
+What's new compared to the littleC codegen:
+- `signed` arithmetic: need `SBB` (subtract with borrow) and signed comparisons
+- `struct`: access via offsets computed by the compiler
+- `switch/case`: jump table or chain of comparisons (more efficient than old littleC `ENDCASE`)
+- `continue`: jump to the increment step in `for`, or to the condition in `while`
+- Standard `for`: step executed **after** the body (fix to littleC bug)
+
+## Task 7.5: Symbol table (`symtab.c`)
+
+- Nested scopes (scope stack: global → function → block) — required for standard C
+- Lookup with shadowing (local variable hides global)
+- `struct` tag namespace separate
+- Allocator for registers/XRAM/stack with the same rules as littleC (bottom-up for registers, top-down for stack)
+
+## Task 7.6: Peephole optimizer (`peephole.c`)
+
+Port from `Backend.pas` (Task 6.1). Same patterns, but operate on an in-memory array of instructions (not on temporary files).
+
+## Task 7.7: Regression and compatibility tests
+
+Strategy with two levels:
+
+1. Compatibility tests for littleC: compile existing demos (with minimal syntax changes: `byte` → `unsigned char`, etc.) and compare ASM to references. Output will not be byte-for-byte identical (operator precedence differences, correct `for`, etc.) but must be functionally equivalent.
+
+2. Tests for new constructs: write specific tests for:
+    - `void f(void) { ... }`
+    - `switch/case/default/break`
+    - `continue`
+    - `struct point { int x; int y; }; struct point p; p.x = 10;`
+    - `enum color { RED, GREEN, BLUE };`
+    - `typedef unsigned char byte;`
+    - `int *p = &x; *p = 42;` (pointers as params)
+    - `signed int` comparisons and arithmetic
+    - Ternary operator `a > b ? a : b`
+
+## Task 7.8: Migrate library headers
+
+- Rewrite `lcd.h`, `key.h`, `puts.h`, `int2str.h`, `string.h` in standard C syntax
+- Add minimal `<stdint.h>`: `typedef unsigned char uint8_t; typedef unsigned int uint16_t;`
+- Provide `compat.h` with convenience typedefs: `typedef unsigned char byte; typedef unsigned int word;`
+
+---
+# Phase 8 — Advanced optimizations (post-porting)
+
+With an AST available, implement optimizations that the old syntax-directed translator could not do:
+
+- Task 8.1: Constant folding — evaluate constant expressions at compile time
+- Task 8.2: Dead code elimination — remove `if(0)` branches, unused functions
+- Task 8.3: Register allocation — smarter use of registers I, J, K, L, M, N
+- Task 8.4: Strength reduction — `x * 2` → `x << 1`, `x * 3` → `(x << 1) + x`
+- Task 8.5: Tail call optimization — useful given the very small stack (~80 bytes)
+- Task 8.6: Inline expansion — inline small functions (1–3 instructions)
+
+---
+# Phase 9 — Cleanup, docs and release
+
+- Task 9.1: Remove Pascal codebase (or archive in `Source/legacy/`).
+- Task 9.2: Write the user manual for the new compiler (`Docs/sc61860cc_manual.md`).
+- Task 9.3: Update README with build instructions (`make` / `cmake`).
+- Task 9.4: CI scripts (GitHub Actions or similar) for automated regression tests.
+- Task 9.5: Publish release with prebuilt binaries (Windows, Linux).
+- Verification: build + full test suite green on Windows and Linux.
 
 ---
 
-## Task 4.3: consider introducing an AST (optional) for complex expressions.
-    
--   Verification: generated asm is semantically identical - Verify: NO_DIFF
+# Riepilogo fasi e dipendenze
 
----
-# Phase 5 — Backend and optimizations
+```
+Phase 0-3  ✅  Completate (modularizzazione Pascal)
+Phase 4    🔧  In corso (separazione sintassi ↔ emissione)
+  └─ Task 4.3: eliminare tutti i writln residui in parser.pas
 
--   Task 5.1: extract optimization logic (temp -> temp2 passes) into `Backend.pas`.
--   Task 5.2: create tests for optimizations (input with known pattern => expected output).
--   Verification: optimizations preserve equivalence and do not introduce regressions.
+Phase 5    📋  AST + specifica linguaggio C target
+  ├─ 5.1: specifica sottoinsieme C per SC61860
+  ├─ 5.2: definire nodi AST (C standard)
+  ├─ 5.3: grammatica BNF formale (formato Bison)
+  └─ 5.4: prototipo AST in Pascal (validazione)
 
----
-# Phase 6 — Hardening, cleanup, docs and tests
+Phase 6    📋  Estrazione peephole optimizer
 
--   Task 6.1: remove duplicates (`parser` vs `parser_new`) after verification and consolidation.
--   Task 6.2: update README, add small scripts/CI for automated tests.
--   Verification: build + smoke tests green.
+Phase 7    📋  Nuovo compilatore Flex/Bison (C) ← core del porting
+  ├─ 7.1: setup progetto C
+  ├─ 7.2: lexer Flex
+  ├─ 7.3: parser Bison
+  ├─ 7.4: backend SC61860 tree-walker
+  ├─ 7.5: symbol table con scope annidati
+  ├─ 7.6: peephole optimizer
+  ├─ 7.7: regression test + test nuovi costrutti
+  └─ 7.8: migrazione header libreria
+
+Phase 8    📋  Ottimizzazioni avanzate (AST-based)
+Phase 9    📋  Cleanup e rilascio
+```
+
+**Dipendenze critiche:**
+```
+Task 4.3 ──→ Phase 5 ──→ Phase 6 ──→ Phase 7
+                │                        │
+                └── 5.3 (BNF) ──────────→ 7.3 (Bison)
+                └── 5.2 (AST def) ──────→ 7.4 (codegen)
+```
 
 ---
 
 # Main risks and mitigations
 
--   Risk: API breakage because many functions rely on globals — Mitigation: create identical wrappers and move functionality progressively.
--   Risk: Differences between `parser.pas` and `parser_new.pas` — Mitigation: compare outputs using a test suite and choose the best base.
--   Risk: optimizations rely on textual matching and are sensitive to formatting/whitespace — Mitigation: implement documented, testable transformation functions.
+| # | Risk | Impact | Mitigation |
+|---|------|--------|------------|
+| 1 | ~385 `writln` residui bloccano la separazione frontend/backend | Alto | Completare Task 4.3 prima di tutto |
+| 2 | Programmi littleC esistenti non compilano col nuovo frontend C | Medio | Fornire `compat.h` con typedef e documentare guida di migrazione |
+| 3 | Divergenza output ASM tra compilatore Pascal e compilatore C | Medio | Test funzionali (non byte-per-byte) + esecuzione su emulatore |
+| 4 | `struct` richiede calcolo offset e gestione alignment | Medio | SC61860 non ha requisiti di alignment — semplifica |
+| 5 | `signed` arithmetic richiede nuove librerie ASM | Medio | Implementare `cmp_signed16.lib`, `neg8.lib`, `neg16.lib` |
+| 6 | Peephole fragile se il formato dell'output cambia | Basso | Operare su array di istruzioni strutturate, non su testo |
+| 7 | Flex/Bison non disponibili facilmente su Windows | Basso | `winflexbison` (pacchetto precompilato), oppure build in WSL |
 
 ---
 
 # Practical development suggestions
 
--   Make frequent, small commits for each extraction ("extract Lexer", "extract SymbolTable").
--   Add a small harness that runs `lcc` over a list of demos and compares the generated asm with reference files (regression tests).
--   Use wrappers to preserve existing public calls (e.g., `GetToken`) and then deprecate the old files gradually.
+-   Completare Phase 4 (zero `writln` nel parser) è il **prerequisito critico**.
+-   Phase 5 (AST) si può prototipare in Pascal — serve solo a validare che il disaccoppiamento funziona. Non serve portare l'intero parser: basta un costrutto (`DoIf`).
+-   Per Phase 7, partire da un **micro-compilatore C esistente** come reference architetturale:
+    -   **chibicc** (Rui Ueyama): ~5000 righe, ottima documentazione, C11 quasi completo, molto didattico.
+    -   **8cc** (stesso autore): predecessore di chibicc, più piccolo.
+    -   **lcc** (Fraser & Hanson): compilatore C accademico con backend retargetable — il più vicino concettualmente.
+    -   **cproc** (Michael Forney): ~6000 righe, C11, backend QBE — buon esempio di struttura.
+-   Usare `test.bat` per le fasi Pascal; per le fasi C, creare un `Makefile` con target `test` equivalente.
+-   I typedef di convenienza (`byte`, `word`) in `compat.h` permettono di compilare gran parte dei demo esistenti con modifiche minime.
 
 ---
 
 # Quality checklist (Quality Gates)
 
--   Build: compile the whole `Source/lcc` after each phase — PASS.
--   Lint/Typecheck: check warnings and resolve them — preferably PASS with no critical warnings.
--   Unit tests: add tests for `Lexer`, `SymbolTable`, `Backend.OptimizeAsm` — PASS.
--   Smoke tests: run `lcc` on 3-5 demos and check the asm is assemblable — PASS.
+**Fasi 4-6 (Pascal):**
+-   Build: FPC compila senza errori.
+-   Regression: `test.bat` → NO_DIFF su tutte le demo.
+-   Nessuna emissione ASM diretta nel parser (da Phase 5 in poi).
+
+**Fasi 7+ (C):**
+-   Build: `make` compila senza errori né warning (`-Wall -Wextra`).
+-   Test funzionali: ogni demo produce ASM assemblabile con `pasm` e funzionalmente corretto.
+-   Test nuovi costrutti: `struct`, `enum`, `switch/case`, `continue`, `signed`, `void`, ternario.
+-   Nessun memory leak (valgrind o AddressSanitizer).
+-   Grammatica Bison: zero conflitti shift/reduce e reduce/reduce.
 
 ---
 
-# Acceptance criteria
+# Acceptance criteria (target finale)
 
--   All new units compile without errors with FPC/Delphi.
--   The external behavior of `lcc` on reference demos remains equivalent (assembler output is assemblable with `pasm`).
--   The `parser` no longer emits asm strings directly but calls `CodeGen`/`Output` (intermediate target).
--   Documentation updated (`Source/lcc/README.md` or this `refactor_roadmap.md`).
-
----
-
-# Quick stub unit examples (first-step implementations)
-
-`Lexer.pas` (suggested interface):
-
-```pascal
-unit Lexer;
-interface
-uses SysUtils, Input, Errors;
-procedure InitLexerFromFile(const filename: string);
-procedure InitLexerFromString(const s: string);
-procedure GetToken(mode: Integer; var s: string);
-function GetName: string;
-function GetNumber: string;
-function GetFloat: string;
-function CurrentToken: string;
-function CurrentLine: Integer;
-implementation
-// ...existing code... (migrated from scanner.pas) ...
-end.
-```
-
-`SymbolTable.pas` (suggested interface):
-
-```pascal
-unit SymbolTable;
-interface
-type TVarInfo = record
-  Name: string;
-  Typ: string;
-  Address: Integer;
-  Size: Integer;
-  Xram: Boolean;
-end;
-function FindVar(const nm: string; out idx: Integer): Boolean;
-function AddVar(const info: TVarInfo): Integer;
-function AllocVar(xr, at: Boolean; size, adr: Integer): Integer;
-implementation
-// ...existing code... (migrated from parser.pas VarList/ProcList) ...
-end.
-```
-
-
----
-
-File created automatically: `Source/lcc/refactor_roadmap.md`.
+1.  Il compilatore `lcc2` (C, Flex/Bison) accetta un **sottoinsieme significativo di C89** con estensioni piattaforma.
+2.  L'output ASM è assemblabile con `pasm` e funzionalmente corretto su SC61860.
+3.  I demo littleC esistenti compilano con modifiche minime (via `compat.h`).
+4.  Costrutti nuovi (`struct`, `enum`, `switch/case`, `signed`, `void`, `continue`, ternario) funzionano.
+5.  Il frontend è una grammatica Bison leggibile, senza conflitti.
+6.  Il backend SC61860 è un modulo C separato, riusabile con altri frontend.
+7.  Il peephole optimizer opera su strutture dati (non su testo) ed è testabile unitariamente.
+8.  Documentazione completa: specifica linguaggio, grammatica, manuale utente, istruzioni di build.
 
 ---
