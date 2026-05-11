@@ -362,14 +362,14 @@ For each component I list responsibilities, minimal API, dependencies and priori
 -   Fixed `EmitInst(inst, operand, comment)` to use space (not tab) when operand is empty, matching reference format
 -   Fixed all `EmitComment` calls that incorrectly included a leading `; ` prefix (double semicolon issue)
 -   Note: `pushcnt` is global in CodeGen.pas — not passed as parameter
--   Verify: `test.bat` → **NO_DIFF** ✅ (all 6 demos: 16bitdiv, Array, bounce, Loop, Math, pointer)
+-   Verify: `test.bat` → **NO_DIFF** (all 6 demos: 16bitdiv, Array, bounce, Loop, Math, pointer) ✅
 
 **Step 4.1.13 — Increment/Decrement register functions** Create in `CodeGen.pas`:
 
--   `EmitIncReg(regAddr: integer)` — INCI/INCJ/INCA/INCB/INCK/INCL/INCM/INCN based on addr (0,1,2,3,8,9,10,11)
--   `EmitDecReg(regAddr: integer)` — DECI/DECJ/DECA/DECB/DECK/DECL/DECM/DECN
--   Update `Assignment` increment/decrement section in parser.pas
--   Verify: NO_DIFF
+-   `EmitIncReg(regAddr: integer)` — INCI/INCJ/INCA/INCB/INCK/INCL/INCM/INCN/INCP based on addr (0,1,2,3,8,9,10,11,12)
+-   `EmitDecReg(regAddr: integer)` — DECI/DECJ/DECA/DECB/DECK/DECL/DECM/DECN/DECP
+-   Update increment/decrement instructions in parser.pas
+-   Verify: `test.bat` → **NO_DIFF**  ✅
 
 **Step 4.1.14 — Verify and remove residual ASM emission in parser.pas**
 

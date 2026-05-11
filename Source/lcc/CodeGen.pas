@@ -72,6 +72,12 @@ procedure LoadAddressOf(adr: integer; const name: string; isXram: boolean);
 procedure AllocStackSpace(bytes: integer);
 procedure FreeStackSpace(bytes: integer; hasReturn, isWord: boolean);
 
+// Increment / Decrement register helpers (Step 4.1.13)
+procedure EmitIncReg(regAddr: integer); overload;
+procedure EmitIncReg(regAddr: integer; const comment: string); overload;
+procedure EmitDecReg(regAddr: integer); overload;
+procedure EmitDecReg(regAddr: integer; const comment: string); overload;
+
 procedure CompSmOrEq;
 procedure CompGrOrEq;
 procedure CompGreater;
@@ -604,6 +610,57 @@ begin
   end else
   begin
     EmitInst('LIA', IntToStr(adr), '&' + name);
+  end;
+end;
+
+{--------------------------------------------------------------}
+{ Increment / Decrement register helpers (Step 4.1.13) }
+
+procedure EmitIncReg(regAddr: integer);
+begin
+  // forward to overload with empty comment
+  EmitIncReg(regAddr, '');
+end;
+
+procedure EmitIncReg(regAddr: integer; const comment: string);
+begin
+  case regAddr of
+    0: if comment = '' then EmitInst('INCI') else EmitInstComment('INCI', comment);
+    1: if comment = '' then EmitInst('INCJ') else EmitInstComment('INCJ', comment);
+    2: if comment = '' then EmitInst('INCA') else EmitInstComment('INCA', comment);
+    3: if comment = '' then EmitInst('INCB') else EmitInstComment('INCB', comment);
+    8: if comment = '' then EmitInst('INCK') else EmitInstComment('INCK', comment);
+    9: if comment = '' then EmitInst('INCL') else EmitInstComment('INCL', comment);
+    10: if comment = '' then EmitInst('INCM') else EmitInstComment('INCM', comment);
+    11: if comment = '' then EmitInst('INCN') else EmitInstComment('INCN', comment);
+    12: if comment = '' then EmitInst('INCP') else EmitInstComment('INCP', comment);
+  else
+    // Generic fallback: increment A
+    if comment = '' then EmitInst('INCA') else EmitInstComment('INCA', comment);
+  end;
+end;
+
+procedure EmitDecReg(regAddr: integer);
+begin
+  // forward to overload with empty comment
+  EmitDecReg(regAddr, '');
+end;
+
+procedure EmitDecReg(regAddr: integer; const comment: string);
+begin
+  case regAddr of
+    0: if comment = '' then EmitInst('DECI') else EmitInstComment('DECI', comment);
+    1: if comment = '' then EmitInst('DECJ') else EmitInstComment('DECJ', comment);
+    2: if comment = '' then EmitInst('DECA') else EmitInstComment('DECA', comment);
+    3: if comment = '' then EmitInst('DECB') else EmitInstComment('DECB', comment);
+    8: if comment = '' then EmitInst('DECK') else EmitInstComment('DECK', comment);
+    9: if comment = '' then EmitInst('DECL') else EmitInstComment('DECL', comment);
+    10: if comment = '' then EmitInst('DECM') else EmitInstComment('DECM', comment);
+    11: if comment = '' then EmitInst('DECN') else EmitInstComment('DECN', comment);
+    12: if comment = '' then EmitInst('DECP') else EmitInstComment('DECP', comment);
+  else
+    // Generic fallback: decrement A
+    if comment = '' then EmitInst('DECA') else EmitInstComment('DECA', comment);
   end;
 end;
 

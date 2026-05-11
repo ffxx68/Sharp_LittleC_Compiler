@@ -770,7 +770,7 @@ begin
                                 writln( #9'LIP'#9+inttostr(adr)+#9'; Store 16bit variable '+name);
                         writln( #9'EXAM'#9#9'; LB');
                         writln( #9'EXAB');
-                        writln( #9'INCP'#9#9'; HB');
+                        EmitInstComment('INCP', 'HB');
                         writln( #9'EXAM');
                     end else
                     begin // Local word
@@ -780,9 +780,9 @@ begin
                         writln(#9'STP');
                         writln(#9'POP'); dec(pushcnt); // restore A
                         writln(#9'EXAM'#9'; LB - Store result in '+name);
-                        writln(#9'EXAB');
-                        writln(#9'DECP');
-                        writln(#9'EXAM'#9'; HB');
+                        writeln(#9'EXAB');
+                        EmitInstComment('DECP', 'LB');
+                        writeln(#9'LDM');
                     end;
                 end else
                 begin
@@ -824,8 +824,8 @@ begin
                         // move using LDM+PUSH
                         writln(#9'LDM'); // (P) -> A
                         writln(#9'PUSH'); inc(pushcnt);
-                        writln(#9'INCP');
-                        writln(#9'DECJ');
+                        EmitInst('INCP');
+                        EmitInst('DECA');
                         writln(#9'JRNZM '+lb);
                         writln(#9'EXAB'); // restore R
                         writln(#9'STR'); // A -> R
@@ -901,12 +901,12 @@ begin
                         writln( #9'ADM');
                         writln( #9'EXAM');
                         writln( #9'STP');
-                        writln( #9'INCP');
-                        writln( #9'POP'); dec(pushcnt);
-                        writln( #9'EXAM');
-                        writln( #9'DECP');
-                        writln( #9'POP'); dec(pushcnt);
-                        writln( #9'EXAM');
+                        EmitInst('INCP');
+                        writeln(#9'POP'); dec(pushcnt);
+                        writeln( #9'EXAM');
+                        EmitInst('DECP');
+                        writeln(#9'POP'); dec(pushcnt);
+                        writeln( #9'EXAM');
                 end else
                 begin
                         writln( #9'RC');
@@ -1058,9 +1058,9 @@ begin
                         else
                                 writln( #9'LIP'#9+inttostr(adr+1)+#9'; Load 16bit variable '+name);
                         writln(#9'LDM'#9#9'; HB');
-                        writln(#9'EXAB');
-                        writln(#9'DECP'#9#9'; LB');
-                        writln(#9'LDM');
+                        writeln(#9'EXAB');
+                        EmitInst('INCP');
+                        writeln(#9'LDM'#9'; LB');
                     end else
                     begin // Local word
                         writln(#9'LDR');
@@ -1068,7 +1068,7 @@ begin
                         writln(#9'STP');
                         writln(#9'LDM'#9'; HB - Load variable '+name);
                         writln(#9'EXAB');
-                        writln(#9'INCP');
+                        EmitInst('INCP');
                         writln(#9'LDM'#9'; LB');
                     end;
                 end else
@@ -1119,13 +1119,13 @@ begin
                         lb := NewLabel;
                         PostLabel(lb);
                         // move using POP+EXAM
-                        writln(#9'POP'); dec(pushcnt);
-                        writln(#9'EXAM'); // A <-> (P), I times (1)
-                        writln(#9'DECP');
-                        writln(#9'DECJ');
-                        writln(#9'JRNZM '+lb);
-                        writln(#9'EXAB'); // restore R
-                        writln(#9'STR'); // A -> R
+                        EmitInst('POP'); dec(pushcnt);
+                        EmitInst('EXAM'); // A <-> (P), I times (1)
+                        EmitInst('DECP');
+                        EmitInst('DECA');
+                        EmitInst('JRNZM '+lb);
+                        EmitInst('EXAB'); // restore R
+                        EmitInst('STR'); // A -> R
                     end;
                 end else begin
                     if loc then
@@ -1158,9 +1158,9 @@ begin
                         if adr <> -1 then
                         begin
                                 writln( #9'LIA'#9'HB('+inttostr(adr)+'-1)');
-                                writln( #9'EXAM');
-                                writln( #9'LP'#9'4'#9'; LB');
-                                writln( #9'LIA'#9'LB('+inttostr(adr)+'-1)');
+                                        writeln( #9'EXAB');
+                                        EmitInst('DECP');
+                                        writeln( #9'LDM'#9#9'; LB');
                         end else
                         begin
                                 writln( #9'LIA'#9'HB('+name+'-1)');
@@ -1185,11 +1185,11 @@ begin
                         writln( #9'LP'#9'0');
                         writln( #9'ADM');
                         writln( #9'EXAM');
-                        writln( #9'STP');
+                        writeln(#9'STP');
                         writln( #9'LDM'#9#9'; HB');
                         writln( #9'EXAB');
-                        writln( #9'DECP');
-                        writln( #9'LDM'#9#9'; LB');
+                        EmitInst('DECP');
+                        writeln(#9'LDM'#9#9'; LB');
                 end else
                 begin
                         writln( #9'RC');
@@ -1417,7 +1417,7 @@ begin
                                         begin
                                                 writln(#9'LDM'#9#9'; Load content LB *'+s);
                                                 writln(#9'EXAB');
-                                                writln(#9'INCP');
+                                                EmitInst('INCP');
                                                 writln(#9'LDM'#9#9'; Load content HB *'+s);
                                                 writln(#9'EXAB');
                                         end;
@@ -1650,19 +1650,15 @@ begin
                                 and ( varlist[varfound].address>=0 ) ) then
                                 begin
                                   a := varlist[varfound].address;
-                                  if a = 0 then begin if Look='+' then writln(#9'INCI') else writln(#9'DECI'); end
-                                  else if a = 1 then begin if Look='+' then writln(#9'INCJ') else writln(#9'DECJ'); end
-                                  else if a = 2 then begin if Look='+' then writln(#9'INCA') else writln(#9'DECA'); end
-                                  else if a = 3 then begin if Look='+' then writln(#9'INCB') else writln(#9'DECB'); end
-                                  else if a = 8 then begin if Look='+' then writln(#9'INCK') else writln(#9'DECK'); end
-                                  else if a = 9 then begin if Look='+' then writln(#9'INCL') else writln(#9'DECL'); end
-                                  else if a = 10 then begin if Look='+' then writln(#9'INCM') else writln(#9'DECM'); end
-                                  else if a = 11 then begin if Look='+' then writln(#9'INCN') else writln(#9'DECN'); end
+                                  if Look = '+' then
+                                    EmitIncReg(a)
+                                  else
+                                    EmitDecReg(a);
                                 end
                                 else
                                 begin
                                         Loadvariable(name);
-                                        if Look = '+' then writln(#9'INCA') else writln(#9'DECA');
+                                        if Look = '+' then EmitInst('INCA') else EmitInst('DECA');
                                         storevariable(name);
                                 end;
                                 exit;
