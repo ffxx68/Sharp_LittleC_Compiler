@@ -161,44 +161,6 @@ begin
                 end;
         end;
 
-        i := 1;
-        lf := false;
-        while i < length(s) do
-        begin
-                if upcase(s[i]) in ['_','A'..'Z'] then
-                begin
-                    if (i > 1) and (s[i - 1] = '0') then
-                    begin
-                        inc(i);
-                        if upcase(s[i-1]) = 'X' then skiphex(s, i)
-                        else if upcase(s[i-1]) = 'B' then skipbin(s, i);
-                        dec(i);
-                    end
-                    else begin
-                        s2 := '';
-                        while (i <= length(s)) and (upcase(s[i]) in ['0'..'9','_','A'..'Z']) do
-                        begin
-                                s2 := s2 + s[i];
-                                inc(i);
-                        end;
-                        if (uppercase(s2) <> 'LB') and
-                        (uppercase(s2) <> 'HB') and (uppercase(s2) <> 'NOT') and
-                        (uppercase(s2) <> 'SIN') and (uppercase(s2) <> 'TAN') and
-                        (uppercase(s2) <> 'COS') and (uppercase(s2) <> 'FAK') and
-                        (uppercase(s2) <> 'ABS') and (uppercase(s2) <> 'SQRT') and
-                        (uppercase(s2) <> 'SQR') and (uppercase(s2) <> 'LN') and
-                        (uppercase(s2) <> 'LOG') and (uppercase(s2) <> 'EXP') and
-                        (uppercase(s2) <> 'ARCTAN') and (uppercase(s2) <> 'PI') and
-                        (uppercase(s2) <> 'E') then
-                        begin
-				lf := true;
-                        end;
-                    end;
-                end;
-                inc(i);
-        end;
-        if lf then begin result := 0; exit; end;
-
 	Evaluate(s, w, r, p);
         if p <> 0 then
         begin
@@ -728,169 +690,63 @@ begin
 
         if not arr then
         begin
-            if (typ='char') or (typ='byte') then
-            begin
-//                if isword then
-//                        writln(#9'EXAB'#9#9'; Store only HB in byte var!');
-                if not xr then
+                if (typ='char') or (typ='byte') then
                 begin
+                  // Delegate byte/char stores to CodeGen helpers
+                  if not xr then
+                  begin
                     if not loc then
-                    begin
-                        if adr <= 63 then
-                            writln(#9'LP'#9+inttostr(adr)+#9'; Store result in '+name)
-                        else
-                            writln(#9'LIP'#9+inttostr(adr)+#9'; Store result in '+name);
-                        writln(#9'EXAM');
-                    end else
-                    begin // Local char or byte
-                        writln(#9'EXAB'); // temp save A (value to store) to B
-                        writln(#9'LDR');  // get stack ptr R to A
-                        writln(#9'ADIA'#9+inttostr(adr+2+pushcnt)); // add relative address
-                        writln(#9'STP'); // move result to P (absolute address)
-                        writln(#9'EXAB'); // restore A
-                        writln(#9'EXAM'#9#9'; Store result in '+name); // store value to P location
-                    end;
-                end else
-                begin
-                        if adr <> -1 then
-                                writln( #9'LIDP'#9+inttostr(adr)+#9'; Store result in '+name)
-                        else
-                                writln( #9'LIDP'#9+name+#9'; Store result in '+name);
-                        writln( #9'STD')
-                end ;
-            end else if (typ='word') then
-            begin
-                if not xr then
-                begin
-                    if not loc then
-                    begin
-                        if adr < 64 then
-                                writln( #9'LP'#9+inttostr(adr)+#9'; Store 16bit variable '+name)
-                        else
-                                writln( #9'LIP'#9+inttostr(adr)+#9'; Store 16bit variable '+name);
-                        writln( #9'EXAM'#9#9'; LB');
-                        writln( #9'EXAB');
-                        EmitInstComment('INCP', 'HB');
-                        writln( #9'EXAM');
-                    end else
-                    begin // Local word
-                        writln(#9'PUSH'); inc(pushcnt); // temp save A
-                        writln(#9'LDR');  // we overwrite A here !!!
-                        writln(#9'ADIA'#9+inttostr(adr+2+pushcnt)); //adr + size + pushcnt
-                        writln(#9'STP');
-                        writln(#9'POP'); dec(pushcnt); // restore A
-                        writln(#9'EXAM'#9'; LB - Store result in '+name);
-                        writeln(#9'EXAB');
-                        EmitInstComment('DECP', 'LB');
-                        writeln(#9'LDM');
-                    end;
-                end else
-                begin
-                        if adr <> -1 then
-                                writln( #9'LIDP'#9+inttostr(adr)+#9'; Store 16bit variable '+name)
-                        else
-                                writln( #9'LIDP'#9+name+#9'; Store 16bit variable '+name);
-                        writln( #9'STD'#9#9'; LB');
-                        writln( #9'EXAB');
-                        if (adr <> -1) and ((adr + 1) div 256 = adr div 256) then
-                                writln( #9'LIDL'#9'LB('+inttostr(adr)+'+1)')
-                        else if adr <> -1 then
-                                writln( #9'LIDP'#9+inttostr(adr)+'+1')
-                        else
-                                writln( #9'LIDP'#9+name+'+1'); // PASM doesn't parse "name + 1" !!!
-                        writln( #9'STD'#9#9'; HB');
-                end;
-            end else if (typ='float') then
-            begin // value is in temporary storage point 'FloatXReg'
-                if not xr then
-                begin
-                    if loc then
-                    begin
-                        // a local variable is reverse-orderd in stack
-                        writln('');
-                        writln(#9'; Store FloatXReg onto local-float variable, reversed');
-                        // to:
-                        writln(#9'LDR'); // R -> A
-                        writln(#9'EXAB'); // save R in B first
-                        writln(#9'LDR'); // R -> A
-                        writln(#9'ADIA'#9+inttostr(adr+2+pushcnt+2)+#9'; to: '+name+' end + 2');
-                        writln(#9'STR'); // now R points to the local variable start addr
-                        // from:
-                        writln(#9'LIP 0x'+IntToHex(FloatXReg,2)+#9'; from: primary float reg addr' );
-                        // loop 8 times
-                        writln(#9'LIJ 8');
-                        lb := NewLabel;
-                        PostLabel(lb);
-                        // move using LDM+PUSH
-                        writln(#9'LDM'); // (P) -> A
-                        writln(#9'PUSH'); inc(pushcnt);
-                        EmitInst('INCP');
-                        EmitInst('DECA');
-                        writln(#9'JRNZM '+lb);
-                        writln(#9'EXAB'); // restore R
-                        writln(#9'STR'); // A -> R
-                    end else
-                    begin // not local
-                        if adr < 64 then
-                             writln( #9'LP'#9'0x'+IntToHex(adr,2)+#9'; store float var '+name )
-                        else
-                             writln( #9'LIP'#9'0x'+IntToHex(adr,2)+#9'; store float var '+name );
-                        // store value to variable
-                        writln( #9'LIQ 0x'+IntToHex(FloatXReg,2)+#9'; from temp float reg' );
-                        writln( #9'LII 7');
-                        writln( #9'MVW ; (FloatXReg) -> (P), 8 bytes');
-                    end;
-                end else
-                begin // destination: xram or code space
-                    if adr <> -1 then
-                       writln( #9'LIDP'#9+'0x'+inttohex(adr,4)+#9'; Store float var '+name )
+                      StoreByteToReg(adr, name)
                     else
-                       writln( #9'LIDP'#9+name+#9'; store var '+name );
-                    writln( #9'LP 0x'+IntToHex(FloatXReg,2)+' ; temp float reg' );
-                    writln( #9'LII 7');
-                    writln( #9'EXWD ; (DP) <-> (FloatXReg), 8 bytes' );
+                      StoreByteToLocal(adr, name);
+                  end
+                  else
+                  begin
+                    StoreByteToXram(adr, name);
+                  end;
+                end else if (typ='word') then
+                begin
+                  // Delegate 16-bit stores to CodeGen helpers
+                  if not xr then
+                  begin
+                    if not loc then
+                      StoreWordToReg(adr, name)
+                    else
+                      StoreWordToLocal(adr, name);
+                  end
+                  else
+                    StoreWordToXram(adr, name);
+                end
+                else if (typ='float') then
+                begin
+                  // Delegate float stores to CodeGen helpers
+                  if not xr then
+                  begin
+                    if loc then
+                      StoreFloatToLocal(adr, name)
+                    else
+                      StoreFloatToReg(adr, name);
+                  end
+                  else
+                    StoreFloatToXram(adr, name);
                 end;
-            end ;
         end else
         begin  // arrays
             if loc then
                Error ( 'Local arrays unsupported yet');
             if (typ='char') or (typ='byte') then
             begin
+                // Delegate array byte stores to CodeGen helpers
                 if not xr then
                 begin
-                        writln( #9'LIB'#9+inttostr(adr)+#9'; Store array element from '+name);
-                        writln( #9'LP'#9'3');
-                        writln( #9'ADM');
-                        writln( #9'EXAB');
-                        writln( #9'STP');
-                        writln( #9'POP'); dec(pushcnt);
-                        writln( #9'EXAM');
-                end else
+                    StoreArrayByteToReg(adr, name);
+                end
+                else
                 begin
-                        writln( #9'PUSH'#9#9'; Store array element from '+name); inc(pushcnt);
-                        writln( #9'LP'#9'7'#9'; HB of address');
-                        if adr <> -1 then
-                        begin
-                                writln( #9'LIA'#9'HB('+inttostr(adr)+'-1)');
-                                writln( #9'EXAM');
-                                writln( #9'LP'#9'6'#9'; LB');
-                                writln( #9'LIA'#9'LB('+inttostr(adr)+'-1)');
-                        end else
-                        begin
-                                writln( #9'LIA'#9'HB('+name+'-1)');
-                                writln( #9'EXAM');
-                                writln( #9'LP'#9'6'#9'; LB');
-                                writln( #9'LIA'#9'LB('+name+'-1)');
-                        end;
-                        writln( #9'EXAM');
-                        writln( #9'POP'); dec(pushcnt);
-                        writln( #9'LIB'#9'0');
-                        writln( #9'ADB');
-                        writln( #9'POP'); dec(pushcnt);
-                        writln( #9'IYS');
+                    StoreArrayByteToXram(adr, name);
                 end;
-            end else if (typ='word') then
+            end
+            else if (typ='word') then
             begin
                 if not xr then
                 begin
@@ -902,16 +758,16 @@ begin
                         writln( #9'EXAM');
                         writln( #9'STP');
                         EmitInst('INCP');
-                        writeln(#9'POP'); dec(pushcnt);
+                        EmitPop;
                         writeln( #9'EXAM');
                         EmitInst('DECP');
-                        writeln(#9'POP'); dec(pushcnt);
+                        EmitPop;
                         writeln( #9'EXAM');
                 end else
                 begin
                         writln( #9'RC');
                         writln( #9'SL');
-                        writln( #9'PUSH'#9#9'; Store array element from '+name); inc(pushcnt);
+                        EmitPush('Store array element from ' + name);
                         writln( #9'LP'#9'7'#9'; HB of address');
                         if adr <> -1 then
                         begin
@@ -927,12 +783,12 @@ begin
                                 writln( #9'LIA'#9'LB('+name+'-1)');
                         end;
                         writln( #9'EXAM');
-                        writln( #9'POP'); dec(pushcnt);
+                        EmitPop;
                         writln( #9'LIB'#9'0');
                         writln( #9'ADB');
-                        writln( #9'POP'); dec(pushcnt);
+                        EmitPop;
                         writln( #9'EXAB');
-                        writln( #9'POP'); dec(pushcnt);
+                        EmitPop;
                         writln( #9'IYS');
                         writln( #9'EXAB');
                         writln( #9'IYS');
@@ -1153,14 +1009,14 @@ begin
                         writln( #9'LDM');
                 end else
                 begin
-                        writln( #9'PUSH'#9#9'; Load array element from '+name); inc(pushcnt);
+                        EmitPush('Load array element from ' + name);
                         writln( #9'LP'#9'5'#9'; HB of address');
                         if adr <> -1 then
                         begin
                                 writln( #9'LIA'#9'HB('+inttostr(adr)+'-1)');
-                                        writeln( #9'EXAB');
-                                        EmitInst('DECP');
-                                        writeln( #9'LDM'#9#9'; LB');
+                                writeln( #9'EXAB');
+                                EmitInst('DECP');
+                                writeln( #9'LDM'#9#9'; LB');
                         end else
                         begin
                                 writln( #9'LIA'#9'HB('+name+'-1)');
@@ -1169,7 +1025,7 @@ begin
                                 writln( #9'LIA'#9'LB('+name+'-1)');
                         end;
                         writln( #9'EXAM');
-                        writln( #9'POP'); dec(pushcnt);
+                        EmitPop;
                         writln( #9'LIB'#9'0');
                         writln( #9'ADB');
                         writln( #9'IXL'); // X -> DP; DP+1 -> DP, X; (DP) -> A
@@ -1194,7 +1050,7 @@ begin
                 begin
                         writln( #9'RC');
                         writln( #9'SL'#9#9'; index*2 for word array');
-                        writln( #9'PUSH'#9#9'; Load array element from '+name); inc(pushcnt);
+                        EmitPush('Load array element from ' + name);
                         writln( #9'LP'#9'5'#9'; HB of address');
                         if adr <> -1 then
                         begin
@@ -1709,15 +1565,15 @@ begin
 		begin
 				if findvar(Name) then
 				begin
-						if varlist[varfound].pnttyp <> 'word' then
-						begin
-								writln(#9'PUSH'); inc(pushcnt);
-						end else
-						begin
-								writln(#9'PUSH'); inc(pushcnt);
-								writln(#9'EXAB');
-								writln(#9'PUSH'); inc(pushcnt);
-						end;
+                        if varlist[varfound].pnttyp <> 'word' then
+                        begin
+                                EmitPush;
+                        end else
+                        begin
+                                EmitPush;
+                                writln(#9'EXAB');
+                                EmitPush;
+                        end;
 						LoadVariable(name);
 						if not varlist[varfound].Pointer then
 										error('This var ('+name+') is not a pointer!');
@@ -1729,36 +1585,36 @@ begin
 										writln(#9'EXAB');
 										writln(#9'EXAM');
 										writln(#9'DY');
-										if varlist[varfound].pnttyp <> 'word' then
-										begin
-												writln(#9'POP'); dec(pushcnt);
-												writln(#9'IYS'#9#9'; Store content *'+s);
-										end else
-										begin
-												writln(#9'POP'); dec(pushcnt);
-												writln(#9'EXAB');
-												writln(#9'POP'); dec(pushcnt);
-												writln(#9'IYS'#9#9'; Store content LB *'+s);
-												writln(#9'EXAB');
-												writln(#9'IYS'#9#9'; Store content HB *'+s);
-										end;
+                                        if varlist[varfound].pnttyp <> 'word' then
+                                        begin
+                                                EmitPop;
+                                                writln(#9'IYS'#9#9'; Store content *'+s);
+                                        end else
+                                        begin
+                                                EmitPop;
+                                                writln(#9'EXAB');
+                                                EmitPop;
+                                                writln(#9'IYS'#9#9'; Store content LB *'+s);
+                                                writln(#9'EXAB');
+                                                writln(#9'IYS'#9#9'; Store content HB *'+s);
+                                        end;
 						end else
 						begin
 										// LIP
 										writln(#9'STP'#9#9'; Set P');
-										if varlist[varfound].pnttyp <> 'word' then
-										begin
-												writln(#9'POP'); dec(pushcnt);
-												writln(#9'EXAM'#9#9'; Store content *'+s);
-										end else
-										begin
-												writln(#9'POP'); dec(pushcnt);
-												writln(#9'EXAB');
-												writln(#9'POP'); dec(pushcnt);
-												writln(#9'EXAM'#9#9'; Store content LB *'+s);
-												writln(#9'EXAB');
-												writln(#9'EXAM'#9#9'; Store content HB *'+s);
-										end;
+                                        if varlist[varfound].pnttyp <> 'word' then
+                                        begin
+                                                EmitPop;
+                                                writln(#9'EXAM'#9#9'; Store content *'+s);
+                                        end else
+                                        begin
+                                                EmitPop;
+                                                writln(#9'EXAB');
+                                                EmitPop;
+                                                writln(#9'EXAM'#9#9'; Store content LB *'+s);
+                                                writln(#9'EXAB');
+                                                writln(#9'EXAM'#9#9'; Store content HB *'+s);
+                                        end;
 						end;
 				end;
 		end;

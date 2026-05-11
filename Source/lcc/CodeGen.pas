@@ -18,6 +18,17 @@ procedure EmitInst(const inst, operand, comment: string); overload;
 procedure EmitInstComment(const inst, comment: string); overload;
 procedure EmitComment(const comment: string);
 procedure EmitBlankLine;
+procedure EmitPush; overload;
+procedure EmitPush(const comment: string); overload;
+procedure EmitPop; overload;
+procedure EmitPop(const comment: string); overload;
+
+// Raw asm passthrough for #asm blocks
+procedure EmitRawAsmLine(const s: string);
+
+// Finalize current asm buffers and write to output file
+procedure FinalizeAndWrite(const filename: string);
+
 
 // Label management
 function NewLabel: string;
@@ -38,6 +49,10 @@ procedure StoreWordToLocal(adr: integer; const name: string);
 // High-level store functions for XRAM variables (Task 4.1.3)
 procedure StoreByteToXram(adr: integer; const name: string);
 procedure StoreWordToXram(adr: integer; const name: string);
+// High-level store functions for float variables (Task 4.1.3 extended)
+procedure StoreFloatToReg(adr: integer; const name: string);
+procedure StoreFloatToLocal(adr: integer; const name: string);
+procedure StoreFloatToXram(adr: integer; const name: string);
 
 // High-level load functions for global variables in registers (Task 4.1.4)
 procedure LoadByteFromReg(adr: integer; const name: string);
@@ -192,6 +207,50 @@ begin
   WritLn('');
 end;
 
+// Simple raw push/pop helpers that update pushcnt consistently.
+procedure EmitPush;
+begin
+  // forward to comment overload with empty comment
+  EmitPush('');
+end;
+
+procedure EmitPush(const comment: string);
+begin
+  if comment = '' then
+    EmitInst('PUSH')
+  else
+    EmitInstComment('PUSH', comment);
+  Inc(pushcnt);
+end;
+
+procedure EmitPop;
+begin
+  // forward to comment overload with empty comment
+  EmitPop('');
+end;
+
+procedure EmitPop(const comment: string);
+begin
+  if comment = '' then
+    EmitInst('POP')
+  else
+    EmitInstComment('POP', comment);
+  Dec(pushcnt);
+end;
+
+procedure EmitRawAsmLine(const s: string);
+begin
+  // forward raw asm line to Output unit; Output.writeln will respect outfile/addasm
+  WritLn(s);
+end;
+
+procedure FinalizeAndWrite(const filename: string);
+begin
+  // write accumulated asm + libtext to disk
+  SaveToFile(filename);
+end;
+
+
 {--------------------------------------------------------------}
 { Generate a Unique Label }
 
@@ -301,6 +360,57 @@ begin
   else
     EmitInst('LIDP', name + '+1');  // PASM doesn't parse "name + 1"
   EmitInstComment('STD', 'HB');
+end;
+
+procedure StoreFloatToReg(adr: integer; const name: string);
+begin
+  // store float from FloatXReg to memory mapped register area
+  if adr < 64 then
+    EmitInst('LP', '0x' + IntToHex(adr, 2), 'store float var ' + name)
+  else
+    EmitInst('LIP', '0x' + IntToHex(adr, 2), 'store float var ' + name);
+  EmitInst('LIQ', '0x' + IntToHex(FloatXReg, 2), 'from temp float reg');
+  EmitInst('LII', '7');
+  EmitInst('MVW', '');
+end;
+
+procedure StoreFloatToLocal(adr: integer; const name: string);
+var lb: string;
+begin
+  // a local variable is reverse-ordered in stack
+  EmitBlankLine;
+  EmitComment('Store FloatXReg onto local-float variable, reversed');
+  // to:
+  EmitInst('LDR'); // R -> A
+  EmitInst('EXAB'); // save R in B first
+  EmitInst('LDR'); // R -> A
+  EmitInst('ADIA', IntToStr(adr + 2 + pushcnt + 2)); // to: name end + 2
+  EmitInst('STR'); // now R points to the local variable start addr
+  // from:
+  EmitInst('LIP', '0x' + IntToHex(FloatXReg, 2), 'from: primary float reg addr');
+  // loop 8 times
+  EmitInst('LIJ', '8');
+  lb := NewLabel;
+  PostLabel(lb);
+  // move using LDM+PUSH
+  EmitInst('LDM'); // (P) -> A
+  EmitPush('Store float local');
+  EmitInst('INCP');
+  EmitInst('DECA');
+  EmitInst('JRNZM ' + lb);
+  EmitInst('EXAB'); // restore R
+  EmitInst('STR'); // A -> R
+end;
+
+procedure StoreFloatToXram(adr: integer; const name: string);
+begin
+  if adr <> -1 then
+    EmitInst('LIDP', '0x' + IntToHex(adr, 4), 'Store float var ' + name)
+  else
+    EmitInst('LIDP', name, 'store var ' + name);
+  EmitInst('LP', '0x' + IntToHex(FloatXReg, 2), 'temp float reg');
+  EmitInst('LII', '7');
+  EmitInst('EXWD', '');
 end;
 
 {--------------------------------------------------------------}

@@ -66,7 +66,7 @@ call :RUN_TEST "bounce" "bounce"
 call :RUN_TEST "Loop" "Loop"
 call :RUN_TEST "Math" "Math"
 call :RUN_TEST "pointer" "pointer"
-
+call :RUN_TEST "Float" "Float"
 
 :ALL_DONE
 echo.

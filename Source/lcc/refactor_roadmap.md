@@ -373,17 +373,33 @@ For each component I list responsibilities, minimal API, dependencies and priori
 
 **Step 4.1.14 — Verify and remove residual ASM emission in parser.pas**
 
-**Implementation notes:**
+Objective: remove the remaining textual ASM emission in `parser.pas` (direct calls to `writeln`/`writln`), moving code generation into centralized APIs (`CodeGen.pas` / `Output.pas`) while keeping functional compatibility (aim: NO_DIFF on the reference demos).
 
--   Functions that modify stack must handle `pushcnt` as `var` parameter
-    
--   When `adr = -1`, use symbolic name instead of numeric address
-    
--   When `adr < 64`, use `LP`; otherwise use `LIP`
-    
--   All changes must be verified incrementally with `test.bat` → NO_DIFF against `reference_bounce.asm`
-    
+Operational plan (prioritized summary)
 
+Immediate checklist (short verifiable steps):
+
+1. Review `Source/lcc/CodeGen.pas` for existing API stubs for emission: `EmitInst`, `EmitLabel`, `EmitComment`, etc. ✅
+
+2. Implement `EmitPush`/`EmitPop` that update internal `pushcnt` and emit `PUSH`/`POP` with identical formatting to today. ✅
+
+3. Migrate `StoreVariable` to `StoreByte`/`StoreWord`/`StoreFloat`/`StoreArray` APIs in `CodeGen`. ✅
+
+   3.1. Still missing "StoreArrayWordToReg/Xram" for word arrays (parser.pas:749 on) — to be implemented.
+
+   3.2. Test program 'Float' compilation error (also in reference lcc) — investigate and fix
+
+4. Replace the emission sites in `parser.pas` for `LoadConstant` and `LoadVariable` with `CodeGen` calls.
+
+5. Centralize `ProcCall` logic (reserve locals, push parameters, CALL, FreeStackSpace).
+
+6. Move intro, SREG save/restore, `CALL main` and variable initializations from `SecondScan` into `CodeGen`/`Output`.
+
+7. Implement `EmitRawAsmBlock` for `#asm...#endasm` as exact pass-through.
+
+8. Remove all remaining ASM emission in `parser.pas`, replacing with API calls and `EmitComment` / `EmitBlankLine` where appropriate.
+
+Run full `test.bat` after each step: NO_DIFF
 
 ---
 
