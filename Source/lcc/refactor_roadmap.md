@@ -375,9 +375,7 @@ For each component I list responsibilities, minimal API, dependencies and priori
 
 Objective: remove the remaining textual ASM emission in `parser.pas` (direct calls to `writeln`/`writln`), moving code generation into centralized APIs (`CodeGen.pas` / `Output.pas`) while keeping functional compatibility (aim: NO_DIFF on the reference demos).
 
-Operational plan (prioritized summary)
-
-Immediate checklist (short verifiable steps):
+Checklist (short verifiable steps; full `test.bat` after each step: NO_DIFF):
 
 1. Review `Source/lcc/CodeGen.pas` for existing API stubs for emission: `EmitInst`, `EmitLabel`, `EmitComment`, etc. ✅
 
@@ -398,8 +396,6 @@ Immediate checklist (short verifiable steps):
 7. Implement `EmitRawAsmBlock` for `#asm...#endasm` as exact pass-through.
 
 8. Remove all remaining ASM emission in `parser.pas`, replacing with API calls and `EmitComment` / `EmitBlankLine` where appropriate.
-
-Run full `test.bat` after each step: NO_DIFF
 
 ---
 
