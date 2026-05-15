@@ -383,9 +383,9 @@ Checklist (short verifiable steps; full `test.bat` after each step: NO_DIFF):
 
 3. Migrate `StoreVariable` to `StoreByte`/`StoreWord`/`StoreFloat`/`StoreArray` APIs in `CodeGen`. ✅
 
-   3.1. Still missing "StoreArrayWordToReg/Xram" for word arrays (parser.pas:749 on) — to be implemented.
-
-   3.2. Test program 'Float' compilation error (also in reference lcc) — investigate and fix
+   3.1. Test program 'Float' compilation error (also in reference lcc) — investigate and fix ✅   
+ 
+   3.2. Still missing "StoreArrayWordToReg/Xram" for word arrays (parser.pas:749 on) — to be implemented. ✅
 
 4. Replace the emission sites in `parser.pas` for `LoadConstant` and `LoadVariable` with `CodeGen` calls.
 

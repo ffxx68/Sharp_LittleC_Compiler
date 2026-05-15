@@ -749,50 +749,9 @@ begin
             else if (typ='word') then
             begin
                 if not xr then
-                begin
-                        writln( #9'RC');
-                        writln( #9'SL');
-                        writln( #9'LII'#9+inttostr(adr)+#9'; Store array element from '+name);
-                        writln( #9'LP'#9'0');
-                        writln( #9'ADM');
-                        writln( #9'EXAM');
-                        writln( #9'STP');
-                        EmitInst('INCP');
-                        EmitPop;
-                        writeln( #9'EXAM');
-                        EmitInst('DECP');
-                        EmitPop;
-                        writeln( #9'EXAM');
-                end else
-                begin
-                        writln( #9'RC');
-                        writln( #9'SL');
-                        EmitPush('Store array element from ' + name);
-                        writln( #9'LP'#9'7'#9'; HB of address');
-                        if adr <> -1 then
-                        begin
-                                writln( #9'LIA'#9'HB('+inttostr(adr)+'-1)');
-                                writln( #9'EXAM');
-                                writln( #9'LP'#9'6'#9'; LB');
-                                writln( #9'LIA'#9'LB('+inttostr(adr)+'-1)');
-                        end else
-                        begin
-                                writln( #9'LIA'#9'HB('+name+'-1)');
-                                writln( #9'EXAM');
-                                writln( #9'LP'#9'6'#9'; LB');
-                                writln( #9'LIA'#9'LB('+name+'-1)');
-                        end;
-                        writln( #9'EXAM');
-                        EmitPop;
-                        writln( #9'LIB'#9'0');
-                        writln( #9'ADB');
-                        EmitPop;
-                        writln( #9'EXAB');
-                        EmitPop;
-                        writln( #9'IYS');
-                        writln( #9'EXAB');
-                        writln( #9'IYS');
-                end;
+                    StoreArrayWordToReg(adr, name)
+                else
+                    StoreArrayWordToXram(adr, name);
             end else if (typ='float') then
             begin
                  Error ( 'Float array storing unsupported yet ');
