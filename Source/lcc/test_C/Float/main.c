@@ -17,7 +17,7 @@ Machine code entry point at 0xE030 = 57576
 
 */
 
-byte regI at 0, regJ 1;
+byte regI at 0, regJ at 1;
 char regA at 2, regB at 3; 
 word regX at 4, regY at 6, addr at 8;
 
