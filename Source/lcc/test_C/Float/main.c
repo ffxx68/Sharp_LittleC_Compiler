@@ -17,18 +17,18 @@ Machine code entry point at 0xE030 = 57576
 
 */
 
-byte regI at 0, regJ 1;
+byte regI at 0, regJ at 1;
 char regA at 2, regB at 3; 
 word regX at 4, regY at 6, addr at 8;
 
 // locations for floating-point (BCD) operations
 // X (10H to 17H) ; Y (18H to 1FH)
-byte floatX[8] at 0x10 = (0x00, 0x20, 0x12, 0x30, 0x00, 0x00, 0x00, 0x00); // 1.23 x 10^2 = 123
-byte floatY[8] at 0x18 = (0x00, 0x20, 0x34, 0x50, 0x00, 0x00, 0x00, 0x00); // 3.45 x 10^2 = 345
-byte floatZ[8] at 0x20 = (0x00, 0x20, 0x67, 0x80, 0x00, 0x00, 0x00, 0x00); // 6.78 x 10^2 = 678
+byte fltX[8] at 0x10 = (0x00, 0x20, 0x12, 0x30, 0x00, 0x00, 0x00, 0x00); // 1.23 x 10^2 = 123
+byte fltY[8] at 0x18 = (0x00, 0x20, 0x34, 0x50, 0x00, 0x00, 0x00, 0x00); // 3.45 x 10^2 = 345
+byte fltZ[8] at 0x20 = (0x00, 0x20, 0x67, 0x80, 0x00, 0x00, 0x00, 0x00); // 6.78 x 10^2 = 678
 byte xram idx;
 
-// NOTE - numerical routines from PC-1403(H) ROM
+// numerical routines from ROM
 // mostly taken from Hrast's notes
 
 // floatX <-> floatY
@@ -70,8 +70,8 @@ f_div() {
 // binary_num --> floatX
 uint2float(word binary_num) {
 		// (0x19) msb, (0x18) lsb
-		floatY[0] = 0xff; // should take from parameter!!
-		floatY[1] = 0xff;
+		fltY[0] = 0xff; // should take from parameter!!
+		fltY[1] = 0xff;
 #asm
 		; 0x1446 - Entry point for an UNSIGNED binary (0 to 65535)
 		; 0x144D - Entry point for a SIGNED binary (-32768 to 32767)
