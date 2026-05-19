@@ -139,7 +139,7 @@ For each new test cycle, rebuild the binary, load it on MAME and restart the pro
  (cmd)> copy tmp.bin [...]\mame
  (debugger) load tmp.bin,e030:maincpu
  (debugger) 'soft reset' (repeat, if device is not responding)
- (Sharp PC) <PRO> mode
+ (Sharp PC) go to <RUN> mode
  (Sharp PC) RUN
 ```
 
