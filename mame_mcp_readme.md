@@ -7,19 +7,6 @@
 
 Control MAME from Claude (or any MCP client) via a Python server.
 
-## Architecture
-
-```
-Claude Desktop  ──(stdio MCP)──►  mame_mcp_server.py
-IntelliJ IDEA   ──(stdio MCP)──►  mame_mcp_server.py
-                                         │
-                          ┌──────────────┼─────────────────┐
-                          │              │                 │
-                    subprocess       TCP :6789          HTTP :8080
-                          │              │                 │
-                       mame.exe ◄── mame_mcp_bridge.lua   MAME HTTP API
-```
-
 ## Requirements
 
 - **MAME** installed on Windows (tested with 0.267+)
