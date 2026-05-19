@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "mame": {
+      "command": "python",
+      "args": ["C:\\Users\\F.Fumi\\mame\\mame_mcp_server.py"],
+      "env": {
+        "MAME_EXE": "C:\\Users\\F.Fumi\\mame\\mame.exe",
+        "MAME_ROM_PATH": "C:\\Users\\F.Fumi\\mame\\roms",
+        "MAME_LUA_BRIDGE": "C:\\Users\\F.Fumi\\mame\\mame_mcp_bridge.lua"
+      }
+    }
+  }
+}
+

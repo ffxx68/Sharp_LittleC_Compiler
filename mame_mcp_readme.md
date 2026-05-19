@@ -7,6 +7,8 @@
 
 Control MAME from Claude (or any MCP client) via a Python server.
 
+*Note* - [mame_mcp_bridge.lua](mame_mcp_bridge.lua), [mame_mcp_server.py](mame_mcp_server.py) are inherited from the https://github.com/ffxx68/mame_mcp_server repositiry
+
 ## Requirements
 
 - **MAME** installed on Windows (tested with 0.267+)
