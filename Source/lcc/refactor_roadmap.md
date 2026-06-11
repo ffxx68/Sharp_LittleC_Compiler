@@ -387,7 +387,7 @@ Checklist (short verifiable steps; full `test.bat` after each step: NO_DIFF):
  
    3.2. Still missing "StoreArrayWordToReg/Xram" for word arrays (parser.pas:749 on) — to be implemented. ✅
 
-4. Replace the emission sites in `parser.pas` for `LoadConstant` and `LoadVariable` with `CodeGen` calls.
+4. Replace the emission sites in `parser.pas` for `LoadConstant` and `LoadVariable` with `CodeGen` calls.  ...
 
 5. Centralize `ProcCall` logic (reserve locals, push parameters, CALL, FreeStackSpace).
 
