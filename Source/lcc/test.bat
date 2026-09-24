@@ -44,9 +44,9 @@ if not exist "%FPC%" (
 )
 
 REM Uso -Mdelphi -Sh e forzo la codepage CP1252
-"%FPC%" -B -Pi386 -Mdelphi -Sh -gl -Fccp1252 lcc.dpr > baseline_build.log 2>&1
+"%FPC%" -B -Pi386 -Mdelphi -Sh -gl -Fccp1252 lcc.dpr > lcc_build.log 2>&1
 if %ERRORLEVEL% neq 0 (
-    echo [ERROR] Build failed. See baseline_build.log
+    echo [ERROR] Build failed. See lcc_build.log
     exit /b %ERRORLEVEL%
 )
 echo [BUILD] Success.
@@ -86,7 +86,7 @@ echo -----------------
 echo ==========================================
 if %FAILED_TESTS% gtr 0 (
     echo.
-    echo [WARNING] %FAILED_TESTS% test(s) failed - see details above
+    echo [WARNING] %FAILED_TESTS% test^(s^) failed - see details above
     echo.
 )
 exit /b 0
