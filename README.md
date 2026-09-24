@@ -174,32 +174,32 @@ With the script loaded, the `key()` function can be used to send key strokes fro
 
 Or, `keyfile()`, to send a list of keystrokes as from an input file.
 
-For example, the below is to enter some of the instructions seen before (note how "#" is a shortcut to toggle BASIC mode):
- 
+For example, the below is to enter some of the instructions seen before.
+Start with SHarp PC in 'CALC' mode (note how "|" is a shortcut to toggle BASIC mode):
 ```
-[MAME]> key("##POKE&ff01,&30,&e8")
-[MAME]> key("#")
-[MAME]> key("new")
-[MAME]> key("mem")
-[MAME]> key("1 call&e030")
-[MAME]> key("#")
+[MAME]> key("_||POKE&ff01,&30,&e8")
+[MAME]> key("|NEW")
+[MAME]> key("MEM")
+[MAME]> key("1 CALL&E030")
+[MAME]> key("|")
 ```
+MEM step should return with on the PC.
 
-Alternatively, using a text file to store the key strokes, named `pc1403_ini.key`:
+Alternatively, using a text file to store the same key strokes, named `pc1403_init.key`:
 
 ```
-##POKE&ff01,&30,&e8
-# 
-new 
-mem 
+_||POKE&ff01,&30,&e8
+| 
+NEW 
+MEM 
 1 call&e030 
-#
+|
 ```
 
-and *executing* it from the Lua console:
+and *executing* it from the Lua console (still with PC in CALC mode):
 
 ```
-[MAME]> keyfile("pc1403_ini.key")
+[MAME]> keyfile("pc1403_init.key")
 ```
 
 More could be done, like interacting with the debugger, etc., but this is just a starting point, for easier test replay.

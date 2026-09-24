@@ -149,9 +149,10 @@ If you want to start MAME manually (for advanced debugging or to see the Lua con
    After this command, the file-based bridge will be active and you can use all MCP tools from IntelliJ or other clients.
 
 > **Note:**  
-> If you want to load additional scripts (e.g. `key.lua`), use:
+> Additional scripts can be loaded, from the LUA console.
+> E.g., to add key input capabilities:
 > ```
-> [MAME]> dofile("key.lua")
+> [MAME]> dofile("pc1403_key.lua")
 > ```
 
 ### Example commands (in Claude Desktop, or IntelliJ Copilot)
@@ -258,6 +259,7 @@ pip install pygetwindow
 
 ## Future extensions
 
+- [ ] Direct key input, leveraging the `pc1403_key.lua` script
 - [ ] Watchpoint on memory addresses (notify when a value changes)
 - [ ] Video recording via MAME `-aviwrite`
 - [ ] CPU breakpoints via Lua debugger hook
