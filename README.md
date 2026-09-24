@@ -165,28 +165,29 @@ to open the *Lua* scripting console, where you can load the script with:
 MAME debugger version 0.267 (mame0267)
 Currently targeting pc1403 (Pocket Computer 1403)
 
-[MAME]> dofile ("[...]\key.lua") 
+[MAME]> dofile ("[...]\pc1403_key.lua") 
 ```
 
-Replace `[...]` with your path to the location of LitteC where `key.lua` is found, or even easier, copy `key.lua` to your mame home beforehand, and no need to add a path.
+Replace `[...]` with your path to the location of LitteC where `pc1403_key.lua` is found, or even easier, 
+copy `pc1403_key.lua` to your mame home beforehand, and no need to add a path.
 
-With the script loaded, the `key()` function can be used to send key strokes from the console directly to the emulated device keyboard.
+With the script loaded, the `keyline()` function can be used to send a line of key strokes (auto-terminated with ENTER)
+to the emulated device keyboard.
 
 Or, `keyfile()`, to send a list of keystrokes as from an input file.
 
 For example, the below is to enter some of the instructions seen before.
-Start with SHarp PC in 'CALC' mode (note how "|" is a shortcut to toggle BASIC mode):
+Start with Sharp PC in 'CALC' mode (note how "|" is a shortcut to toggle BASIC mode):
 ```
-[MAME]> key("_||POKE&ff01,&30,&e8")
-[MAME]> key("|NEW")
-[MAME]> key("MEM")
-[MAME]> key("1 CALL&E030")
-[MAME]> key("|")
+[MAME]> keyline("_||POKE&ff01,&30,&e8")
+[MAME]> keyline("|NEW")
+[MAME]> keyline("MEM")
+[MAME]> keyline("1 CALL&E030")
+[MAME]> keyline("|")
 ```
 MEM step should return with on the PC.
 
 Alternatively, using a text file to store the same key strokes, named `pc1403_init.key`:
-
 ```
 _||POKE&ff01,&30,&e8
 | 
