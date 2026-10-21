@@ -38,6 +38,13 @@ procedure PostLabel(L: string);
 procedure load_x(s: string);
 procedure load_y(s: string);
 
+procedure LoadByteConstant(const value: string);
+procedure LoadWordConstant(const value: string);
+procedure LoadFloatConstant(const value: string; const bcd: RawByteString; isZero: boolean);
+procedure LoadFloatFromReg(adr: integer; const name: string);
+procedure LoadFloatFromLocal(adr: integer; const name: string);
+procedure LoadFloatFromXram(adr: integer; const name: string);
+
 // High-level store functions (Task 4.1.1)
 procedure StoreByteToReg(adr: integer; const name: string);
 procedure StoreWordToReg(adr: integer; const name: string);
@@ -416,6 +423,79 @@ end;
 {--------------------------------------------------------------}
 { High-level Load functions for global variables in registers (Task 4.1.4) }
 
+procedure LoadByteConstant(const value: string);
+begin
+  EmitInst('LIA', value, 'Load byte constant ' + value);
+end;
+
+procedure LoadWordConstant(const value: string);
+begin
+  EmitInst('LIA', 'LB(' + value + ')', 'Load word constant LB');
+  EmitInst('LIB', 'HB(' + value + ')', 'Load word constant HB');
+end;
+
+procedure LoadFloatConstant(const value: string; const bcd: RawByteString; isZero: boolean);
+var lb: string;
+begin
+  if not isZero then
+  begin
+    lb := 'C_' + NewLabel;
+    varfcode(bcd, lb);
+    EmitInst('LIDP', lb + ' ; Load floating-point constant: ' + value);
+  end
+  else
+    EmitInst('LIA 00');
+  EmitInst('LP', '0x' + IntToHex(FloatXReg, 2) + ' ; temporary store point');
+  EmitInst('LII 07');
+  if not isZero then
+    EmitInst('MVWD')
+  else
+    EmitInst('FILM');
+end;
+
+procedure LoadFloatFromReg(adr: integer; const name: string);
+begin
+  EmitInstComment('LIQ 0x' + IntToHex(adr, 2), 'from here');
+  EmitInst('LP', '0x' + IntToHex(FloatXReg, 2), 'to temporary store');
+  EmitInst('LII 7');
+  EmitInst('MVW ; (Q) -> (FloatXReg), 8 bytes');
+end;
+
+procedure LoadFloatFromLocal(adr: integer; const name: string);
+var lb: string;
+begin
+  // Local floats are reverse-ordered on the stack; save and restore R.
+  EmitBlankLine;
+  EmitComment('Load local-float var into FloatXReg, reversed');
+  EmitInst('LDR');
+  EmitInst('EXAB');
+  EmitInst('LDR');
+  EmitInst('ADIA', IntToStr(adr + pushcnt + 2 - 7), 'from: ' + name + ' offset');
+  EmitInst('STR');
+  EmitInstComment('LIP 0x' + IntToHex(FloatXReg + 7, 2), 'to: primary float reg end addr');
+  EmitInstComment('LIJ 8', 'move 8 bytes');
+  lb := NewLabel;
+  PostLabel(lb);
+  EmitPop;
+  EmitInst('EXAM');
+  EmitInst('DECP');
+  EmitInst('DECJ');
+  EmitInst('JRNZM ' + lb);
+  EmitInst('EXAB');
+  EmitInst('STR');
+end;
+
+procedure LoadFloatFromXram(adr: integer; const name: string);
+begin
+  if adr <> -1 then
+    EmitInst('LIDP', '0x' + IntToHex(adr, 4), 'Load variable ' + name)
+  else
+    EmitInst('LIDP', name + '+1', 'Load variable ' + name);
+  EmitInst('LP', '0x' + IntToHex(FloatXReg, 2) + ' ; to temporary store');
+  EmitInst('LII 07');
+  EmitInst('MVWD ; (DP) -> (P), I+1 times');
+end;
+
 procedure LoadByteFromReg(adr: integer; const name: string);
 begin
   if adr < 64 then
@@ -503,7 +583,7 @@ end;
 
 procedure LoadArrayByteFromXram(adr: integer; const name: string);
 begin
-  EmitInstComment('PUSH', 'Load array element from ' + name); Inc(pushcnt);
+  EmitPush('Load array element from ' + name);
   EmitInst('LP', '5', 'HB of address');
   if adr <> -1 then
   begin
@@ -519,15 +599,10 @@ begin
     EmitInst('LIA', 'LB(' + name + '-1)');
   end;
   EmitInst('EXAM');
-  EmitInst('POP'); Dec(pushcnt);
+  EmitPop;
   EmitInst('LIB', '0');
   EmitInst('ADB');
-  EmitInst('POP'); Dec(pushcnt);
-  EmitInst('EXAB');
-  EmitInst('POP'); Dec(pushcnt);
-  EmitInst('IYS');
-  EmitInst('EXAB');
-  EmitInst('IYS');
+  EmitInst('IXL');
 end;
 
 procedure StoreArrayByteToReg(adr: integer; const name: string);
@@ -572,49 +647,46 @@ end;
 procedure LoadArrayWordFromReg(adr: integer; const name: string);
 begin
   EmitInst('RC');
-  EmitInst('SL');
+  EmitInstComment('SL', 'index*2 for word array');
   EmitInst('LII', IntToStr(adr), 'Load array element from ' + name);
   EmitInst('LP', '0');
   EmitInst('ADM');
   EmitInst('EXAM');
   EmitInst('STP');
-  EmitInst('INCP');
-  EmitInst('POP'); Dec(pushcnt);
-  EmitInst('EXAM');
+  EmitInstComment('LDM', 'HB');
+  EmitInst('EXAB');
   EmitInst('DECP');
-  EmitInst('POP'); Dec(pushcnt);
-  EmitInst('EXAM');
+  EmitInstComment('LDM', 'LB');
 end;
 
 procedure LoadArrayWordFromXram(adr: integer; const name: string);
 begin
   EmitInst('RC');
-  EmitInst('SL');
-  EmitInstComment('PUSH', 'Load array element from ' + name); Inc(pushcnt);
-  EmitInst('LP', '7', 'HB of address');
+  EmitInstComment('SL', 'index*2 for word array');
+  EmitPush('Load array element from ' + name);
+  EmitInst('LP', '5', 'HB of address');
   if adr <> -1 then
   begin
     EmitInst('LIA', 'HB(' + IntToStr(adr) + '-1)');
     EmitInst('EXAM');
-    EmitInst('LP', '6', 'LB');
+    EmitInst('LP', '4', 'LB');
     EmitInst('LIA', 'LB(' + IntToStr(adr) + '-1)');
   end else
   begin
     EmitInst('LIA', 'HB(' + name + '-1)');
     EmitInst('EXAM');
-    EmitInst('LP', '6', 'LB');
+    EmitInst('LP', '4', 'LB');
     EmitInst('LIA', 'LB(' + name + '-1)');
   end;
   EmitInst('EXAM');
-  EmitInst('POP'); Dec(pushcnt);
+  EmitPop;
   EmitInst('LIB', '0');
   EmitInst('ADB');
-  EmitInst('POP'); Dec(pushcnt);
+  EmitInst('DX');
+  EmitInstComment('IXL', 'HB');
   EmitInst('EXAB');
-  EmitInst('POP'); Dec(pushcnt);
-  EmitInst('IYS');
+  EmitInstComment('IXL', 'LB');
   EmitInst('EXAB');
-  EmitInst('IYS');
 end;
 
 procedure StoreArrayWordToReg(adr: integer; const name: string);
@@ -2055,4 +2127,3 @@ begin
   libname[CPGE16] := 'cpge16';
 
 end.
-

@@ -387,7 +387,11 @@ Checklist (short verifiable steps; full `test.bat` after each step: NO_DIFF):
  
    3.2. Still missing "StoreArrayWordToReg/Xram" for word arrays (parser.pas:749 on) — to be implemented. ✅
 
-4. Replace the emission sites in `parser.pas` for `LoadConstant` and `LoadVariable` with `CodeGen` calls.  ...
+4. Replace the emission sites in `parser.pas` for `LoadConstant` and `LoadVariable` with `CodeGen` calls. ✅
+
+   - All constant and variable loads delegate ASM emission to `CodeGen`, including floats; numeric/BCD conversion and type checks remain in the parser.
+   - Helpers and `LoadVariable` are aligned with `main`; added `Demos/LoadVariable/main.c` to `test.bat` for global word and register/XRAM array loads.
+   - Verification: all 8 demos are NO_DIFF; 144 variable-load and 12 constant comparisons preserve instructions, BCD data, labels and stack accounting.
 
 5. Centralize `ProcCall` logic (reserve locals, push parameters, CALL, FreeStackSpace).
 

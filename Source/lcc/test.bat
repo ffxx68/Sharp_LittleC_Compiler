@@ -67,6 +67,7 @@ call :RUN_TEST "Loop" "Loop"
 call :RUN_TEST "Math" "Math"
 call :RUN_TEST "pointer" "pointer"
 call :RUN_TEST "Float" "Float"
+call :RUN_TEST "LoadVariable" "LoadVariable"
 
 :ALL_DONE
 echo.
@@ -157,4 +158,3 @@ if %ERRORLEVEL% equ 0 (
 )
 
 exit /b 0
-

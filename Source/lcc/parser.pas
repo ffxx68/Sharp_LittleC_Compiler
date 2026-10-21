@@ -765,8 +765,6 @@ end;
 { Load the Primary Register with a Constant }
 
 procedure LoadConstant(n: string);
-var i, c: integer;
-var s, lb: string;
 var f: float;
 begin
 
@@ -775,32 +773,18 @@ begin
         f := mathparse ( n, 0 );
         if not (f = 0) then
         begin
-          s := SharpBCD ( f );
-          lb := 'C_'+NewLabel;
-          varfcode ( s, lb );
-          writln( #9'LIDP'#9+lb+' ; Load floating-point constant: '+n );
-          writln( #9'LP'#9'0x'+IntToHex(FloatXReg,2)+' ; temporary store point' );
-          writln( #9'LII 07');
-          writln( #9'MVWD' );
+          LoadFloatConstant(n, SharpBCD(f), false);
         end else
         begin
-          writln( #9'LIA 00');
-          writln( #9'LP'#9'0x'+IntToHex(FloatXReg,2)+' ; temporary store point' );
-          writln( #9'LII 07');
-          writln( #9'FILM' );
+          LoadFloatConstant(n, '', true);
         end;
     end else
     if optype = otWord then
     begin
-        writln( #9'LIA'#9'LB('+n+')'#9'; Load word constant LB');
-        writln( #9'LIB'#9'HB('+n+')'#9'; Load word constant HB');
+        LoadWordConstant(n);
     end else
     begin
-        val(n, i, c);
-	{ if (c = 0) and (i = 0) then
-                writln( #9'RA'#9#9'; Load 0')
-        else      }
-                writln( #9'LIA'#9+n+#9'; Load byte constant '+n);
+        LoadByteConstant(n);
     end;
 end;
 
@@ -809,7 +793,7 @@ end;
 { Load a Variable to the Primary Register }
 
 procedure LoadVariable(Name: string);
-var typ, lb: string;
+var typ: string;
     xr,arr,loc: boolean;
     adr: integer;
 begin
@@ -831,34 +815,23 @@ begin
                 begin
                     if not loc then
                     begin
-                        if adr < 64 then
-                                writln( #9'LP'#9+inttostr(adr)+#9'; Load variable '+name)
-                        else
-                                writln( #9'LIP'#9+inttostr(adr)+#9'; Load variable '+name);
-                        writln( #9'LDM');
+                        LoadByteFromReg(adr, name);
                     end else
                     begin // Local char or byte
-                        writln(#9'LDR');
-                        writln(#9'ADIA'#9+inttostr(adr+2+pushcnt));
-                        writln(#9'STP');
-                        writln(#9'LDM'#9#9'; Load variable '+name);
+                        LoadByteFromLocal(adr, name);
                     end;
                 end else
                 begin
                     if loc then
                        Error ( 'Xram Local loading Unsupported' );
-                    if adr <> -1 then
-                            writln( #9'LIDP'#9+inttostr(adr)+#9'; Load variable '+name)
-                    else
-                            writln( #9'LIDP'#9+name+#9'; Load variable '+name);
-                    writln( #9'LDD');
+                    LoadByteFromXram(adr, name);
                 end;
                 if optype = otFloat then
                    // TO DO -casting ?
                    Error ( 'Unsupported load float to byte' );
                 if optype = otWord then
                    // cast byte to word
-                   writln( #9'LIB'#9'0');
+                   EmitInst('LIB', '0');
             end else if (typ='word') then
             begin
                 if optype = otFloat then
@@ -868,41 +841,16 @@ begin
                 begin
                     if not loc then
                     begin
-                        if adr < 64 then
-                                writln( #9'LP'#9+inttostr(adr+1)+#9'; Load 16bit variable '+name)
-                        else
-                                writln( #9'LIP'#9+inttostr(adr+1)+#9'; Load 16bit variable '+name);
-                        writln(#9'LDM'#9#9'; HB');
-                        writeln(#9'EXAB');
-                        EmitInst('INCP');
-                        writeln(#9'LDM'#9'; LB');
+                        LoadWordFromReg(adr, name);
                     end else
                     begin // Local word
-                        writln(#9'LDR');
-                        writln(#9'ADIA'#9+inttostr(adr+1+pushcnt));
-                        writln(#9'STP');
-                        writln(#9'LDM'#9'; HB - Load variable '+name);
-                        writln(#9'EXAB');
-                        EmitInst('INCP');
-                        writln(#9'LDM'#9'; LB');
+                        LoadWordFromLocal(adr, name);
                     end;
                 end else
                 begin
                     if loc then
                        Error ( 'Unsupported Xram local load' );
-                    if adr <> -1 then
-                            writln( #9'LIDP'#9+inttostr(adr+1)+#9'; Load 16bit variable '+name)
-                    else
-                            writln( #9'LIDP'#9+name+'+1'#9'; Load 16bit variable '+name);
-                    writln( #9'LDD'#9#9'; HB');
-                    writln( #9'EXAB');
-                    if (adr <> -1) and ((adr + 1) div 256 = adr div 256) then
-                            writln( #9'LIDL'#9'LB('+inttostr(adr)+')')
-                    else if adr <> -1 then
-                            writln( #9'LIDP'#9+inttostr(adr))
-                    else
-                            writln( #9'LIDP'#9+name);
-                    writln( #9'LDD'#9#9'; LB');
+                    LoadWordFromXram(adr, name);
                 end;
             end else if (typ='float') then
             begin
@@ -912,46 +860,15 @@ begin
                 begin
                     if not loc then
                     begin
-                        writln(#9'LIQ 0x'+IntToHex(adr,2)+#9'; from here');
-                        writln(#9'LP'#9'0x'+IntToHex(FloatXReg,2)+#9'; to temporary store' );
-                        writln(#9'LII 7');
-                        writln(#9'MVW ; (Q) -> (FloatXReg), 8 bytes');
+                        LoadFloatFromReg(adr, name);
                     end
                     else begin
-                        // a local variable is reverse-ordered on stack
-                        writln(#9'');
-                        writln(#9'; Load local-float var into FloatXReg, reversed');
-                        writln(#9'LDR');  // R -> A
-                        writln(#9'EXAB'); // save R in B, first
-                        // from:
-                        writln(#9'LDR'); // R -> A
-                        writln(#9'ADIA'#9+inttostr(adr+pushcnt+2-7)+#9'; from: '+name+' offset');
-                        writln(#9'STR'); // now R points to the local variable start addr
-                        // to:
-                        writln(#9'LIP 0x'+IntToHex(FloatXReg+7,2)+#9'; to: primary float reg end addr' );
-                        // loop 8 times
-                        writln(#9'LIJ 8'#9'; move 8 bytes');
-                        lb := NewLabel;
-                        PostLabel(lb);
-                        // move using POP+EXAM
-                        EmitInst('POP'); dec(pushcnt);
-                        EmitInst('EXAM'); // A <-> (P), I times (1)
-                        EmitInst('DECP');
-                        EmitInst('DECA');
-                        EmitInst('JRNZM '+lb);
-                        EmitInst('EXAB'); // restore R
-                        EmitInst('STR'); // A -> R
+                        LoadFloatFromLocal(adr, name);
                     end;
                 end else begin
                     if loc then
                        Error ( 'Unsupported Xram Local loading' );
-                    if adr <> -1 then
-                       writln( #9'LIDP'#9+'0x'+inttohex(adr,4)+#9'; Load variable '+name)
-                    else
-                       writln( #9'LIDP'#9+name+'+1'#9'; Load variable '+name);
-                    writln(#9'LP'#9'0x'+inttohex(FloatXReg,2)+' ; to temporary store' );
-                    writln(#9'LII 07');
-                    writln(#9'MVWD ; (DP) -> (P), I+1 times' );
+                    LoadFloatFromXram(adr, name);
                 end;
             end;
         end else
@@ -960,79 +877,20 @@ begin
             begin
                 if not xr then
                 begin
-                        writln( #9'LIB'#9+inttostr(adr)+#9'; Load array element from '+name);
-                        writln( #9'LP'#9'3');
-                        writln( #9'ADM');
-                        writln( #9'EXAB');
-                        writln( #9'STP');
-                        writln( #9'LDM');
+                        LoadArrayByteFromReg(adr, name);
                 end else
                 begin
-                        EmitPush('Load array element from ' + name);
-                        writln( #9'LP'#9'5'#9'; HB of address');
-                        if adr <> -1 then
-                        begin
-                                writln( #9'LIA'#9'HB('+inttostr(adr)+'-1)');
-                                writeln( #9'EXAB');
-                                EmitInst('DECP');
-                                writeln( #9'LDM'#9#9'; LB');
-                        end else
-                        begin
-                                writln( #9'LIA'#9'HB('+name+'-1)');
-                                writln( #9'EXAM');
-                                writln( #9'LP'#9'4'#9'; LB');
-                                writln( #9'LIA'#9'LB('+name+'-1)');
-                        end;
-                        writln( #9'EXAM');
-                        EmitPop;
-                        writln( #9'LIB'#9'0');
-                        writln( #9'ADB');
-                        writln( #9'IXL'); // X -> DP; DP+1 -> DP, X; (DP) -> A
+                        LoadArrayByteFromXram(adr, name);
                 end;
             end else if (typ='word') then
             begin
                 // word array: index needs to be multiplied by 2
                 if not xr then
                 begin
-                        writln( #9'RC');
-                        writln( #9'SL'#9#9'; index*2 for word array');
-                        writln( #9'LII'#9+inttostr(adr)+#9'; Load array element from '+name);
-                        writln( #9'LP'#9'0');
-                        writln( #9'ADM');
-                        writln( #9'EXAM');
-                        writeln(#9'STP');
-                        writln( #9'LDM'#9#9'; HB');
-                        writln( #9'EXAB');
-                        EmitInst('DECP');
-                        writeln(#9'LDM'#9#9'; LB');
+                        LoadArrayWordFromReg(adr, name);
                 end else
                 begin
-                        writln( #9'RC');
-                        writln( #9'SL'#9#9'; index*2 for word array');
-                        EmitPush('Load array element from ' + name);
-                        writln( #9'LP'#9'5'#9'; HB of address');
-                        if adr <> -1 then
-                        begin
-                                writln( #9'LIA'#9'HB('+inttostr(adr)+'-1)');
-                                writln( #9'EXAM');
-                                writln( #9'LP'#9'4'#9'; LB');
-                                writln( #9'LIA'#9'LB('+inttostr(adr)+'-1)');
-                        end else
-                        begin
-                                writln( #9'LIA'#9'HB('+name+'-1)');
-                                writln( #9'EXAM');
-                                writln( #9'LP'#9'4'#9'; LB');
-                                writln( #9'LIA'#9'LB('+name+'-1)');
-                        end;
-                        writln( #9'EXAM');
-                        writln( #9'POP'); dec(pushcnt);
-                        writln( #9'LIB'#9'0');
-                        writln( #9'ADB');
-                        writln( #9'DX');
-                        writln( #9'IXL'#9#9'; HB');
-                        writln( #9'EXAB');
-                        writln( #9'IXL'#9#9'; LB');
-                        writln( #9'EXAB');
+                        LoadArrayWordFromXram(adr, name);
                 end;
             end else if (typ='float') then
             begin
@@ -2839,6 +2697,4 @@ begin
         ProcCount := 0;
         VarPos := 8;   // initial variable allocation point
 end.
-
-
 
