@@ -1856,9 +1856,28 @@ end;
 {-------------------------------------------------------------}
 { Procedure Call }
 
+function ProcTypeSize(const typ, kind, procName: string): integer;
+begin
+        if (typ = 'char') or (typ = 'byte') then
+                Result := 1
+        else if typ = 'word' then
+                Result := 2
+        else if typ = 'float' then
+                Result := 8
+        else
+        begin
+                if kind = 'parameter' then
+                        Error('Invalid parameter type <' + typ + '> in ' + procName)
+                else
+                        Error('Invalid local var type <' + typ + '> in ' + procName);
+                Result := 0;
+        end;
+end;
+
 procedure ProcCall;
-var i, c, a, aa: integer;
-    name: string;
+var c, a, aa, typeBytes: integer;
+    name, paramType: string;
+    localComments: array of string;
 begin
         if tok = '' then exit;
         name := extrword(tok);
@@ -1878,31 +1897,28 @@ begin
                         c := 0;
                         repeat
                                 Rd(Look, Tok); tok := trim(tok);// + ',';
+                                if c >= ProcList[ProcFound].ParCnt then
+                                    Error('Too many parameters for '+ProcList[ProcFound].ProcName);
                                 {if findvar(ProcList[ProcFound].parname[c]) then
                                 begin
                                     varlist[varfound].address := a;
                                 end else
                                     error('Parameter error!');}
-                                if ( ProcList[ProcFound].partyp[c] = 'char' )
-                                   or ( ProcList[ProcFound].partyp[c] = 'byte') then
-                                begin
-                                    isword := false; inc(a);
+                                paramType := ProcList[ProcFound].partyp[c];
+                                typeBytes := ProcTypeSize(paramType, 'parameter',
+                                    ProcList[ProcFound].ProcName);
+                                inc(a, typeBytes);
+                                isword := paramType = 'word';
+                                if paramType = 'word' then
+                                    optype := otWord
+                                else if paramType = 'float' then
+                                    optype := otFloat
+                                else
                                     optype := otByte;
-                                end else if ProcList[ProcFound].partyp[c] = 'word' then
-                                begin
-                                    isword := true; inc(a, 2);
-                                    optype := otWord;
-                                end else if ProcList[ProcFound].partyp[c] = 'float' then
-                                begin
-                                    isword := false; inc(a, 8);
-                                    optype := otFloat;
-                                end;
                                 Expression;
                                 EmitComment(ProcList[ProcFound].parname[c]+' ('+ProcList[ProcFound].partyp[c]+')');
                                 Push;
                                 inc(c);
-                                if c > ProcList[ProcFound].ParCnt then
-                                    error('Too many parameters for '+ProcList[ProcFound].ProcName);
                         until (Look <> ',');
                         if c <> ProcList[ProcFound].ParCnt then
                                 error('Wrong number of parameters for '+ProcList[ProcFound].ProcName);
@@ -1931,58 +1947,23 @@ begin
 }
                 end;
 
-                // allocating locals too on stack
-                if proclist[procfound].loccnt > 0 then
+                // Collect local stack size and comments for CodeGen.
+                aa := 0;
+                SetLength(localComments, proclist[procfound].loccnt);
+                for c := 0 to proclist[procfound].loccnt - 1 do
                 begin
-                    EmitBlankLine;
-                    EmitComment('reserving stack (R recalc)...');
-                    aa := 0;
-                    for c := 0 to proclist[procfound].loccnt - 1 do
-                    begin
-                            if ((ProcList[ProcFound].loctyp[c] = 'char') or
-                                (ProcList[ProcFound].loctyp[c] = 'byte')) then
-                            begin
-                                isword := false;
-                                optype := otByte;
-                                inc(a);
-                                inc(aa);
-                            end else if ProcList[ProcFound].loctyp[c] = 'word' then
-                            begin
-                                isword := true;
-                                optype := otWord;
-                                inc(a, 2);
-                                inc(aa, 2);
-                            end else if ProcList[ProcFound].loctyp[c] = 'float' then
-                            begin
-                                isword := false;
-                                optype := otFloat;
-                                inc(a, 8);
-                                inc(aa, 8);
-                            end;
-                            EmitComment(ProcList[ProcFound].locname[c]+' ('+ProcList[ProcFound].loctyp[c]+')');
-                            // Push         // see optimization below
-
-                            {if findvar(ProcList[ProcFound].locname[c]) then
-                            begin
-                                varlist[varfound].address := a;
-                            end else
-                                error('Parameter error!'); }
-                    end;
-                     // allocating room on stack pointer... either via 'push', or R decrement
-                     AllocStackSpace(aa);
+                        typeBytes := ProcTypeSize(ProcList[ProcFound].loctyp[c],
+                            'local', ProcList[ProcFound].ProcName);
+                        inc(a, typeBytes);
+                        inc(aa, typeBytes);
+                        localComments[c] := ProcList[ProcFound].locname[c]+' ('+ProcList[ProcFound].loctyp[c]+')';
                 end;
 
-                // call the routine
-                EmitBlankLine;
-                EmitInst('CALL', name);
-
-                if a > 0 then
-                begin
-                    EmitBlankLine;
-                    if ( proclist[procfound].returntype = 'float' ) then
-                       Error ( 'Float return handling not implemented!');
-                    FreeStackSpace(a, proclist[procfound].hasreturn, proclist[procfound].returnisword);
-                end;
+                // Reserve locals and emit the call, then release parameters and locals.
+                if (a > 0) and (proclist[procfound].returntype = 'float') then
+                    Error('Float return handling not implemented!');
+                EmitProcCall(name, aa, a, proclist[procfound].hasreturn,
+                    proclist[procfound].returnisword, localComments);
 //              tok := s;
                 rd(look, tok);
         end else
@@ -2010,19 +1991,11 @@ begin
         // sum up local space needed
         m := 0; // counting return address location
         if pc > 0 then for i := 0 to pc - 1 do
-                if ProcList[currproc].partyp[i] = 'float' then inc(m, 8)
-                else if ProcList[currproc].partyp[i] = 'word' then inc(m, 2)
-                else if ((ProcList[currproc].partyp[i] = 'byte') or
-                         (ProcList[currproc].partyp[i] = 'char')) then inc(m)
-                else Error ('Invalid parameter type <' + ProcList[currproc].partyp[i] + '> in '
-                      + ProcList[currproc].ProcName );
+                inc(m, ProcTypeSize(ProcList[currproc].partyp[i], 'parameter',
+                    ProcList[currproc].ProcName));
         if lc > 0 then for i := 0 to lc - 1 do
-                if ProcList[currproc].loctyp[i] = 'float' then inc(m, 8)
-                else if ProcList[currproc].loctyp[i] = 'word' then inc(m, 2)
-                else if ((ProcList[currproc].loctyp[i] = 'byte') or
-                         (ProcList[currproc].loctyp[i] = 'char')) then inc(m)
-                else Error ('Invalid local var type <' + ProcList[currproc].partyp[i] + '> in '
-                     + ProcList[currproc].ProcName );
+                inc(m, ProcTypeSize(ProcList[currproc].loctyp[i], 'local',
+                    ProcList[currproc].ProcName));
 
         // calc each local relative address (offset), starting from the end
         a := 1;
@@ -2035,10 +2008,8 @@ begin
                 writeln('LOCAL ',ProcList[currproc].procname,' PARAM: ', name,
                                '(',ProcList[currproc].partyp[i],')',
                                ': ', VarList[VarFound].address );
-                if ProcList[currproc].partyp[i] = 'float' then inc(a, 8)
-                else if ProcList[currproc].partyp[i] = 'word' then inc(a, 2)
-                else if ((ProcList[currproc].partyp[i] = 'byte') or
-                         (ProcList[currproc].partyp[i] = 'char')) then inc(a);
+                inc(a, ProcTypeSize(ProcList[currproc].partyp[i], 'parameter',
+                    ProcList[currproc].ProcName));
         end;
         if lc > 0 then for i := 0 to lc - 1 do
         begin
@@ -2049,10 +2020,8 @@ begin
                 writeln('LOCAL ',ProcList[currproc].procname,' VAR: ', name,
                                '(',ProcList[currproc].loctyp[i],')',
                                ': ', VarList[VarFound].address );
-                if ProcList[currproc].loctyp[i] = 'float' then inc(a, 8)
-                else if ProcList[currproc].loctyp[i] = 'word' then inc(a, 2)
-                else if ((ProcList[currproc].loctyp[i] = 'byte') or
-                         (ProcList[currproc].loctyp[i] = 'char')) then inc(a);
+                inc(a, ProcTypeSize(ProcList[currproc].loctyp[i], 'local',
+                    ProcList[currproc].ProcName));
 
         end;
 end;
@@ -2697,4 +2666,3 @@ begin
         ProcCount := 0;
         VarPos := 8;   // initial variable allocation point
 end.
-

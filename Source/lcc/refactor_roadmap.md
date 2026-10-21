@@ -395,6 +395,17 @@ Checklist (short verifiable steps; full `test.bat` after each step: NO_DIFF):
 
 5. Centralize `ProcCall` logic (reserve locals, push parameters, CALL, FreeStackSpace).
 
+   5.1. Move local stack reservation, `CALL` emission and stack restoration into a high-level `CodeGen.EmitProcCall`; keep argument parsing and pushes in `Parser`. ✅
+   - Verification: `test.bat` — all 8 demos NO_DIFF.
+
+   5.2. Consolidate parameter/local type-size calculations and validate argument-count bounds before indexing procedure metadata. ✅
+   - Verification: `test.bat` — all 8 demos NO_DIFF; excess-argument call rejected with the expected diagnostic.
+
+   5.3. Verify nested calls, byte/word/float parameters, locals, byte/word return values and stack allocation/restoration thresholds; add focused coverage if the current demos do not exercise these cases. ✅
+   - Added `Demos/ProcCallStack/main.c` and included it with `Parameter_passing` in `test.bat`. The focused fixture covers 3/4-byte cleanup, 7/8-byte local allocation, byte/word returns, float arguments, and calls within procedures; `Parameter_passing` covers nested argument calls.
+   - Verification: `test.bat` — all 10 demos NO_DIFF; generated assembly checked for the stack-threshold instruction sequences.
+   - Note: both the reference and refactored compilers print `main: Possible Stack corruption!` for the float-argument case; their generated assembly is identical.
+
 6. Move intro, SREG save/restore, `CALL main` and variable initializations from `SecondScan` into `CodeGen`/`Output`.
 
 7. Implement `EmitRawAsmBlock` for `#asm...#endasm` as exact pass-through.
@@ -554,6 +565,10 @@ Fix 4.1.1 possibily incomplete.
 **Symptoms:**
 
 The warning appears during compilation of the Array demo, for example.
+
+It also appears in `Demos/ProcCallStack/main.c` for the float-argument call `consumeFloat(1.25)`. 
+Both the reference and refactored compilers report `main: Possible Stack corruption!` and emit identical assembly, 
+so this case remains a compiler issue rather than a regression from the `ProcCall` refactor.
 
 ---
 # Phase 5 — Introduction of AST and frontend/backend separation

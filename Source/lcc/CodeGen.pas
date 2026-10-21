@@ -93,6 +93,8 @@ procedure LoadAddressOf(adr: integer; const name: string; isXram: boolean);
 // Stack management functions (Task 4.1.12)
 procedure AllocStackSpace(bytes: integer);
 procedure FreeStackSpace(bytes: integer; hasReturn, isWord: boolean);
+procedure EmitProcCall(const name: string; localBytes, stackBytes: integer;
+  hasReturn, isWord: boolean; const localComments: array of string);
 
 // Increment / Decrement register helpers (Step 4.1.13)
 procedure EmitIncReg(regAddr: integer); overload;
@@ -2091,6 +2093,29 @@ begin
       Dec(pushcnt, bytes);
       EmitInst('STR');
     end;
+  end;
+end;
+
+procedure EmitProcCall(const name: string; localBytes, stackBytes: integer;
+  hasReturn, isWord: boolean; const localComments: array of string);
+var i: integer;
+begin
+  if localBytes > 0 then
+  begin
+    EmitBlankLine;
+    EmitComment('reserving stack (R recalc)...');
+    for i := Low(localComments) to High(localComments) do
+      EmitComment(localComments[i]);
+    AllocStackSpace(localBytes);
+  end;
+
+  EmitBlankLine;
+  EmitInst('CALL', name);
+
+  if stackBytes > 0 then
+  begin
+    EmitBlankLine;
+    FreeStackSpace(stackBytes, hasReturn, isWord);
   end;
 end;
 {--------------------------------------------------------------}

@@ -68,6 +68,8 @@ call :RUN_TEST "Math" "Math"
 call :RUN_TEST "pointer" "pointer"
 call :RUN_TEST "Float" "Float"
 call :RUN_TEST "LoadVariable" "LoadVariable"
+call :RUN_TEST "Parameter_passing" "Parameter_passing"
+call :RUN_TEST "ProcCallStack" "ProcCallStack"
 
 :ALL_DONE
 echo.
