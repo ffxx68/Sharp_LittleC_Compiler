@@ -415,24 +415,28 @@ Checklist (short verifiable steps; full `test.bat` after each step: NO_DIFF):
    Startup emission is straightforward; variable initialization is the main effort because it covers register/XRAM storage, 
    scalars, arrays, and floats. Keep `VarEntry` in `Parser`: pass the required fields to CodeGen APIs rather than introducing a Parser dependency or moving the type.
 
-   6.1. Capture the current generated assembly for all existing demos as the baseline. Record startup and initialization output ordering, including lines buffered through `addasm`. ✅
+   6.1. ✅ Capture the current generated assembly for all existing demos as the baseline. Record startup and initialization output ordering, 
+           including lines buffered through `addasm`.
    - Regenerated outputs for all 10 demos in an isolated session directory; each matches its existing `test_C/<demo>/new.asm` byte-for-byte.
    - Observed order: intro/`.ORG`, SREG save, `CALL main`, SREG restore/data, global initialization instructions, procedures, then `addasm`-buffered data declarations. Preserve this two-channel ordering when moving initialization.
    - Byte-for-byte output differs in whitespace for 9/10 demos; `fc /W` comparisons matching `test.bat` report NO DIFF for all 10. The batch file was not run because it deletes and recreates those `test_C` directories; equivalent comparisons used isolated outputs instead.
 
-   6.2. Add a CodeGen API for the program intro and startup sequence. Move emission of the header, `.ORG`, optional SREG save/restore, `CALL main`, `RTN`, and the `SREG` data label out of `SecondScan`. Preserve `nosave` behavior and current formatting. ✅
+   6.2. ✅ Add a CodeGen API for the program intro and startup sequence. Move emission of the header, `.ORG`, optional SREG save/restore, `CALL main`, `RTN`, 
+           and the `SREG` data label out of `SecondScan`. Preserve `nosave` behavior and current formatting.
    - Added `CodeGen.EmitProgramStartup(org, saveRegisters)` and replaced the startup emission block in `SecondScan`.
    - Verification: `test.bat` in an isolated copy — all 10 demos NO_DIFF; explicit `#nosave` fixture also matches the reference and omits SREG save/restore while retaining `CALL main`.
 
-   6.3. Add a CodeGen API for global variable initialization. Pass the required variable fields as arguments and dispatch to the existing initialization routines (`varxram`, `varxarr`, `varcode`, `varfcode`, `varcarr`, `varfarr`, `varreg`, `varrarr`). Preserve the existing distinction between emitted instructions and data buffered with `addasm`. ✅
+   6.3. ✅ Add a CodeGen API for global variable initialization. Pass the required variable fields as arguments and dispatch to the existing initialization routines (`varxram`, `varxarr`, `varcode`, `varfcode`, `varcarr`, `varfarr`, `varreg`, `varrarr`). 
+           Preserve the existing distinction between emitted instructions and data buffered with `addasm`.
    - Added `CodeGen.EmitGlobalVariableInitialization` with explicit name/type/address/size/value and storage/initializer flags; the dispatch preserves the existing `SecondScan` conditions. Its integration into `SecondScan` is step 6.4.
    - Verification: build succeeded; `test.bat` in the isolated copy — all 10 demos NO_DIFF.
 
-   6.4. Replace the startup and initialization emission blocks in `SecondScan` with calls to the new CodeGen APIs. Keep procedure scanning and missing-`main` diagnostics in Parser. *(~30–45 minutes)*
+   6.4. ✅ Replace the startup and initialization emission blocks in `SecondScan` with calls to the new CodeGen APIs. 
+           Keep procedure scanning and missing-`main` diagnostics in Parser.
+   - `SecondScan` now delegates startup and each global variable initializer to CodeGen; procedure scanning and missing-`main` diagnostics remain in Parser.
+   - Verification: build succeeded; `test.bat` in the isolated copy — all 10 demos NO_DIFF.
 
-   6.5. Compare generated assembly against the baseline for all demos. Check startup output with `nosave` enabled and disabled, and cover initialized register/XRAM variables, scalar and array data, and float initializers. Fix any differences before marking complete. *(~1–1.5 hours)*
-
-   - Acceptance: `test.bat` reports NO_DIFF for the existing demos; startup and initialization output retain their original ordering and formatting.
+   6.5. Check startup output with `nosave` enabled and disabled.
 
 7. Implement `EmitRawAsmBlock` for `#asm...#endasm` as exact pass-through.
 

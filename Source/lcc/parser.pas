@@ -2264,9 +2264,7 @@ end;
 
 procedure SecondScan(filen: string);
 var name, typ, s, s2, s3: string;
-    at, arr: boolean;
-    i, adr, size, value: integer;
-    fval: float;
+    i: integer;
     f2: textfile;
 begin
         md := MODESTR;
@@ -2278,47 +2276,10 @@ begin
 
         { Variables' initializations }
         for i := 0 to VarCount - 1 do
-        begin
-                adr := VarList[i].address;
-                size := VarList[i].size;
-                name := VarList[i].VarName;
-                value := VarList[i].initn;
-                fval := VarList[i].initf;
-                typ := VarList[i].typ;
-                at := VarList[i].at;
-                arr := VarList[i].arr;
-                if VarList[i].xram then
-                begin // xram variables
-                        if at then
-                        begin
-                          if value <> -1 then
-                              if not arr then
-                                  varxram(value, adr, size, name)
-                              else
-                                  varxarr(VarList[i].inits, adr, size, name, typ);
-                          end else
-                          begin // with an init value
-                                // for float, inits is allocated anyway
-                              if not arr then
-                                 if not (  typ = 'float' ) then varcode(value, adr, size, name)
-                                 else varfcode(VarList[i].inits, name)
-                              else
-                                 if not (  typ = 'float' ) then varcarr(VarList[i].inits, adr, size, name, typ)
-                                 else varfarr(VarList[i].inits, size, name);
-                          end;
-                end else
-                begin // register variables
-                        if value <> -1 then
-                        begin
-                            if not arr then
-                                    varreg(value, adr, size, name)
-                            else
-                            begin
-                                    varrarr(VarList[i].inits, adr, size, name, typ);
-                            end;
-                        end;
-                end;
-        end;
+          EmitGlobalVariableInitialization(
+            VarList[i].VarName, VarList[i].Typ, VarList[i].address,
+            VarList[i].size, VarList[i].initn, VarList[i].xram,
+            VarList[i].at, VarList[i].arr, VarList[i].inits);
 
         { Process procedures }
         mainfound := false;
