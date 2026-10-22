@@ -178,11 +178,12 @@ begin
     i := 0;
     while i < Lines.Count do
     begin
-      if ((Copy(Trim(Lines[i]), 1, 6) = 'LIB'#9'1'#9) or
-        (Lines[i] = 'LIB'#9'1')) and
+      if (HasPrefix(Trim(Lines[i]), 'LIB'#9'1'#9) or
+        (Trim(Lines[i]) = 'LIB'#9'1')) and
         (i + 1 < Lines.Count) then
       begin
-        if HasPrefix(Lines[i + 1], 'LP'#9'3') and (i + 2 < Lines.Count) then
+        if HasPrefix(Trim(Lines[i + 1]), 'LP'#9'3') and
+          (i + 2 < Lines.Count) then
         begin
           if HasPrefix(Lines[i + 2], 'ADM') and (i + 3 < Lines.Count) then
           begin
@@ -209,11 +210,12 @@ begin
     i := 0;
     while i < Lines.Count do
     begin
-      if ((Copy(Trim(Lines[i]), 1, 6) = 'LIB'#9'1'#9) or
-        (Lines[i] = 'LIB'#9'1')) and
+      if (HasPrefix(Trim(Lines[i]), 'LIB'#9'1'#9) or
+        (Trim(Lines[i]) = 'LIB'#9'1')) and
         (i + 1 < Lines.Count) then
       begin
-        if HasPrefix(Lines[i + 1], 'LP'#9'3') and (i + 2 < Lines.Count) then
+        if HasPrefix(Trim(Lines[i + 1]), 'LP'#9'3') and
+          (i + 2 < Lines.Count) then
         begin
           if HasPrefix(Lines[i + 2], 'EXAB') and (i + 3 < Lines.Count) then
           begin

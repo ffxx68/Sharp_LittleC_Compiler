@@ -662,16 +662,13 @@ use this roadmap for implementation sequencing and acceptance criteria.
 
 ### Task 5.1.2 ✅: Define a typed AST (standard C)
 
-Added `Source/C/lcc2/ast.h` with typed nodes for the target declarations, types, statements, initializers, and expressions. Nodes retain source spans, and recursive declarators use structured type kinds instead of string-valued types.
+Added `Source/C/lcc2/ast.h` with typed nodes for the target declarations, types, statements, initializers, and expressions.
+Nodes retain source spans, and recursive declarators use structured type kinds instead of string-valued types.
 
-### Task 5.1.3: Document formal BNF grammar
+### Task 5.1.3 ✅: Document formal BNF grammar
 
-Write `Docs/sc61860_c_grammar.y` (directly in Bison-compatible format):
-
-- Start from simplified C89 grammar (e.g. K&R Appendix A or `c99.y` by Jutta Degener).
-- Remove unsupported constructs (`long`, `double`, `volatile`, `register`, multi-dimensional arrays, function pointers, variadic `...`).
-- Add platform extensions (`__at`, `__xram`, `__asm`).
-- Use **standard C** operator precedence — not littleC's precedence.
+Added `Docs/sc61860_c_grammar.y`, a Bison-compatible C89-subset grammar with standard C expression precedence, SC61860 extensions,
+and no function-pointer or multidimensional-array declarators. Bison generates it without shift/reduce or reduce/reduce conflicts.
 
 ### Task 5.1.4: Define the backend compatibility contract
 
@@ -699,12 +696,14 @@ Extracted the existing optimizer into `Backend.pas`. `SecondScan` now calls `Opt
 | 4 | `LIB 1; LP 3; ADM; EXAB` → `INCA` |
 | 5 | `LIB 1; LP 3; EXAB; SBM; EXAB` → `DECA` |
 
-Exposed testable functions: `OptimizeDoubleEXAB()`, `OptimizeLIAtoLIB()`, `OptimizeRedundantPUSHPOP()`, and `OptimizeIncDec()`. The existing constant-arithmetic folds are also retained in the pipeline. Temporary `temp.asm`/`temp2.asm` optimizer files are no longer needed.
+Exposed testable functions: `OptimizeDoubleEXAB()`, `OptimizeLIAtoLIB()`, `OptimizeRedundantPUSHPOP()`, and `OptimizeIncDec()`. 
+The existing constant-arithmetic folds are also retained in the pipeline. Temporary `temp.asm`/`temp2.asm` optimizer files are no longer needed.
 
-### Task 5.2.2: Unit tests for each peephole optimization pattern
+### Task 5.2.2 ✅: Unit tests for each peephole optimization pattern
 
-- Preserve each transformation's order and behavior; test both a matching pattern and nearby non-matching input.
-- Verification: `test.bat` → NO_DIFF on the Pascal compiler. Optimizer tests must also prove unrelated lines, labels, comments, and library sections remain unchanged.
+Added `backend_tests.pas` and `test_backend.bat`. 
+The optimizer tests cover matching and near-match cases for each pass and verify that the full pipeline preserves unrelated instructions, 
+labels, comments, and library text.
 
 ---
 ## Phase 5.3 — Incremental C compiler using the existing backend as reference

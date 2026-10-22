@@ -160,7 +160,7 @@ These littleC constructs are not part of the new language:
 
 | Legacy construct | Use instead |
 |---|---|
-| `loop(n) { ... }` | A standard `for` or `while` loop. |
+| `loop(n) { ... }` | A standard `for` or `while` loop (declare a `for` counter before the loop in the initial C89 subset). |
 | `switch` arms written as `value: proc()` | `switch (x) { case value: proc(); break; }`. |
 | `label name;` | A C label, `name:`. |
 | `byte` / `word` type keywords | `unsigned char` / `unsigned int`, or project typedefs. |
