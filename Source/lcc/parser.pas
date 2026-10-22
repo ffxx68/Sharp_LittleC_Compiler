@@ -1062,57 +1062,13 @@ begin
                                 if not varlist[varfound].Pointer then
                                         error('This var ('+s+') is not a pointer!');
                                 if varlist[varfound].xram then
-                                begin
-                                        writln(#9'LP'#9'4'#9'; XL');
-                                        writln(#9'EXAM');
-                                        writln(#9'LP'#9'5'#9'; XH');
-                                        writln(#9'EXAB');
-                                        writln(#9'EXAM');
-                                        writln(#9'DX');
-                                        if varlist[varfound].pnttyp <> 'word' then
-                                        begin
-                                                writln(#9'IXL'#9#9'; Load content *'+s);
-                                        end else
-                                        begin
-                                                writln(#9'IXL'#9#9'; Load content LB *'+s);
-                                                writln(#9'EXAB');
-                                                writln(#9'IXL'#9#9'; Load content HB *'+s);
-                                                writln(#9'EXAB');
-                                        end;
-                                end else
-                                begin
-                                        // LIP
-                                        writln(#9'STP'#9#9'; Set P');
-                                        if varlist[varfound].pnttyp <> 'word' then
-                                        begin
-                                                writln(#9'LDM'#9#9'; Load content *'+s);
-                                        end else
-                                        begin
-                                                writln(#9'LDM'#9#9'; Load content LB *'+s);
-                                                writln(#9'EXAB');
-                                                EmitInst('INCP');
-                                                writln(#9'LDM'#9#9'; Load content HB *'+s);
-                                                writln(#9'EXAB');
-                                        end;
-                                end;
+                                  LoadPointerContentXram(varlist[varfound].pnttyp, s)
+                                else
+                                  LoadPointerContentReg(varlist[varfound].pnttyp, s);
                         end else
                         if pointer = ADR then
                         begin
-                                if varlist[varfound].xram then
-                                begin
-                                        if varlist[varfound].address = -1 then
-                                        begin
-                                                writln(#9'LIA'#9'LB('+s+')'#9'; &'+s);
-                                                writln(#9'LIB'#9'HB('+s+')'#9'; &'+s);
-                                        end else
-                                        begin
-                                                writln(#9'LIA'#9'LB('+inttostr(varlist[varfound].address)+')'#9'; &'+s);
-                                                writln(#9'LIB'#9'HB('+inttostr(varlist[varfound].address)+')'#9'; &'+s);
-                                        end;
-                                end else
-                                begin
-                                        writln(#9'LIA'#9+inttostr(varlist[varfound].address)+#9'; &'+s);
-                                end;
+                                LoadAddressOf(varlist[varfound].address, s, varlist[varfound].xram);
                         end else
                                 LoadVariable(s);
                 end else if findproc(s) then
@@ -1388,51 +1344,16 @@ begin
                         end else
                         begin
                                 EmitPush;
-                                writln(#9'EXAB');
+                                EmitInst('EXAB');
                                 EmitPush;
                         end;
 						LoadVariable(name);
 						if not varlist[varfound].Pointer then
 										error('This var ('+name+') is not a pointer!');
 						if varlist[varfound].xram then
-						begin
-										writln(#9'LP'#9'6'#9'; YL');
-										writln(#9'EXAM');
-										writln(#9'LP'#9'7'#9'; YH');
-										writln(#9'EXAB');
-										writln(#9'EXAM');
-										writln(#9'DY');
-                                        if varlist[varfound].pnttyp <> 'word' then
-                                        begin
-                                                EmitPop;
-                                                writln(#9'IYS'#9#9'; Store content *'+s);
-                                        end else
-                                        begin
-                                                EmitPop;
-                                                writln(#9'EXAB');
-                                                EmitPop;
-                                                writln(#9'IYS'#9#9'; Store content LB *'+s);
-                                                writln(#9'EXAB');
-                                                writln(#9'IYS'#9#9'; Store content HB *'+s);
-                                        end;
-						end else
-						begin
-										// LIP
-										writln(#9'STP'#9#9'; Set P');
-                                        if varlist[varfound].pnttyp <> 'word' then
-                                        begin
-                                                EmitPop;
-                                                writln(#9'EXAM'#9#9'; Store content *'+s);
-                                        end else
-                                        begin
-                                                EmitPop;
-                                                writln(#9'EXAB');
-                                                EmitPop;
-                                                writln(#9'EXAM'#9#9'; Store content LB *'+s);
-                                                writln(#9'EXAB');
-                                                writln(#9'EXAM'#9#9'; Store content HB *'+s);
-                                        end;
-						end;
+						  StorePointerContentXram(varlist[varfound].pnttyp, s)
+						else
+						  StorePointerContentReg(varlist[varfound].pnttyp, s);
 				end;
 		end;
         // Note: array index POP is handled inside StoreVariable for array access

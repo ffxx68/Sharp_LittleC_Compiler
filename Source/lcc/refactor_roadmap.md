@@ -454,11 +454,13 @@ Checklist (short verifiable steps; full `test.bat` after each step: NO_DIFF):
    8.1. ✅ Migrate the simple residual emissions: shift and increment/decrement comments in `Expression` / `Assignment`, and the trailing blank line in `Block`.
    - Use `EmitComment` and `EmitBlankLine`; preserve the exact comment text and placement.
    - `Expression` and `Assignment` now route shift/increment comments through `EmitComment`; `Block` routes its trailing blank line through `EmitBlankLine`.
-   - Verification: build and `test.bat` — all 10 demos NO DIFF.
+   - Verification: build and `test.bat` — all 11 demos NO DIFF.
 
-   8.2. Migrate pointer dereference, pointer store, and address-of instruction sequences in `Factor` and `Assignment`.
+   8.2. ✅ Migrate pointer dereference, pointer store, and address-of instruction sequences in `Factor` and `Assignment`.
    - Reuse existing CodeGen pointer/address helpers where applicable; add focused APIs for any remaining instruction sequences rather than emitting ASM from Parser.
    - Verify register and XRAM pointers, byte and word pointees, and address-of expressions; add a focused fixture if the demos do not cover a case.
+   - `Factor` and `Assignment` now delegate pointer loads/stores and address calculation to CodeGen. Added store-through-pointer APIs and `Demos/PointerAccess/main.c`, covering register/XRAM pointers, byte/word pointees, and address-of.
+   - Verification: build and `test.bat` — all 11 demos NO DIFF.
 
    8.3. Migrate `DoSwitch`.
    - Preserve the current `outfile` toggling and the ordering/routing of case labels, case bodies, `RTN`, and `ENDCASE`.
@@ -475,23 +477,13 @@ Checklist (short verifiable steps; full `test.bat` after each step: NO_DIFF):
    - Scope: diagnostic/debug `writeln`, file serialization, and commented-out legacy code are not ASM emission and are not part of this step.
 
 ---
-
-## Task 4.2: Complete the migration of any residual `writln` in parser.pas
-
-**Goal:** eliminate direct `writln` in `parser.pas`, using only `CodeGen.Emit...` and high-level CodeGen functions.
-
--   Verification: `test.bat` → NO_DIFF
-
-
-
----
-## Task 4.3: Fixing compiler issues
+## Task 4.2: Fixing compiler issues
 
 This task addresses preexisting compiler bugs discovered during refactoring.
 
 *Possibly not required if embracing the Flex/Bison rewrite (Phases 5 on)*
 
-**Step 4.3.1 — Wrong array init code**  ✅
+**Step 4.2.1 — Wrong array init code**  ✅   
 
 **Problem description:**
 
@@ -525,7 +517,7 @@ fixed to
 if (typ = 'byte') or (typ = 'char') or (typ = 'float') then
 ```
 
-**Step 4.3.2 — Fix word array XRAM expression parsing**
+**Step 4.2.2 — Fix word array XRAM expression parsing**
 
 **Problem description:**
 
@@ -606,7 +598,7 @@ EXAB
 ```
 
 
-**Step 4.3.3 — Complete fix to "Possible Stack corruption!" warning**
+**Step 4.2.3 — Complete fix to "Possible Stack corruption!" warning**
 
 **Problem description:**
 

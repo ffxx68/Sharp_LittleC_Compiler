@@ -90,6 +90,8 @@ procedure StoreArrayWordToXram(adr: integer; const name: string);
 // Pointer dereferencing functions (Task 4.1.10)
 procedure LoadPointerContentXram(const pnttyp, name: string);
 procedure LoadPointerContentReg(const pnttyp, name: string);
+procedure StorePointerContentXram(const pnttyp, name: string);
+procedure StorePointerContentReg(const pnttyp, name: string);
 procedure LoadAddressOf(adr: integer; const name: string; isXram: boolean);
 
 // Stack management functions (Task 4.1.12)
@@ -814,29 +816,70 @@ begin
   EmitInst('DX');
   if pnttyp <> 'word' then
   begin
-    EmitInstComment('IXL', 'Load content *' + name);
+    EmitRawAsmLine(#9 + 'IXL' + #9 + #9 + '; Load content *' + name);
   end else
   begin
-    EmitInstComment('IXL', 'Load content LB *' + name);
+    EmitRawAsmLine(#9 + 'IXL' + #9 + #9 + '; Load content LB *' + name);
     EmitInst('EXAB');
-    EmitInstComment('IXL', 'Load content HB *' + name);
+    EmitRawAsmLine(#9 + 'IXL' + #9 + #9 + '; Load content HB *' + name);
     EmitInst('EXAB');
   end;
 end;
 
 procedure LoadPointerContentReg(const pnttyp, name: string);
 begin
-  EmitInstComment('STP', 'Set P');
+  EmitRawAsmLine(#9 + 'STP' + #9 + #9 + '; Set P');
   if pnttyp <> 'word' then
   begin
-    EmitInstComment('LDM', 'Load content *' + name);
+    EmitRawAsmLine(#9 + 'LDM' + #9 + #9 + '; Load content *' + name);
   end else
   begin
-    EmitInstComment('LDM', 'Load content LB *' + name);
+    EmitRawAsmLine(#9 + 'LDM' + #9 + #9 + '; Load content LB *' + name);
     EmitInst('EXAB');
     EmitInst('INCP');
-    EmitInstComment('LDM', 'Load content HB *' + name);
+    EmitRawAsmLine(#9 + 'LDM' + #9 + #9 + '; Load content HB *' + name);
     EmitInst('EXAB');
+  end;
+end;
+
+procedure StorePointerContentXram(const pnttyp, name: string);
+begin
+  EmitInst('LP', '6', 'YL');
+  EmitInst('EXAM');
+  EmitInst('LP', '7', 'YH');
+  EmitInst('EXAB');
+  EmitInst('EXAM');
+  EmitInst('DY');
+  if pnttyp <> 'word' then
+  begin
+    EmitPop;
+    EmitRawAsmLine(#9 + 'IYS' + #9 + #9 + '; Store content *' + name);
+  end else
+  begin
+    EmitPop;
+    EmitInst('EXAB');
+    EmitPop;
+    EmitRawAsmLine(#9 + 'IYS' + #9 + #9 + '; Store content LB *' + name);
+    EmitInst('EXAB');
+    EmitRawAsmLine(#9 + 'IYS' + #9 + #9 + '; Store content HB *' + name);
+  end;
+end;
+
+procedure StorePointerContentReg(const pnttyp, name: string);
+begin
+  EmitRawAsmLine(#9 + 'STP' + #9 + #9 + '; Set P');
+  if pnttyp <> 'word' then
+  begin
+    EmitPop;
+    EmitRawAsmLine(#9 + 'EXAM' + #9 + #9 + '; Store content *' + name);
+  end else
+  begin
+    EmitPop;
+    EmitInst('EXAB');
+    EmitPop;
+    EmitRawAsmLine(#9 + 'EXAM' + #9 + #9 + '; Store content LB *' + name);
+    EmitInst('EXAB');
+    EmitRawAsmLine(#9 + 'EXAM' + #9 + #9 + '; Store content HB *' + name);
   end;
 end;
 
