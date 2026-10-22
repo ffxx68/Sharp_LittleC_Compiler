@@ -25,6 +25,7 @@ procedure EmitPop(const comment: string); overload;
 
 // Raw asm passthrough for #asm blocks
 procedure EmitRawAsmLine(const s: string);
+procedure EmitProgramStartup(const org: string; saveRegisters: boolean);
 
 // Finalize current asm buffers and write to output file
 procedure FinalizeAndWrite(const filename: string);
@@ -133,6 +134,9 @@ procedure varcarr(Value: RawByteString; adr, size: integer; nm, typ: string);
 procedure varfarr(Value: RawByteString; size: integer; nm: string);
 procedure varreg(Value, adr, size: integer; nm: string);
 procedure varrarr(Value: RawByteString; adr, size: integer; nm, typ: string);
+procedure EmitGlobalVariableInitialization(const name, typ: string;
+  address, size, initValue: integer; isXram, isAt, isArray: boolean;
+  const initData: RawByteString);
 
 type OpTypes = (otByte, otWord, otFloat);
 
@@ -251,6 +255,39 @@ procedure EmitRawAsmLine(const s: string);
 begin
   // forward raw asm line to Output unit; Output.writeln will respect outfile/addasm
   WritLn(s);
+end;
+
+procedure EmitProgramStartup(const org: string; saveRegisters: boolean);
+begin
+  EmitRawAsmLine('; pasm file - assemble with pasm!');
+  EmitRawAsmLine('; Compiled with lcc v1.1');
+  EmitBlankLine;
+  EmitRawAsmLine('.ORG'#9 + org);
+  EmitBlankLine;
+
+  if saveRegisters then
+  begin
+    EmitRawAsmLine(#9'LP'#9'0');
+    EmitRawAsmLine(#9'LIDP'#9'SREG');
+    EmitRawAsmLine(#9'LII'#9'11');
+    EmitRawAsmLine(#9'EXWD');
+  end;
+
+  EmitBlankLine;
+  EmitRawAsmLine(#9'CALL'#9'main');
+
+  if saveRegisters then
+  begin
+    EmitBlankLine;
+    EmitRawAsmLine(#9'LP'#9'0');
+    EmitRawAsmLine(#9'LIDP'#9'SREG');
+    EmitRawAsmLine(#9'LII'#9'11');
+    EmitRawAsmLine(#9'MVWD');
+    EmitRawAsmLine(#9'RTN');
+    EmitBlankLine;
+    EmitRawAsmLine('SREG:'#9'.DW 0, 0, 0, 0, 0, 0');
+    EmitBlankLine;
+  end;
 end;
 
 procedure FinalizeAndWrite(const filename: string);
@@ -1221,6 +1258,49 @@ begin
   EmitBlankLine;
 end;
 {--------------------------------------------------------------}
+
+procedure EmitGlobalVariableInitialization(const name, typ: string;
+  address, size, initValue: integer; isXram, isAt, isArray: boolean;
+  const initData: RawByteString);
+begin
+  if isXram then
+  begin
+    if isAt then
+    begin
+      if initValue <> -1 then
+      begin
+        if not isArray then
+          varxram(initValue, address, size, name)
+        else
+          varxarr(initData, address, size, name, typ);
+      end;
+    end
+    else
+    begin
+      if not isArray then
+      begin
+        if typ <> 'float' then
+          varcode(initValue, address, size, name)
+        else
+          varfcode(initData, name);
+      end
+      else
+      begin
+        if typ <> 'float' then
+          varcarr(initData, address, size, name, typ)
+        else
+          varfarr(initData, size, name);
+      end;
+    end;
+  end
+  else if initValue <> -1 then
+  begin
+    if not isArray then
+      varreg(initValue, address, size, name)
+    else
+      varrarr(initData, address, size, name, typ);
+  end;
+end;
 
 
 {--------------------------------------------------------------}

@@ -2273,39 +2273,8 @@ begin
         assign(f,'temp.asm');
         rewrite(f);
 
-        { Write Intro }
-        writln( '; pasm file - assemble with pasm!');
-        writln( '; Compiled with lcc v1.1');
-        writln('');
-        writln( '.ORG'#9+org);
-        writln('');
-
-        { Registry save point }
-        if not nosave then
-        begin
-          writln(#9'LP'#9'0');
-          writln(#9'LIDP'#9'SREG');
-          writln(#9'LII'#9'11');
-          writln(#9'EXWD');
-        end;
-
-        { -mandatory- "main" entry point }
-        writln('');
-        writln(#9'CALL'#9'main');
-
-        { Registry restore and return to BASIC }
-        if not nosave then
-        begin
-          writln('');
-          writln(#9'LP'#9'0');
-          writln(#9'LIDP'#9'SREG');
-          writln(#9'LII'#9'11');
-          writln(#9'MVWD');
-          writln(#9'RTN');
-          writln('');
-          writln('SREG:'#9'.DW 0, 0, 0, 0, 0, 0');
-          writln('');
-        end;
+        { Emit program intro and startup sequence }
+        EmitProgramStartup(org, not nosave);
 
         { Variables' initializations }
         for i := 0 to VarCount - 1 do

@@ -377,17 +377,17 @@ Objective: remove the remaining textual ASM emission in `parser.pas` (direct cal
 
 Checklist (short verifiable steps; full `test.bat` after each step: NO_DIFF):
 
-1. Review `Source/lcc/CodeGen.pas` for existing API stubs for emission: `EmitInst`, `EmitLabel`, `EmitComment`, etc. ✅
+1. ✅ Review `Source/lcc/CodeGen.pas` for existing API stubs for emission: `EmitInst`, `EmitLabel`, `EmitComment`, etc.
 
-2. Implement `EmitPush`/`EmitPop` that update internal `pushcnt` and emit `PUSH`/`POP` with identical formatting to today. ✅
+2. ✅ Implement `EmitPush`/`EmitPop` that update internal `pushcnt` and emit `PUSH`/`POP` with identical formatting to today.
 
-3. Migrate `StoreVariable` to `StoreByte`/`StoreWord`/`StoreFloat`/`StoreArray` APIs in `CodeGen`. ✅
+3. ✅ Migrate `StoreVariable` to `StoreByte`/`StoreWord`/`StoreFloat`/`StoreArray` APIs in `CodeGen`.
 
-   3.1. Test program 'Float' compilation error (also in reference lcc) — investigate and fix ✅   
+   3.1. ✅ Test program 'Float' compilation error (also in reference lcc) — investigate and fix   
  
-   3.2. Still missing "StoreArrayWordToReg/Xram" for word arrays (parser.pas:749 on) — to be implemented. ✅
+   3.2. ✅ Still missing "StoreArrayWordToReg/Xram" for word arrays (parser.pas:749 on) — to be implemented.
 
-4. Replace the emission sites in `parser.pas` for `LoadConstant` and `LoadVariable` with `CodeGen` calls. ✅
+4. ✅ Replace the emission sites in `parser.pas` for `LoadConstant` and `LoadVariable` with `CodeGen` calls.
 
    - All constant and variable loads delegate ASM emission to `CodeGen`, including floats; numeric/BCD conversion and type checks remain in the parser.
    - Helpers and `LoadVariable` are aligned with `main`; added `Demos/LoadVariable/main.c` to `test.bat` for global word and register/XRAM array loads.
@@ -395,18 +395,44 @@ Checklist (short verifiable steps; full `test.bat` after each step: NO_DIFF):
 
 5. Centralize `ProcCall` logic (reserve locals, push parameters, CALL, FreeStackSpace).
 
-   5.1. Move local stack reservation, `CALL` emission and stack restoration into a high-level `CodeGen.EmitProcCall`; keep argument parsing and pushes in `Parser`. ✅
+   5.1. ✅ Move local stack reservation, `CALL` emission and stack restoration into a high-level `CodeGen.EmitProcCall`;
+           keep argument parsing and pushes in `Parser`.
    - Verification: `test.bat` — all 8 demos NO_DIFF.
 
-   5.2. Consolidate parameter/local type-size calculations and validate argument-count bounds before indexing procedure metadata. ✅
+   5.2. ✅ Consolidate parameter/local type-size calculations and validate argument-count bounds before indexing procedure metadata.
    - Verification: `test.bat` — all 8 demos NO_DIFF; excess-argument call rejected with the expected diagnostic.
 
-   5.3. Verify nested calls, byte/word/float parameters, locals, byte/word return values and stack allocation/restoration thresholds; add focused coverage if the current demos do not exercise these cases. ✅
+   5.3. ✅ Verify nested calls, byte/word/float parameters, locals, byte/word return values and stack allocation/restoration thresholds; 
+            add focused coverage if the current demos do not exercise these cases.
    - Added `Demos/ProcCallStack/main.c` and included it with `Parameter_passing` in `test.bat`. The focused fixture covers 3/4-byte cleanup, 7/8-byte local allocation, byte/word returns, float arguments, and calls within procedures; `Parameter_passing` covers nested argument calls.
    - Verification: `test.bat` — all 10 demos NO_DIFF; generated assembly checked for the stack-threshold instruction sequences.
    - Note: both the reference and refactored compilers print `main: Possible Stack corruption!` for the float-argument case; their generated assembly is identical.
 
 6. Move intro, SREG save/restore, `CALL main` and variable initializations from `SecondScan` into `CodeGen`/`Output`.
+
+   **Complexity estimate: Medium (4–6 hours), including regression checks.**
+   Run `test.bat` after each substep and require NO_DIFF before proceeding.
+   Startup emission is straightforward; variable initialization is the main effort because it covers register/XRAM storage, 
+   scalars, arrays, and floats. Keep `VarEntry` in `Parser`: pass the required fields to CodeGen APIs rather than introducing a Parser dependency or moving the type.
+
+   6.1. Capture the current generated assembly for all existing demos as the baseline. Record startup and initialization output ordering, including lines buffered through `addasm`. ✅
+   - Regenerated outputs for all 10 demos in an isolated session directory; each matches its existing `test_C/<demo>/new.asm` byte-for-byte.
+   - Observed order: intro/`.ORG`, SREG save, `CALL main`, SREG restore/data, global initialization instructions, procedures, then `addasm`-buffered data declarations. Preserve this two-channel ordering when moving initialization.
+   - Byte-for-byte output differs in whitespace for 9/10 demos; `fc /W` comparisons matching `test.bat` report NO DIFF for all 10. The batch file was not run because it deletes and recreates those `test_C` directories; equivalent comparisons used isolated outputs instead.
+
+   6.2. Add a CodeGen API for the program intro and startup sequence. Move emission of the header, `.ORG`, optional SREG save/restore, `CALL main`, `RTN`, and the `SREG` data label out of `SecondScan`. Preserve `nosave` behavior and current formatting. ✅
+   - Added `CodeGen.EmitProgramStartup(org, saveRegisters)` and replaced the startup emission block in `SecondScan`.
+   - Verification: `test.bat` in an isolated copy — all 10 demos NO_DIFF; explicit `#nosave` fixture also matches the reference and omits SREG save/restore while retaining `CALL main`.
+
+   6.3. Add a CodeGen API for global variable initialization. Pass the required variable fields as arguments and dispatch to the existing initialization routines (`varxram`, `varxarr`, `varcode`, `varfcode`, `varcarr`, `varfarr`, `varreg`, `varrarr`). Preserve the existing distinction between emitted instructions and data buffered with `addasm`. ✅
+   - Added `CodeGen.EmitGlobalVariableInitialization` with explicit name/type/address/size/value and storage/initializer flags; the dispatch preserves the existing `SecondScan` conditions. Its integration into `SecondScan` is step 6.4.
+   - Verification: build succeeded; `test.bat` in the isolated copy — all 10 demos NO_DIFF.
+
+   6.4. Replace the startup and initialization emission blocks in `SecondScan` with calls to the new CodeGen APIs. Keep procedure scanning and missing-`main` diagnostics in Parser. *(~30–45 minutes)*
+
+   6.5. Compare generated assembly against the baseline for all demos. Check startup output with `nosave` enabled and disabled, and cover initialized register/XRAM variables, scalar and array data, and float initializers. Fix any differences before marking complete. *(~1–1.5 hours)*
+
+   - Acceptance: `test.bat` reports NO_DIFF for the existing demos; startup and initialization output retain their original ordering and formatting.
 
 7. Implement `EmitRawAsmBlock` for `#asm...#endasm` as exact pass-through.
 
