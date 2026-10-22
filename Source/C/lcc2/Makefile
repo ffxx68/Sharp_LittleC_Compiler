@@ -4,10 +4,11 @@ BISON ?= bison
 CFLAGS ?= -Wall -Wextra -Werror -O2 -std=c99
 BUILD_DIR := build
 TARGET := lcc2.exe
-OBJECTS := $(BUILD_DIR)/main.o $(BUILD_DIR)/ast.o $(BUILD_DIR)/parser.o $(BUILD_DIR)/lexer.o
+OBJECTS := $(BUILD_DIR)/main.o $(BUILD_DIR)/ast.o $(BUILD_DIR)/codegen.o $(BUILD_DIR)/parser.o $(BUILD_DIR)/lexer.o
 TEST_TARGET := $(BUILD_DIR)/test_ast.exe
 LEXER_TEST_TARGET := $(BUILD_DIR)/test_lexer.exe
 PARSER_TEST_TARGET := $(BUILD_DIR)/test_parser.exe
+CODEGEN_TEST_TARGET := $(BUILD_DIR)/test_codegen.exe
 
 .PHONY: all check-tools test clean
 
@@ -51,10 +52,14 @@ $(LEXER_TEST_TARGET): tests/test_lexer.c $(BUILD_DIR)/parser.c $(BUILD_DIR)/lexe
 $(PARSER_TEST_TARGET): tests/test_parser.c $(BUILD_DIR)/parser.c $(BUILD_DIR)/lexer.c ast.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -I$(BUILD_DIR) -I. -o $@ tests/test_parser.c $(BUILD_DIR)/parser.c $(BUILD_DIR)/lexer.c ast.c
 
-test: all $(TEST_TARGET) $(LEXER_TEST_TARGET) $(PARSER_TEST_TARGET)
+$(CODEGEN_TEST_TARGET): tests/test_codegen.c codegen.c codegen.h ast.c $(BUILD_DIR)/parser.c $(BUILD_DIR)/lexer.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -I$(BUILD_DIR) -I. -o $@ tests/test_codegen.c codegen.c ast.c $(BUILD_DIR)/parser.c $(BUILD_DIR)/lexer.c
+
+test: all $(TEST_TARGET) $(LEXER_TEST_TARGET) $(PARSER_TEST_TARGET) $(CODEGEN_TEST_TARGET)
 	./$(TEST_TARGET)
 	./$(LEXER_TEST_TARGET)
 	./$(PARSER_TEST_TARGET)
+	./$(CODEGEN_TEST_TARGET)
 	./$(TARGET) --help
 	./$(TARGET) --version
 

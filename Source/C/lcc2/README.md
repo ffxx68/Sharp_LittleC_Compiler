@@ -14,8 +14,11 @@ make
 
 The build requires GCC, Flex, Bison, and GNU Make, and produces `lcc2.exe`.
 The project target builds the command-line scaffold, AST arena, Flex scanner,
-and Bison parser. The parser can be exercised through `lcc2_parse_string`;
-source compilation remains unavailable until the backend milestone is complete.
+Bison parser, and the initial code-generation module. The parser can be
+exercised through `lcc2_parse_string`; the backend API currently emits byte/word
+constants, stack operations, add/sub operations, labels, and parameterless
+functions whose bodies contain a constant-return expression. Other constructs
+are rejected before any assembly is emitted.
 
 Run the foundational checks with `make test`. Remove generated build files with
 `make clean`.
@@ -30,5 +33,7 @@ Run the foundational checks with `make test`. Remove generated build files with
 - `parser.y` builds the typed AST for declarations, function bodies, statements,
   initializers, and expressions. The parser currently accepts the supported
   subset; semantic validation and full identifier shadowing are later work.
+- `codegen.h` / `codegen.c` define an explicit codegen context with assembly
+  output, deterministic labels, stack-depth tracking, and a limited AST walker.
 - `parser.h` exposes `lcc2_parse_string` for parser clients and tests.
 - `main.c` provides the initial command-line entry point.

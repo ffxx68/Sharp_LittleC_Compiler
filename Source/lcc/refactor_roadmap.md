@@ -839,6 +839,14 @@ For each ported operation:
 - Test stack-depth and library requirements as well as output text.
 - Keep AST-level concerns (type checking, symbol lookup, layout) outside the instruction emitter; pass their results to backend operations as storage/address inputs.
 
+Initial slice implemented in `Source/C/lcc2/codegen.c`: explicit output,
+label, and stack-depth context; byte/word constant loads and stack primitives;
+byte/word add/sub operation sequences; and a validating tree-walker for
+parameterless functions returning constants or `+`/`-` expressions. Unsupported
+translation-unit constructs are rejected before assembly emission. Scalar
+symbol access, branches/comparisons, calls, startup/finalization, and broader
+AST coverage remain follow-up work for this task.
+
 The C compiler will additionally need behaviors not supplied by the current littleC backend:
 - `signed` arithmetic: need `SBB` (subtract with borrow) and signed comparisons
 - `struct`: access via offsets computed by the compiler
