@@ -467,8 +467,10 @@ Checklist (short verifiable steps; full `test.bat` after each step: NO_DIFF):
    - `DoSwitch` now delegates switch comments, `CASE` entries, case-arm buffering, and closing output to CodeGen. Added `Demos/SwitchCase/main.c` and `Demos/SwitchCaseElse/main.c` to cover switches with and without an `else` arm.
    - Verification: build and `test.bat` — all 13 demos NO DIFF.
 
-   8.4. Migrate conditional and transfer statements: `DoIf`, `DoGoto`, `DoLabel`, `DoBreak`, and `DoReturn`.
+   8.4. ✅ Migrate conditional and transfer statements: `DoIf`, `DoGoto`, `DoLabel`, `DoBreak`, and `DoReturn`.
    - Use the existing branch and label APIs, plus `EmitInst`, `EmitComment`, and `EmitBlankLine`; preserve current label placement and return formatting.
+   - These statements now delegate instruction, comment, blank-line, and user-label emission to CodeGen while retaining the existing branch targets and output formatting.
+   - Verification: build succeeded; `test.bat` in an isolated copy — all 13 demos NO DIFF.
 
    8.5. Migrate loop statements: `DoLoop`, `DoWhile`, `DoFor`, and `DoDoWhile`.
    - Preserve loop labels, branch instructions, break targets, comments, and blank-line placement.

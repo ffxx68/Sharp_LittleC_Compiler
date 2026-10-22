@@ -1509,8 +1509,8 @@ end;
 procedure DoIf;
 var L1, L2: string;
 begin
-        writln( #9'; If block: Boolean expression');
-        writln('');
+        EmitComment('If block: Boolean expression');
+        EmitBlankLine;
         delete(Tok, 1, 4);
         BoolExpression;
         if tok <> '' then
@@ -1520,8 +1520,8 @@ begin
         end;
         L1 := NewLabel; L2 := L1;
         BranchAbsFalse(L1);   // potentially large jump
-        writln('');
-        writln( #9'; If expression = true');
+        EmitBlankLine;
+        EmitComment('If expression = true');
         Block;
 
         if copy(dummy, 1, 4) = 'else' then
@@ -1535,10 +1535,10 @@ begin
                 L2 := NewLabel;
                 BranchAbs(L2);   // potentially large jump
                 PostLabel(L1);
-                writln( #9'; If expression = false');
+                EmitComment('If expression = false');
                 Block;
         end;
-        writln( #9'; End of if');
+        EmitComment('End of if');
         PostLabel(L2);
 end;
 {-------------------------------------------------------------}
@@ -1550,8 +1550,8 @@ end;
 procedure DoGoto;
 begin
         delete(tok, 1, 5); tok := trim(tok);
-        writln( #9'RJMP'#9+tok+#9'; Goto');
-        writln('');
+        EmitInst('RJMP', tok, 'Goto');
+        EmitBlankLine;
 end;
 {-------------------------------------------------------------}
 
@@ -1564,8 +1564,8 @@ begin
         delete(tok, 1, 6); tok := trim(tok);
         if findvar(tok) or findproc(tok) then
                 error(tok+': This label name is already used!');
-        writln('');
-        writln( '  '+tok+':'#9'; User label');
+        EmitBlankLine;
+        PostUserLabel(tok);
 end;
 {-------------------------------------------------------------}
 
@@ -1576,10 +1576,10 @@ end;
 procedure DoBreak;
 begin
         if InnerLoop = 'loop' then
-                writln( #9'LEAVE'#9#9'; Break')
+                EmitInst('LEAVE', #9+'; Break')
         else
-                writln( #9'RJMP'#9+ExitLabel+#9'; Break');
-        writln('');
+                EmitInst('RJMP', ExitLabel, 'Break');
+        EmitBlankLine;
 end;
 {-------------------------------------------------------------}
 
@@ -1600,8 +1600,8 @@ begin
                 else if proclist[currproc].returntype = 'float' then optype := otFloat;
                 Expression;
         end;
-        writln( #9'RTN'#9#9'; end of ' + proclist[currproc].procname);
-        writln('');
+        EmitInst('RTN', #9+'; end of ' + proclist[currproc].procname);
+        EmitBlankLine;
 end;
 {-------------------------------------------------------------}
 

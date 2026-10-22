@@ -42,6 +42,7 @@ procedure FinalizeAndWrite(const filename: string);
 // Label management
 function NewLabel: string;
 procedure PostLabel(L: string);
+procedure PostUserLabel(const L: string);
 
 // Register load helpers
 procedure load_x(s: string);
@@ -387,6 +388,11 @@ end;
 procedure PostLabel(L: string);
 begin
    WritLn('  '+L+':');
+end;
+
+procedure PostUserLabel(const L: string);
+begin
+   WritLn('  '+L+':'#9'; User label');
 end;
 
 {--------------------------------------------------------------}
