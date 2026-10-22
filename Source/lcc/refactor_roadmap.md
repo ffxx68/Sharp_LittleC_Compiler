@@ -670,13 +670,11 @@ Nodes retain source spans, and recursive declarators use structured type kinds i
 Added `Docs/sc61860_c_grammar.y`, a Bison-compatible C89-subset grammar with standard C expression precedence, SC61860 extensions,
 and no function-pointer or multidimensional-array declarators. Bison generates it without shift/reduce or reduce/reduce conflicts.
 
-### Task 5.1.4: Define the backend compatibility contract
+### Task 5.1.4 ✅: Define the backend compatibility contract
 
-- Inventory the public `CodeGen.pas` operations by semantic group (emission/state, scalar and aggregate access, control flow, calls/stack, arithmetic/libraries, data/startup).
-- For each operation selected for the initial C compiler, record its inputs, state effects, emitted instruction sequence, and library requirements. Make `pushcnt`, label allocation, output destination, and library tracking explicit in the C backend context.
-- Add or identify focused Pascal regression fixtures for representative byte/word/float, local/global/XRAM, array, pointer, call, branch, and initialization paths. These are the behavioral oracle for the C port; exact ASM comparison applies only where source semantics are the same.
-- Do not prototype an AST in Pascal solely to prove the tree-walker: the C frontend itself should build the AST, and its first milestone should walk a deliberately small subset through a C backend API.
-- Verification: the contract is covered by named fixtures and the current Pascal compiler still builds and passes its applicable regression suite.
+The contract and operation inventory are documented in `Docs/sc61860_backend_contract.md`, including explicit C context invariants, 
+library behavior, and named Pascal fixtures. The C backend's first milestone is intentionally smaller than the full Pascal API; 
+signed operations and standard-C switch semantics require new implementations.
 
 ---
 ## Phase 5.2 — Stabilize and test the backend boundary
