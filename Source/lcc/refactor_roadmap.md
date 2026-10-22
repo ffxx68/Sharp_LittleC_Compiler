@@ -759,7 +759,7 @@ target; typedef-name classification remains tied to the parser's scope state.
 
 - Verification: `make test` passes the scanner, AST arena, and CLI checks.
 
-### Task 5.3.3: Bison parser (`parser.y`)
+### Task 5.3.3 ✅: Bison parser (`parser.y`)
 
 Start from simplified C89 grammar. Semantic actions build the AST (`ast.h`).
 
@@ -796,6 +796,16 @@ attribute_specifier: __AT '(' constant_expression ')'
                    | __XRAM
                    ;
 ```
+
+Implemented `Source/C/lcc2/parser.y` with conflict-free expression precedence,
+AST actions for declarations, aggregate types, initializers, statements,
+function definitions, casts, calls, and literals, plus SC61860 storage
+attributes and explicit diagnostics for unsupported storage/type keywords.
+Added the `lcc2_parse_string` API, parser build rules, and AST-shape tests.
+Full symbol-table shadowing and semantic validation remain follow-up work.
+
+- Verification: `make test` passes lexer, AST, parser, and CLI checks; Bison
+  runs with `-Wall -Werror` and reports no grammar conflicts.
 
 ### Task 5.3.4: SC61860 backend — tree-walker (`codegen.c`)
 
