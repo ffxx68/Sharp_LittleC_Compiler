@@ -1474,10 +1474,10 @@ var L1, temp: string;
     iselse: boolean;
 begin
         delete(tok, 1, 7); tok := trim(tok);
-        writln(#9'; Switch');
+        EmitSwitchStart;
         Rd(Look, tok); tok:=trim(tok);
         Expression;
-        writln(#9'CASE');
+        EmitSwitchCasesStart;
         iselse := false;
         repeat
                 getToken(MODESTR, dummy);
@@ -1492,18 +1492,14 @@ begin
                 if pos('else', tok) > 0 then
                         iselse := true;
                 L1 := NewLabel;
-                writln(#9 + tok + #9 + L1);
-                outfile := false;
-                writln('  ' + L1 + ':');
+                EmitSwitchCase(tok, L1);
+                BeginSwitchArm(L1);
                 block;
-                writln(#9 + 'RTN');
-                writln('');
-                outfile := true;
+                EndSwitchArm;
         until trim(dummy)[1] = '}';
         if not iselse then
-                writln( #9'ELSE:'#9+'EOP');
-        writln(#9'ENDCASE');
-        writln(#9'; End switch');
+                EmitSwitchDefault;
+        EmitSwitchEnd;
 end;
 
 

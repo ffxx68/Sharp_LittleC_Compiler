@@ -26,6 +26,13 @@ procedure EmitPop(const comment: string); overload;
 // Raw asm passthrough for #asm blocks
 procedure EmitRawAsmLine(const s: string);
 procedure EmitRawAsmBlock(const block: string);
+procedure EmitSwitchStart;
+procedure EmitSwitchCasesStart;
+procedure EmitSwitchCase(const value, labelName: string);
+procedure BeginSwitchArm(const labelName: string);
+procedure EndSwitchArm;
+procedure EmitSwitchDefault;
+procedure EmitSwitchEnd;
 procedure EmitProgramStartup(const org: string; saveRegisters: boolean);
 
 // Finalize current asm buffers and write to output file
@@ -282,6 +289,45 @@ begin
   end;
   if line <> '' then
     EmitRawAsmLine(#9 + line);
+end;
+
+procedure EmitSwitchStart;
+begin
+  EmitComment('Switch');
+end;
+
+procedure EmitSwitchCasesStart;
+begin
+  EmitInst('CASE');
+end;
+
+procedure EmitSwitchCase(const value, labelName: string);
+begin
+  EmitRawAsmLine(#9 + value + #9 + labelName);
+end;
+
+procedure BeginSwitchArm(const labelName: string);
+begin
+  outfile := false;
+  EmitRawAsmLine('  ' + labelName + ':');
+end;
+
+procedure EndSwitchArm;
+begin
+  EmitInst('RTN');
+  EmitBlankLine;
+  outfile := true;
+end;
+
+procedure EmitSwitchDefault;
+begin
+  EmitRawAsmLine(#9 + 'ELSE:' + #9 + 'EOP');
+end;
+
+procedure EmitSwitchEnd;
+begin
+  EmitInst('ENDCASE');
+  EmitComment('End switch');
 end;
 
 procedure EmitProgramStartup(const org: string; saveRegisters: boolean);
