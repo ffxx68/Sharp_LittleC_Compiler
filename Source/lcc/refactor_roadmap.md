@@ -410,7 +410,6 @@ Checklist (short verifiable steps; full `test.bat` after each step: NO_DIFF):
 
 6. Move intro, SREG save/restore, `CALL main` and variable initializations from `SecondScan` into `CodeGen`/`Output`.
 
-   **Complexity estimate: Medium (4–6 hours), including regression checks.**
    Run `test.bat` after each substep and require NO_DIFF before proceeding.
    Startup emission is straightforward; variable initialization is the main effort because it covers register/XRAM storage, 
    scalars, arrays, and floats. Keep `VarEntry` in `Parser`: pass the required fields to CodeGen APIs rather than introducing a Parser dependency or moving the type.
@@ -436,7 +435,9 @@ Checklist (short verifiable steps; full `test.bat` after each step: NO_DIFF):
    - `SecondScan` now delegates startup and each global variable initializer to CodeGen; procedure scanning and missing-`main` diagnostics remain in Parser.
    - Verification: build succeeded; `test.bat` in the isolated copy — all 10 demos NO_DIFF.
 
-   6.5. Check startup output with `nosave` enabled and disabled.
+   6.5. ✅ Check startup output with `nosave` enabled and disabled; cover initialization declarations, arrays, and float data.
+   - Normal startup and initialization output for `Array` and `Float` match the 6.1 baseline. With `#nosave`, both match the reference compiler, retain `.ORG` and `CALL main`, and omit the SREG block.
+   - Verification: `test.bat` in the isolated copy — all 10 demos NO_DIFF.
 
 7. Implement `EmitRawAsmBlock` for `#asm...#endasm` as exact pass-through.
 
