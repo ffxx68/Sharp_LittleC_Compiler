@@ -13,9 +13,9 @@ make
 ```
 
 The build requires GCC, Flex, Bison, and GNU Make, and produces `lcc2.exe`.
-The initial project target builds the command-line scaffold and AST arena;
-source compilation is not available until the frontend and backend milestones
-are implemented.
+The initial project target builds the command-line scaffold, AST arena, and
+Flex scanner. Source compilation is not available until the parser and backend
+milestones are implemented.
 
 Run the foundational checks with `make test`. Remove generated build files with
 `make clean`.
@@ -24,6 +24,9 @@ Run the foundational checks with `make test`. Remove generated build files with
 
 - `ast.h` defines the typed AST contract and arena allocation API.
 - `ast.c` implements zero-initialized arena allocations and string copies.
+- `lexer.l` and `lexer_tokens.h` define the scanner, token codes, and source
+  locations. Typedef-name classification is deferred until parser scope data
+  is available.
 - `main.c` provides the initial command-line entry point.
-- `lexer.l`, `parser.y`, and the compiler subsystems are added in their
+- `parser.y` and the remaining compiler subsystems are added in their
   respective Phase 5.3 milestones.

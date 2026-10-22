@@ -7,6 +7,15 @@
 extern "C" {
 #endif
 
+typedef struct AstArena AstArena;
+
+/* Allocations are zero-initialized and live until the arena is destroyed. */
+AstArena *ast_arena_create(void);
+void ast_arena_destroy(AstArena *arena);
+void *ast_arena_alloc(AstArena *arena, size_t size);
+char *ast_arena_strdup(AstArena *arena, const char *text);
+char *ast_arena_strndup(AstArena *arena, const char *text, size_t length);
+
 typedef struct AstNode AstNode;
 typedef struct AstExpr AstExpr;
 typedef struct AstStmt AstStmt;

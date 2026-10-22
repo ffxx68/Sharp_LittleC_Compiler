@@ -630,7 +630,7 @@ This phase replaces the syntax-directed Pascal frontend with a standard-C fronte
 while incrementally porting the proven SC61860 backend behavior. It is divided into three subphases: define the language and backend contract,
 stabilize the Pascal backend boundary, then build and validate the C compiler.
 
-## Phase 5.1 — Define the C frontend/backend contract
+## Phase 5.1 ✅ — Define the C frontend/backend contract
 
 Motivation: the current parser is a syntax-directed translator — it emits code during parsing.
 To replace the frontend with a standard C frontend (Flex/Bison) we need an intermediate AST that completely decouples parsing from codegen.
@@ -712,27 +712,16 @@ Prerequisites: target language and grammar defined (Tasks 5.1.1–5.1.3), backen
 
 The C backend is a staged port of relevant behavior in `CodeGen.pas`, not an independent redesign. First reproduce current behavior for a small subset; introduce standard-C semantic changes only in separate, explicitly tested milestones. A direct Pascal/C FFI is out of scope unless a later measured need justifies its build and runtime complexity.
 
-### Task 5.3.1: Project setup in C
+### Task 5.3.1 ✅: Project setup in C
 
-- Create `Source/C/lcc2/` with structure:
-    ```
-    lcc2/
-    ├── Makefile          (or CMakeLists.txt)
-    ├── ast.h             (AST nodes from Task 5.1.2)
-    ├── ast.c             (node allocators/destructors)
-    ├── lexer.l           (Flex)
-    ├── parser.y          (Bison)
-    ├── symtab.h / .c     (symbol table)
-    ├── codegen.h / .c    (SC61860 backend)
-    ├── peephole.h / .c   (optimizations)
-    ├── output.h / .c     (ASM accumulation and writing)
-    ├── platform.h        (platform constants: register addresses, stack layout)
-    └── main.c
-    ```
-- Toolchain: `gcc` (MinGW on Windows), `flex`, `bison`
-- Build: `make` produces `lcc2.exe`
+Created the `Source/C/lcc2/` project with a GCC/Make build, command-line entry
+point, AST arena allocation, and initial allocation/CLI smoke tests. The
+parser, symbol table, backend, optimizer, output, and platform modules are
+introduced by their subsequent milestones.
 
-### Task 5.3.2: Flex lexer (`lexer.l`)
+- Verification: `make` builds `lcc2.exe`; `make test` passes AST arena and CLI checks.
+
+### Task 5.3.2 ✅: Flex lexer (`lexer.l`)
 
 C standard tokens + platform extensions:
 
@@ -759,7 +748,16 @@ STRING_CONST     "..."
 IDENTIFIER       [a-zA-Z_][a-zA-Z0-9_]*
 ```
 
-Keywords that are not supported (`long`, `volatile`, `register`, etc.) are recognized by the lexer but generate a semantic error in the parser ("unsupported on this platform").
+Keywords that are not supported (`long`, `volatile`, `register`, etc.) are
+recognized by the lexer but generate a semantic error in the parser
+("unsupported on this platform").
+
+Implemented `lexer.l` with token codes in `lexer_tokens.h`, source locations,
+comments, literals, operators, SC61860 attributes, inline-assembly blocks, and
+the supported `#pragma` forms. Added scanner coverage to the project test
+target; typedef-name classification remains tied to the parser's scope state.
+
+- Verification: `make test` passes the scanner, AST arena, and CLI checks.
 
 ### Task 5.3.3: Bison parser (`parser.y`)
 
