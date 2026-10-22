@@ -626,7 +626,9 @@ so this case remains a compiler issue rather than a regression from the `ProcCal
 ---
 # Phase 5 — Migrating to Flex/Bison
 
-This phase replaces the syntax-directed Pascal frontend with a standard-C frontend built using Flex and Bison, while incrementally porting the proven SC61860 backend behavior. It is divided into three subphases: define the language and backend contract, stabilize the Pascal backend boundary, then build and validate the C compiler.
+This phase replaces the syntax-directed Pascal frontend with a standard-C frontend built using Flex and Bison,
+while incrementally porting the proven SC61860 backend behavior. It is divided into three subphases: define the language and backend contract,
+stabilize the Pascal backend boundary, then build and validate the C compiler.
 
 ## Phase 5.1 — Define the C frontend/backend contract
 
@@ -652,115 +654,15 @@ It is not directly reusable by a C/Flex/Bison program as-is: the unit is Pascal,
 The language direction remains a standard-C subset for SC61860 rather than a byte-for-byte reimplementation of littleC semantics. Existing programs may need minimal syntax changes, and standard-C behavior changes must be validated functionally rather than treated as regressions.
 
 
-### Task 5.1.1: Define the target C subset
+### Task 5.1.1 ✅: Define the target C subset
 
-Write `Docs/sc61860_c_subset.md`: the specification of the language accepted by the new compiler.
+Created `Docs/sc61860_c_subset.md` as the language specification, including supported and deferred C features, target data model,
+semantics, preprocessor behavior, SC61860 extensions, and deprecated littleC syntax. Keep detailed language requirements in that document;
+use this roadmap for implementation sequencing and acceptance criteria.
 
-Supported standard C constructs (target):
+### Task 5.1.2 ✅: Define a typed AST (standard C)
 
-| Area | Supported | Platform notes |
-|------|-----------|----------------|
-| Types `char`, `unsigned char` | ✅ | 8 bit, always unsigned on SC61860 |
-| Types `int`, `unsigned int` | ✅ | 16 bit (= littleC `word`) |
-| Type `long` | ❌ | 32 bit not practical (too slow, little RAM) |
-| Type `float` | ✅ | Sharp BCD, 8 bytes, via library |
-| `void` | ✅ | For functions without return (littleC forbids this — to be fixed) |
-| `const` | ✅ | Useful for code-space data |
-| `signed`/`unsigned` | ✅ | littleC has no signed — to be added |
-| Pointers | ✅ | 16 bit; pointers as parameters (littleC does not support) |
-| One-dimensional arrays | ✅ | Max 256 bytes / 128 words (HW limit) |
-| `struct` | ✅ | Fundamental for idiomatic C code |
-| `union` | ⚠️ | Possible but low priority |
-| `enum` | ✅ | Simple: integer constants |
-| `typedef` | ✅ | Type aliases, no runtime cost |
-| `if`/`else` | ✅ | Standard |
-| `while`, `do..while` | ✅ | Standard |
-| `for` (3 expressions) | ✅ | Standard (littleC executes step before body — bug) |
-| `switch`/`case`/`break`/`default` | ✅ | Standard C semantics (littleC has different semantics) |
-| `break`, `continue` | ✅ | `continue` is missing in littleC |
-| `return` | ✅ | Standard |
-| `goto`/label | ✅ | Standard C label (`label:` not `label name;`) |
-| Ternary operator `?:` | ✅ | Missing in littleC |
-| Compound assignment `+= -= ...` | ✅ | Already in littleC |
-| `++`/`--` prefix and postfix | ✅ | littleC has only postfix |
-| Standard C operator precedence | ✅ | littleC has inverted precedence — to be fixed |
-| Preprocessor `#include #define #ifdef #else #endif` | ✅ | Handled by `lcpp`, add `#else` |
-| `#pragma org(addr)` | ✅ | Portable substitute for `#org` |
-| Inline assembly `__asm { ... }` | ✅ | Substitute for `#asm..#endasm`, more standard syntax |
-
-Deprecated littleC constructs (not carried forward):
-
-| littleC construct | C standard substitute |
-|-------------------|----------------------|
-| `loop(n) { ... }` | `for (int i=0; i<=n; i++) { ... }` |
-| `switch` with `value: proc()` | `switch(x) { case V: proc(); break; }` |
-| `label name;` | `name:` (C standard label) |
-| `byte`/`word`/`char` as type keywords | `unsigned char` / `unsigned int` / `char` (with convenience typedef) |
-| `at` / `xram` in declarators | `__at(addr)` / `__xram` attribute (or `#pragma`) |
-| `#org`, `#pc`, `#nosave` | `#pragma org(addr)`, `#pragma pc(addr)`, `#pragma nosave` |
-| Names that cannot start with a type | No restriction (parser fix) |
-
-Platform-specific extensions (attributes starting with `__`):
-
-```c
-// Variable allocated to a fixed CPU register address
-unsigned char __at(8) pbuf;
-
-// Variable in external RAM (XRAM)
-__xram unsigned int baspnt;
-__xram __at(0xFFD7) unsigned int baspnt;  // with address
-
-// Inline assembly
-__asm {
-    LIA  0x42
-    LP   8
-    EXAM
-}
-
-// Configuration pragmas
-#pragma org(33000)
-#pragma nosave
-```
-
-### Task 5.1.2: Define a typed AST (standard C)
-
-Create `ast.h` with nodes that reflect the C grammar, not littleC's grammar. Use a type representation that can express supported base types, qualifiers, pointers, arrays, and struct/union types; a single string-valued `type` field is insufficient for declarators. Retain source locations for diagnostics and tests.
-
-| Node | Main fields |
-|------|-------------|
-| `TranslationUnit` | `decls[]` (top-level declarations) |
-| `Type` | kind/base type, qualifiers, pointee/element type, array length, struct reference |
-| `VarDecl` | `type`, `name`, `init`, `attrs` (`__at`, `__xram`) |
-| `FuncDecl` | `retType`, `name`, `params[]`, `body` |
-| `ParamDecl` | `type`, `name` |
-| `StructDecl` | `tag`, `members[]` |
-| `EnumDecl` | `tag`, `values[]` |
-| `TypedefDecl` | `type`, `alias` |
-| `CompoundStmt` | `items[]` (decls + stmts, like C99) |
-| `IfStmt` | `cond`, `then`, `else` |
-| `WhileStmt` | `cond`, `body` |
-| `DoWhileStmt` | `body`, `cond` |
-| `ForStmt` | `init`, `cond`, `step`, `body` |
-| `SwitchStmt` | `expr`, `body` (with `CaseLabel`/`DefaultLabel`) |
-| `ReturnStmt` | `expr` (optional) |
-| `BreakStmt` | — |
-| `ContinueStmt` | — |
-| `GotoStmt` | `label` |
-| `LabelStmt` | `name`, `stmt` |
-| `ExprStmt` | `expr` |
-| `AsmStmt` | `code` |
-| `BinaryExpr` | `op`, `left`, `right` |
-| `UnaryExpr` | `op`, `operand`, `prefix` |
-| `TernaryExpr` | `cond`, `then`, `else` |
-| `CastExpr` | `type`, `expr` |
-| `CallExpr` | `func`, `args[]` |
-| `IndexExpr` | `array`, `index` |
-| `MemberExpr` | `obj`, `field`, `isArrow` |
-| `IdentExpr` | `name` |
-| `ConstExpr` | `value`, `type` |
-| `SizeofExpr` | `type` or `expr` |
-| `AddrOfExpr` | `operand` |
-| `DerefExpr` | `operand` |
+Added `Source/C/lcc2/ast.h` with typed nodes for the target declarations, types, statements, initializers, and expressions. Nodes retain source spans, and recursive declarators use structured type kinds instead of string-valued types.
 
 ### Task 5.1.3: Document formal BNF grammar
 
@@ -782,11 +684,12 @@ Write `Docs/sc61860_c_grammar.y` (directly in Bison-compatible format):
 ---
 ## Phase 5.2 — Stabilize and test the backend boundary
 
-Phase 5.2 is a bridge, not a second backend rewrite. Keep `CodeGen.pas` as the reference implementation; extract the existing optimizer from `SecondScan` into a separately testable Pascal unit, then use the same cases to validate the C port.
+Phase 5.2 is a bridge, not a second backend rewrite. Keep `CodeGen.pas` as the reference implementation;
+extract the existing optimizer from `SecondScan` into a separately testable Pascal unit, then use the same cases to validate the C port.
 
-### Task 5.2.1: Extract optimizations from `SecondScan` into `Backend.pas`
+### Task 5.2.1 ✅: Extract optimizations from `SecondScan` into `Backend.pas`
 
-The current optimizations in `SecondScan` (lines ~2800-3020 of `parser.pas`) are textual passes on temporary files:
+Extracted the existing optimizer into `Backend.pas`. `SecondScan` now calls `OptimizeAssembly`, which applies the passes in their existing order in memory and writes the final assembly directly to the requested output file.
 
 | Step | Pattern → Replacement |
 |------|-----------------------|
@@ -796,7 +699,7 @@ The current optimizations in `SecondScan` (lines ~2800-3020 of `parser.pas`) are
 | 4 | `LIB 1; LP 3; ADM; EXAB` → `INCA` |
 | 5 | `LIB 1; LP 3; EXAB; SBM; EXAB` → `DECA` |
 
-Extract into testable functions: `OptimizeDoubleEXAB()`, `OptimizeLIAtoLIB()`, `OptimizeRedundantPUSHPOP()`, `OptimizeIncDec()`.
+Exposed testable functions: `OptimizeDoubleEXAB()`, `OptimizeLIAtoLIB()`, `OptimizeRedundantPUSHPOP()`, and `OptimizeIncDec()`. The existing constant-arithmetic folds are also retained in the pipeline. Temporary `temp.asm`/`temp2.asm` optimizer files are no longer needed.
 
 ### Task 5.2.2: Unit tests for each peephole optimization pattern
 

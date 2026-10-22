@@ -8,7 +8,7 @@ unit Parser;
 
 {--------------------------------------------------------------}
 interface
-uses Input, Scanner, Errors, CodeGen, Output, sysutils, calcunit, math;
+uses Input, Scanner, Errors, CodeGen, Output, Backend, sysutils, calcunit, math;
 
 procedure FirstScan(filen: string);
 procedure SecondScan(filen: string);
@@ -2182,13 +2182,11 @@ end;
 { Do Second Scan }
 
 procedure SecondScan(filen: string);
-var name, typ, s, s2, s3: string;
-    i: integer;
+var i: integer;
+    s: string;
     f2: textfile;
 begin
         md := MODESTR;
-        assign(f,'temp.asm');
-        rewrite(f);
 
         { Emit program intro and startup sequence }
         EmitProgramStartup(org, not nosave);
@@ -2269,239 +2267,12 @@ begin
         if (asmcnt > 0) then
                 for i := 0 to asmcnt - 1 do
                         writln( asmlist[i]);
-        close(f);
 
-
-
-        { ****************************************************************}
-        { Third pass? Optimize Code }
-
-        s2 := #9'INCA';
-        s3 := #9'DECA';
-        for i := 1 to 6 do
-        begin
-	     s := #9'LIA'#9+inttostr(i)+#9'; Load constant '+inttostr(i)+#13#10#9'EXAB'#13#10#9'LP'#9'3'#13#10#9'SBM'#9#9'; Subtraction'#13#10#9'EXAB';
-             while pos(s, asmtext) > 0 do begin delete(asmtext, pos(s, asmtext), length(s)); insert(s2, asmtext, pos(s, asmtext)); s2 := s2 + #13#10#9'DECA'; end;
-	     s := #9'LIA'#9+inttostr(i)+#9'; Load constant '+inttostr(i)+#13#10#9'LP'#9'3'#13#10#9'ADM'#9#9'; Addition'#13#10#9'EXAB';
-	     while pos(s, asmtext) > 0 do begin delete(asmtext, pos(s, asmtext), length(s)); insert(s3, asmtext, pos(s, asmtext)); s3 := s3 + #13#10#9'INCA'; end;
-        end;
-        s := #9'EXAB'#13#10#9'EXAB'#13#10;
-        while pos(s, asmtext) > 0 do delete(asmtext, pos(s, asmtext), length(s));
-
-        assignfile(f, 'temp.asm');
-        rewrite(f);
-        writeln(f, asmtext);
-        writeln(f, libtext);
-        closefile(f);
-
-        // Replace LIA... EXAB to LIB
-        assignfile(f, 'temp.asm');
-        reset(f);
-        assignfile(f2, 'temp2.asm');
-        rewrite(f2);
-
-        while not eof(f) do
-        begin
-                readln(f, s);
-                if copy(trim(s),1,3) = 'LIA' then
-                begin
-                        name := s;
-                        readln(f, s);
-                        if copy(trim(s),1,4) = 'EXAB' then
-                        begin
-                                s := #9'LIB' + copy(name,5,255);
-                                writeln(f2, s);
-                        end else
-                        begin
-                                writeln(f2, name);
-                                writeln(f2, s);
-                        end;
-                end else
-                        writeln(f2, s);
-        end;
-        closefile(f2);
-        closefile(f);
-
-
-        // Replace PUSH LIB... POP to LIB...
-        assignfile(f, 'temp2.asm');
-        reset(f);
-        assignfile(f2, 'temp.asm');
-        rewrite(f2);
-
-        while not eof(f) do
-        begin
-                readln(f, s);
-                if copy(trim(s),1,4) = 'PUSH' then
-                begin
-                        name := s;
-                        readln(f, s);
-                        if copy(trim(s),1,3) = 'LIB' then
-                        begin
-                                typ := s;
-                                readln(f, s);
-                                if copy(trim(s),1,3) = 'POP' then
-                                begin
-                                        writeln(f2, typ);
-                                end else
-                                begin
-                                        writeln(f2, name);
-                                        writeln(f2, typ);
-                                        writeln(f2, s);
-                                end;
-                        end else
-                        begin
-                                writeln(f2, name);
-                                writeln(f2, s);
-                        end;
-                end else
-                begin
-                        writeln(f2, s);
-                end;
-        end;
-        closefile(f2);
-        closefile(f);
-
-        // Remove double EXAB
-        assignfile(f, 'temp.asm');
-        reset(f);
-        assignfile(f2, 'temp2.asm');
-        rewrite(f2);
-
-        while not eof(f) do
-        begin
-                readln(f, s);
-                if copy(trim(s),1,3) = 'EXAB' then
-                begin
-                        name := s;
-                        readln(f, s);
-                        if copy(trim(s),1,4) <> 'EXAB' then
-                        begin
-                                writeln(f2, name);
-                                writeln(f2, s);
-                        end;
-                end else
-                        writeln(f2, s);
-        end;
-        closefile(f2);
-        closefile(f);
-
-        // Replace n++ code to INCA
-        assignfile(f, 'temp2.asm');
-        reset(f);
-        assignfile(f2, 'temp.asm');
-        rewrite(f2);
-
-        while not eof(f) do
-        begin
-                readln(f, s);
-                if (copy(trim(s),1,6) = 'LIB'#9'1'#9) or (s = 'LIB'#9'1') then
-                begin
-                        name := s;
-                        readln(f, s);
-                        if copy(trim(s),1,4) = 'LP'#9'3' then
-                        begin
-                                typ := s;
-                                readln(f, s);
-                                if copy(trim(s),1,3) = 'ADM' then
-                                begin
-                                        s2 := s;
-                                        readln(f, s);
-                                        if copy(trim(s),1,4) = 'EXAB' then
-                                        begin
-                                                writeln(f2, #9'INCA');
-                                        end else
-                                        begin
-                                                writeln(f2, name);
-                                                writeln(f2, typ);
-                                                writeln(f2, s2);
-                                                writeln(f2, s);
-                                        end;
-                                end else
-                                begin
-                                        writeln(f2, name);
-                                        writeln(f2, typ);
-                                        writeln(f2, s);
-                                end;
-                        end else
-                        begin
-                                writeln(f2, name);
-                                writeln(f2, s);
-                        end;
-                end else
-                begin
-                        writeln(f2, s);
-                end;
-        end;
-        closefile(f2);
-        closefile(f);
-
-        // Replace n-- code to DECA
-        assignfile(f, 'temp.asm');
-        reset(f);
+        s := OptimizeAssembly(asmtext, GetLibText, i);
         assignfile(f2, filen);
         rewrite(f2);
-        i := 0;
-
-        while not eof(f) do
-        begin
-                readln(f, s);
-                if (copy(trim(s),1,6) = 'LIB'#9'1'#9) or (s = 'LIB'#9'1') then
-                begin
-                        name := s;
-                        readln(f, s);
-                        if copy(trim(s),1,4) = 'LP'#9'3' then
-                        begin
-                                typ := s;
-                                readln(f, s);
-                                if copy(trim(s),1,4) = 'EXAB' then
-                                begin
-                                        s2 := s;
-                                        readln(f, s);
-                                        if copy(trim(s),1,3) = 'SBM' then
-                                        begin
-                                                s3 := s;
-                                                readln(f, s);
-                                                if copy(trim(s),1,4) = 'EXAB' then
-                                                begin
-                                                        writeln(f2, #9'DECA'); inc(i);
-                                                end else
-                                                begin
-                                                        writeln(f2, name); if name<> '' then inc(i);
-                                                        writeln(f2, typ); if typ<> '' then inc(i);
-                                                        writeln(f2, s2); if s2<> '' then inc(i);
-                                                        writeln(f2, s3); if s3<> '' then inc(i);
-                                                        writeln(f2, s); if s<> '' then inc(i);
-                                                end;
-                                        end else
-                                        begin
-                                                writeln(f2, name); if name<> '' then inc(i);
-                                                writeln(f2, typ); if typ<> '' then inc(i);
-                                                writeln(f2, s2); if s2<> '' then inc(i);
-                                                writeln(f2, s); if s<> '' then inc(i);
-                                        end;
-                                end else
-                                begin
-                                        writeln(f2, name); if name<> '' then inc(i);
-                                        writeln(f2, typ); if typ<> '' then inc(i);
-                                        writeln(f2, s); if s<> '' then inc(i);
-                                end;
-                        end else
-                        begin
-                                writeln(f2, name); if name<> '' then inc(i);
-                                writeln(f2, s); if s<> '' then inc(i);
-                        end;
-                end else
-                begin
-                        writeln(f2, s);  if s<> '' then inc(i);
-                end;
-        end;
+        write(f2, s);
         closefile(f2);
-        closefile(f);
-
-        deletefile('temp.asm');
-        deletefile('temp2.asm');
-
         writeln('Complete: ',i,' assembler lines were produced!');
 end;
 {--------------------------------------------------------------}
