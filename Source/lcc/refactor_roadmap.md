@@ -618,32 +618,37 @@ Both the reference and refactored compilers report `main: Possible Stack corrupt
 so this case remains a compiler issue rather than a regression from the `ProcCall` refactor.
 
 
----
-# Assessment — using the existing `CodeGen.pas`
 
-`CodeGen.pas` is no longer just a collection of low-level helpers. It already contains a substantial, tested SC61860 backend: instruction and label emission, byte/word/float loads and stores, local stack addressing, arrays, pointers, procedure-call stack handling, comparisons, branches, arithmetic/library calls, and global data initialization. Phases 5–7 should treat this as the implementation reference and compatibility contract, rather than plan a fresh backend from scratch.
+---
+# Phase 5 — Migrating to Flex/Bison
+
+This phase replaces the syntax-directed Pascal frontend with a standard-C frontend built using Flex and Bison, while incrementally porting the proven SC61860 backend behavior. It is divided into three subphases: define the language and backend contract, stabilize the Pascal backend boundary, then build and validate the C compiler.
+
+## Phase 5.1 — Define the C frontend/backend contract
+
+Motivation: the current parser is a syntax-directed translator — it emits code during parsing.
+To replace the frontend with a standard C frontend (Flex/Bison) we need an intermediate AST that completely decouples parsing from codegen.
+
+> Change of direction compared to littleC: the goal is NOT to replicate littleC's idiosyncrasies (non-standard operator precedence, `loop`, `switch` with custom semantics, etc.) but to converge toward a subset of the C89/C99 standard, within the limits of the SC61860 platform. Existing littleC programs may require minimal adjustments to compile with the new frontend.
+
+**Assessment — using the existing `CodeGen.pas`**
+
+`CodeGen.pas` is no longer just a collection of low-level helpers. It already contains a substantial, tested SC61860 backend: instruction and label emission, byte/word/float loads and stores, local stack addressing, arrays, pointers, procedure-call stack handling, comparisons, branches, arithmetic/library calls, and global data initialization. Phases 5.1–5.3 should treat this as the implementation reference and compatibility contract, rather than plan a fresh backend from scratch.
 
 It is not directly reusable by a C/Flex/Bison program as-is: the unit is Pascal, emits through `Output.WritLn`, and depends on shared mutable state such as `pushcnt`, `isword`, `isfloat`, `optype`, labels, and library-use tables. The practical reuse strategy is **behavioral and incremental porting**: preserve the proven instruction sequences and their tests, give the C backend explicit state/output interfaces, and port only the operations required by each frontend milestone. Do not mechanically translate the entire unit or introduce Pascal/C FFI as a prerequisite.
 
-| Existing capability in `CodeGen.pas` | How Phases 5–7 should use it |
+| Existing capability in `CodeGen.pas` | How Phase 5 should use it |
 |---|---|
 | Emission, labels, branches, comparisons, arithmetic and library selection | Define C backend API names and output expectations against these operations; port on demand with parity tests. |
 | Byte/word/float variables, arrays, pointers, locals and stack/call sequences | Use as the tested reference for backend milestones. Keep type/address classification in the compiler and pass explicit parameters/state to backend routines. |
 | Global data initialization and program startup/finalization | Preserve established assembler directives and output order; share golden ASM fixtures where semantics are unchanged. |
 | `Output` buffers and `outfile` routing | Replace implicit global routing with an explicit C output context/buffer; test switch buffering and library text separately. |
-| Existing optimizer transformations in `SecondScan` | Keep distinct from instruction-generation helpers; extract and test them in Phase 6 before porting the optimizer to C. |
+| Existing optimizer transformations in `SecondScan` | Keep distinct from instruction-generation helpers; extract and test them in Phase 5.2 before porting the optimizer to C. |
 
 The language direction remains a standard-C subset for SC61860 rather than a byte-for-byte reimplementation of littleC semantics. Existing programs may need minimal syntax changes, and standard-C behavior changes must be validated functionally rather than treated as regressions.
 
----
-# Phase 5 — Define the C frontend/backend contract
 
-Motivation: the current parser is a syntax-directed translator — it emits code during parsing. 
-To replace the frontend with a standard C frontend (Flex/Bison) we need an intermediate AST that completely decouples parsing from codegen.
-
-> Change of direction compared to littleC: the goal is NOT to replicate littleC's idiosyncrasies (non-standard operator precedence, `loop`, `switch` with custom semantics, etc.) but to converge toward a subset of the C89/C99 standard, within the limits of the SC61860 platform. Existing littleC programs may require minimal adjustments to compile with the new frontend.
-
-## Task 5.1: Define the target C subset
+### Task 5.1.1: Define the target C subset
 
 Write `Docs/sc61860_c_subset.md`: the specification of the language accepted by the new compiler.
 
@@ -713,7 +718,7 @@ __asm {
 #pragma nosave
 ```
 
-## Task 5.2: Define a typed AST (standard C)
+### Task 5.1.2: Define a typed AST (standard C)
 
 Create `ast.h` with nodes that reflect the C grammar, not littleC's grammar. Use a type representation that can express supported base types, qualifiers, pointers, arrays, and struct/union types; a single string-valued `type` field is insufficient for declarators. Retain source locations for diagnostics and tests.
 
@@ -753,7 +758,7 @@ Create `ast.h` with nodes that reflect the C grammar, not littleC's grammar. Use
 | `AddrOfExpr` | `operand` |
 | `DerefExpr` | `operand` |
 
-## Task 5.3: Document formal BNF grammar
+### Task 5.1.3: Document formal BNF grammar
 
 Write `Docs/sc61860_c_grammar.y` (directly in Bison-compatible format):
 
@@ -762,7 +767,7 @@ Write `Docs/sc61860_c_grammar.y` (directly in Bison-compatible format):
 - Add platform extensions (`__at`, `__xram`, `__asm`).
 - Use **standard C** operator precedence — not littleC's precedence.
 
-## Task 5.4: Define the backend compatibility contract
+### Task 5.1.4: Define the backend compatibility contract
 
 - Inventory the public `CodeGen.pas` operations by semantic group (emission/state, scalar and aggregate access, control flow, calls/stack, arithmetic/libraries, data/startup).
 - For each operation selected for the initial C compiler, record its inputs, state effects, emitted instruction sequence, and library requirements. Make `pushcnt`, label allocation, output destination, and library tracking explicit in the C backend context.
@@ -771,11 +776,11 @@ Write `Docs/sc61860_c_grammar.y` (directly in Bison-compatible format):
 - Verification: the contract is covered by named fixtures and the current Pascal compiler still builds and passes its applicable regression suite.
 
 ---
-# Phase 6 — Stabilize and test the backend boundary
+## Phase 5.2 — Stabilize and test the backend boundary
 
-Phase 6 is a bridge, not a second backend rewrite. Keep `CodeGen.pas` as the reference implementation; extract the existing optimizer from `SecondScan` into a separately testable Pascal unit, then use the same cases to validate the C port.
+Phase 5.2 is a bridge, not a second backend rewrite. Keep `CodeGen.pas` as the reference implementation; extract the existing optimizer from `SecondScan` into a separately testable Pascal unit, then use the same cases to validate the C port.
 
-## Task 6.1: Extract optimizations from `SecondScan` into `Backend.pas`
+### Task 5.2.1: Extract optimizations from `SecondScan` into `Backend.pas`
 
 The current optimizations in `SecondScan` (lines ~2800-3020 of `parser.pas`) are textual passes on temporary files:
 
@@ -789,27 +794,27 @@ The current optimizations in `SecondScan` (lines ~2800-3020 of `parser.pas`) are
 
 Extract into testable functions: `OptimizeDoubleEXAB()`, `OptimizeLIAtoLIB()`, `OptimizeRedundantPUSHPOP()`, `OptimizeIncDec()`.
 
-## Task 6.2: Unit tests for each peephole optimization pattern
+### Task 5.2.2: Unit tests for each peephole optimization pattern
 
 - Preserve each transformation's order and behavior; test both a matching pattern and nearby non-matching input.
 - Verification: `test.bat` → NO_DIFF on the Pascal compiler. Optimizer tests must also prove unrelated lines, labels, comments, and library sections remain unchanged.
 
 ---
-# Phase 7 — Incremental C compiler using the existing backend as reference
+## Phase 5.3 — Incremental C compiler using the existing backend as reference
 
-Prerequisites: target language and grammar defined (Tasks 5.1–5.3), backend compatibility contract and fixtures established (Task 5.4), and Pascal optimizer extracted/tested (Phase 6).
+Prerequisites: target language and grammar defined (Tasks 5.1.1–5.1.3), backend compatibility contract and fixtures established (Task 5.1.4), and Pascal optimizer extracted/tested (Phase 5.2).
 
 > From this phase the work is on a new C codebase (`Source/C/lcc2/`), parallel to the Pascal one. The Pascal compiler stays functional as reference for regression tests.
 
 The C backend is a staged port of relevant behavior in `CodeGen.pas`, not an independent redesign. First reproduce current behavior for a small subset; introduce standard-C semantic changes only in separate, explicitly tested milestones. A direct Pascal/C FFI is out of scope unless a later measured need justifies its build and runtime complexity.
 
-## Task 7.1: Project setup in C
+### Task 5.3.1: Project setup in C
 
 - Create `Source/C/lcc2/` with structure:
     ```
     lcc2/
     ├── Makefile          (or CMakeLists.txt)
-    ├── ast.h             (AST nodes from Task 5.2)
+    ├── ast.h             (AST nodes from Task 5.1.2)
     ├── ast.c             (node allocators/destructors)
     ├── lexer.l           (Flex)
     ├── parser.y          (Bison)
@@ -823,7 +828,7 @@ The C backend is a staged port of relevant behavior in `CodeGen.pas`, not an ind
 - Toolchain: `gcc` (MinGW on Windows), `flex`, `bison`
 - Build: `make` produces `lcc2.exe`
 
-## Task 7.2: Flex lexer (`lexer.l`)
+### Task 5.3.2: Flex lexer (`lexer.l`)
 
 C standard tokens + platform extensions:
 
@@ -852,7 +857,7 @@ IDENTIFIER       [a-zA-Z_][a-zA-Z0-9_]*
 
 Keywords that are not supported (`long`, `volatile`, `register`, etc.) are recognized by the lexer but generate a semantic error in the parser ("unsupported on this platform").
 
-## Task 7.3: Bison parser (`parser.y`)
+### Task 5.3.3: Bison parser (`parser.y`)
 
 Start from simplified C89 grammar. Semantic actions build the AST (`ast.h`).
 
@@ -890,9 +895,9 @@ attribute_specifier: __AT '(' constant_expression ')'
                    ;
 ```
 
-## Task 7.4: SC61860 backend — tree-walker (`codegen.c`)
+### Task 5.3.4: SC61860 backend — tree-walker (`codegen.c`)
 
-Port the proven backend operations incrementally from `CodeGen.pas` (currently a broad unit of roughly 2,400 lines including interface, helpers, and implementation). Start with the subset needed by the first AST milestones; do not translate every routine before the frontend can use it. Maintain an operation-parity checklist tied to Task 5.4 fixtures.
+Port the proven backend operations incrementally from `CodeGen.pas` (currently a broad unit of roughly 2,400 lines including interface, helpers, and implementation). Start with the subset needed by the first AST milestones; do not translate every routine before the frontend can use it. Maintain an operation-parity checklist tied to Task 5.1.4 fixtures.
 
 The C API should retain the semantic groupings of the Pascal API, but pass backend context explicitly instead of relying on unit globals:
 
@@ -929,18 +934,18 @@ The C compiler will additionally need behaviors not supplied by the current litt
 - `continue`: jump to the increment step in `for`, or to the condition in `while`
 - Standard `for`: step executed **after** the body (fix to littleC bug)
 
-## Task 7.5: Symbol table (`symtab.c`)
+### Task 5.3.5: Symbol table (`symtab.c`)
 
 - Nested scopes (scope stack: global → function → block) — required for standard C
 - Lookup with shadowing (local variable hides global)
 - `struct` tag namespace separate
 - Define storage/layout results consumed by the backend; reuse and document Pascal register/XRAM/stack allocation rules where valid, without coupling the new symbol table to code emission.
 
-## Task 7.6: Peephole optimizer (`peephole.c`)
+### Task 5.3.6: Peephole optimizer (`peephole.c`)
 
-Port and test the transformations extracted in Phase 6. Keep the transformation set and order aligned with `Backend.pas`; moving from text to structured instructions is an implementation detail, not a reason to change optimizer behavior.
+Port and test the transformations extracted in Phase 5.2. Keep the transformation set and order aligned with `Backend.pas`; moving from text to structured instructions is an implementation detail, not a reason to change optimizer behavior.
 
-## Task 7.7: Regression and compatibility tests
+### Task 5.3.7: Regression and compatibility tests
 
 Strategy with three levels:
 
@@ -960,13 +965,13 @@ Tests for new constructs should include:
 - `signed int` comparisons and arithmetic
 - Ternary operator `a > b ? a : b`
 
-## Task 7.8: Migrate library headers
+### Task 5.3.8: Migrate library headers
 
 - Rewrite `lcd.h`, `key.h`, `puts.h`, `int2str.h`, `string.h` in standard C syntax
 - Add minimal `<stdint.h>`: `typedef unsigned char uint8_t; typedef unsigned int uint16_t;`
 - Provide `compat.h` with convenience typedefs: `typedef unsigned char byte; typedef unsigned int word;`
 
-## Task 7.9: Port completion gates
+### Task 5.3.9: Port completion gates
 
 - The Pascal reference compiler remains buildable and its existing regression tests continue to pass.
 - Every backend capability required by a supported C construct has an operation-parity fixture or a new-construct functional test.
@@ -974,25 +979,25 @@ Tests for new constructs should include:
 - Do not retire or archive the Pascal compiler until the C compiler satisfies the final acceptance criteria and repository workflows have migrated.
 
 ---
-# Phase 8 — Advanced optimizations (post-porting)
+# Phase 6 — Advanced optimizations (post-porting)
 
 With an AST available, implement optimizations that the old syntax-directed translator could not do:
 
-- Task 8.1: Constant folding — evaluate constant expressions at compile time
-- Task 8.2: Dead code elimination — remove `if(0)` branches, unused functions
-- Task 8.3: Register allocation — smarter use of registers I, J, K, L, M, N
-- Task 8.4: Strength reduction — `x * 2` → `x << 1`, `x * 3` → `(x << 1) + x`
-- Task 8.5: Tail call optimization — useful given the very small stack (~80 bytes)
-- Task 8.6: Inline expansion — inline small functions (1–3 instructions)
+- Task 6.1: Constant folding — evaluate constant expressions at compile time
+- Task 6.2: Dead code elimination — remove `if(0)` branches, unused functions
+- Task 6.3: Register allocation — smarter use of registers I, J, K, L, M, N
+- Task 6.4: Strength reduction — `x * 2` → `x << 1`, `x * 3` → `(x << 1) + x`
+- Task 6.5: Tail call optimization — useful given the very small stack (~80 bytes)
+- Task 6.6: Inline expansion — inline small functions (1–3 instructions)
 
 ---
-# Phase 9 — Cleanup, docs and release
+# Phase 7 — Cleanup, docs and release
 
-- Task 9.1: Decide whether to retain the Pascal compiler as a reference or archive it only after the Phase 7.9 completion gates pass.
-- Task 9.2: Write the user manual for the new compiler (`Docs/sc61860cc_manual.md`).
-- Task 9.3: Update README with build instructions (`make` / `cmake`).
-- Task 9.4: CI scripts (GitHub Actions or similar) for automated regression tests.
-- Task 9.5: Publish release with prebuilt binaries (Windows, Linux).
+- Task 7.1: Decide whether to retain the Pascal compiler as a reference or archive it only after the Phase 5.3.9 completion gates pass.
+- Task 7.2: Write the user manual for the new compiler (`Docs/sc61860cc_manual.md`).
+- Task 7.3: Update README with build instructions (`make` / `cmake`).
+- Task 7.4: CI scripts (GitHub Actions or similar) for automated regression tests.
+- Task 7.5: Publish release with prebuilt binaries (Windows, Linux).
 - Verification: build + full test suite green on Windows and Linux.
 
 ---
@@ -1004,35 +1009,36 @@ Phase 0-3  ✅  Completate (modularizzazione Pascal)
 Phase 4    🔧  In corso (separazione sintassi ↔ emissione)
   └─ Task 4.1.14: completare la migrazione dell'emissione ASM residua da parser.pas
 
-Phase 5    📋  Specifica C + AST tipizzato + contratto di compatibilità CodeGen
-  ├─ 5.1: specifica sottoinsieme C per SC61860
-  ├─ 5.2: definire nodi AST (C standard)
-  ├─ 5.3: grammatica BNF formale (formato Bison)
-  └─ 5.4: inventario API CodeGen + fixture di parità
+Phase 5    📋  Migrazione a Flex/Bison
+  ├─ Phase 5.1: specifica C, AST tipizzato e contratto di compatibilità CodeGen
+  │   ├─ 5.1.1: specifica sottoinsieme C per SC61860
+  │   ├─ 5.1.2: definire nodi AST (C standard)
+  │   ├─ 5.1.3: grammatica BNF formale (formato Bison)
+  │   └─ 5.1.4: inventario API CodeGen + fixture di parità
+  ├─ Phase 5.2: estrazione/test peephole Pascal come ponte verso il porting C
+  │   ├─ 5.2.1: estrarre ottimizzazioni da SecondScan
+  │   └─ 5.2.2: test unitari per i pattern peephole
+  └─ Phase 5.3: nuovo compilatore Flex/Bison (C), backend portato a milestone
+      ├─ 5.3.1: setup progetto C
+      ├─ 5.3.2: lexer Flex
+      ├─ 5.3.3: parser Bison
+      ├─ 5.3.4: backend SC61860 tree-walker
+      ├─ 5.3.5: symbol table con scope annidati
+      ├─ 5.3.6: peephole optimizer
+      ├─ 5.3.7: regression test + test nuovi costrutti
+      ├─ 5.3.8: migrazione header libreria
+      └─ 5.3.9: gate di completamento porting
 
-Phase 6    📋  Estrazione/test peephole Pascal come ponte verso il porting C
-
-Phase 7    📋  Nuovo compilatore Flex/Bison (C), backend portato a milestone
-  ├─ 7.1: setup progetto C
-  ├─ 7.2: lexer Flex
-  ├─ 7.3: parser Bison
-  ├─ 7.4: backend SC61860 tree-walker
-  ├─ 7.5: symbol table con scope annidati
-  ├─ 7.6: peephole optimizer
-  ├─ 7.7: regression test + test nuovi costrutti
-  ├─ 7.8: migrazione header libreria
-  └─ 7.9: gate di completamento porting
-
-Phase 8    📋  Ottimizzazioni avanzate (AST-based)
-Phase 9    📋  Cleanup e rilascio
+Phase 6    📋  Ottimizzazioni avanzate (AST-based)
+Phase 7    📋  Cleanup e rilascio
 ```
 
 **Dipendenze critiche:**
 ```
-Task 4.1.14 ──→ Phase 5 ──→ Phase 6 ──→ Phase 7
-                │                        │
-                └── 5.3 (BNF) ──────────→ 7.3 (Bison)
-                └── 5.2 (AST) + 5.4 (CodeGen contract/fixtures) ──→ 7.4 (backend port)
+Task 4.1.14 ──→ Phase 5.1 ──→ Phase 5.2 ──→ Phase 5.3 ──→ Phase 6 ──→ Phase 7
+                │                            │
+                └── 5.1.3 (BNF) ─────────────→ 5.3.3 (Bison)
+                └── 5.1.2 (AST) + 5.1.4 (CodeGen contract/fixtures) ──→ 5.3.4 (backend port)
 ```
 
 ---
@@ -1057,7 +1063,7 @@ Task 4.1.14 ──→ Phase 5 ──→ Phase 6 ──→ Phase 7
 -   Completare Phase 4 (nessuna emissione ASM sintattica residua nel parser) è il **prerequisito critico** per il nuovo frontend. Output serializzato e diagnostica restano fuori da tale obiettivo.
 -   Prima del codice C, catalogare l'API effettiva di `CodeGen.pas` e scegliere fixture rappresentative; non serve ricostruire un AST Pascal.
 -   Portare il backend C incrementalmente seguendo i costrutti implementati, usando il compilatore Pascal come oracolo e le stesse fixture per verificare la parità.
--   Per Phase 7, partire da un **micro-compilatore C esistente** come reference architetturale:
+-   Per Phase 5.3, partire da un **micro-compilatore C esistente** come reference architetturale:
     -   **chibicc** (Rui Ueyama): ~5000 righe, ottima documentazione, C11 quasi completo, molto didattico.
     -   **8cc** (stesso autore): predecessore di chibicc, più piccolo.
     -   **lcc** (Fraser & Hanson): compilatore C accademico con backend retargetable — il più vicino concettualmente.
@@ -1069,13 +1075,13 @@ Task 4.1.14 ──→ Phase 5 ──→ Phase 6 ──→ Phase 7
 
 # Quality checklist (Quality Gates)
 
-**Fasi 4-6 (Pascal):**
+**Fasi 4-5.2 (Pascal):**
 -   Build: FPC compila senza errori.
 -   Regression: `test.bat` → NO_DIFF su tutte le demo.
 -   Nessuna emissione ASM diretta nel parser (da Phase 5 in poi).
 -   Le trasformazioni peephole hanno test positivi e negativi, e preservano output non coinvolto.
 
-**Fasi 7+ (C):**
+**Fasi 5.3+ (C):**
 -   Build: `make` compila senza errori né warning (`-Wall -Wextra`).
 -   Test di parità: le operazioni portate da `CodeGen.pas` conservano sequenza e formato ASM sui fixture equivalenti.
 -   Test funzionali: ogni demo supportata produce ASM assemblabile con `pasm` e funzionalmente corretto.
