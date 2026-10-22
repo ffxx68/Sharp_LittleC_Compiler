@@ -839,13 +839,64 @@ For each ported operation:
 - Test stack-depth and library requirements as well as output text.
 - Keep AST-level concerns (type checking, symbol lookup, layout) outside the instruction emitter; pass their results to backend operations as storage/address inputs.
 
-Initial slice implemented in `Source/C/lcc2/codegen.c`: explicit output,
-label, and stack-depth context; byte/word constant loads and stack primitives;
-byte/word add/sub operation sequences; and a validating tree-walker for
-parameterless functions returning constants or `+`/`-` expressions. Unsupported
-translation-unit constructs are rejected before assembly emission. Scalar
-symbol access, branches/comparisons, calls, startup/finalization, and broader
-AST coverage remain follow-up work for this task.
+#### Task 5.3.4.1 ✅: Initial emission and constant-expression slice
+
+Implemented in `Source/C/lcc2/codegen.c`: explicit output, label, and
+stack-depth context; byte/word constant loads and stack primitives; byte/word
+add/sub operation sequences; and a validating tree-walker for parameterless
+functions returning constants or `+`/`-` expressions. Unsupported
+translation-unit constructs are rejected before assembly emission.
+`tests/test_codegen.c` checks expected instruction text, stack accounting,
+labels, and rejection of unsupported constructs. This slice does not provide
+complete-program output or command-line source compilation.
+
+#### Task 5.3.4.2: Scalar storage access
+
+Port byte/word loads and stores for register, local-stack, and XRAM storage.
+Consume explicit symbol/type/layout results from Task 5.3.5 rather than
+performing allocation or symbol lookup in the instruction emitter.
+Cover assignments and scalar expressions in the tree-walker.
+
+#### Task 5.3.4.3: Comparisons, branches, and structured control flow
+
+Port equality and unsigned relational operations and branch helpers.
+Extend the tree-walker with conditionals and loops, including correct
+`break`, `continue`, and standard-C `for` step ordering.
+
+#### Task 5.3.4.4: Functions, calls, and stack frames
+
+Add parameters, local storage, calls, return-value handling, and stack
+allocation/restoration. Verify cleanup thresholds, nested calls, and
+byte-accurate stack balance at function boundaries.
+
+#### Task 5.3.4.5: Program startup, data, and output integration
+
+Port startup and global initialization, preserve separate code/data/library
+output ordering, and wire source-to-ASM compilation into the command line.
+Produce complete assembly suitable for the existing assembler; binary
+generation remains the assembler's responsibility.
+
+#### Task 5.3.4.6: Arrays, pointers, and aggregate access
+
+Port array and pointer operations by storage class and element width.
+Use compiler-computed aggregate offsets for member access; keep type checking
+and layout outside the instruction emitter.
+
+#### Task 5.3.4.7: Remaining arithmetic and standard-C extensions
+
+Port remaining arithmetic/library operations and floating-point support as
+their AST constructs become supported. Implement signed operations and
+standard-C switch semantics separately from legacy unsigned/switch behavior.
+Track and deduplicate required runtime libraries in the context.
+
+#### Task 5.3.4.8: Operation-parity checklist and completion gates
+
+Maintain a checklist against the Task 5.1.4 fixture inventory, recording
+ported and deferred operations explicitly. Compare equivalent output with
+the Pascal reference and functionally validate intentional semantic changes.
+Cover library requirements as well as output text and stack effects.
+Task 5.3.4 remains incomplete until the required slices and their validation
+gates are satisfied; only Task 5.3.4.1 is currently marked complete.
 
 The C compiler will additionally need behaviors not supplied by the current littleC backend:
 - `signed` arithmetic: need `SBB` (subtract with borrow) and signed comparisons
