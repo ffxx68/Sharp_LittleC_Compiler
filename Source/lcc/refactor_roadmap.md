@@ -439,39 +439,36 @@ Checklist (short verifiable steps; full `test.bat` after each step: NO_DIFF):
    - Normal startup and initialization output for `Array` and `Float` match the 6.1 baseline. With `#nosave`, both match the reference compiler, retain `.ORG` and `CALL main`, and omit the SREG block.
    - Verification: `test.bat` in the isolated copy — all 10 demos NO_DIFF.
 
-7. Implement `EmitRawAsmBlock` for `#asm...#endasm` as exact pass-through.
+7. ✅ Implement `EmitRawAsmBlock` in `CodeGen` and route `#asm...#endasm` through it.
+
+   - In `Parser`, collect the block body through `#endasm` and pass it to CodeGen; do not emit its lines directly with `writln`.
+   - Preserve the current generated-assembly contract: omit the delimiters, retain blank body lines and the existing tab/line formatting, and keep `Output`'s `outfile`/`addasm` routing unchanged. “Exact pass-through” means no changes to the assembly currently generated, not preservation of source indentation that the parser already trims.
+   - Keep the blank line emitted after the enclosing statement unchanged.
+   - Added `CodeGen.EmitRawAsmBlock`; `Parser.Block` now gathers each body line through `#endasm` and delegates emission without changing the existing whitespace/output routing.
+   - Verification: build succeeded; `Float`, `bounce`, `bug2/main1.c`, and `bug2/main2.c` all match the reference compiler (`NO DIFF`), including blocks containing blank lines.
 
 8. Remove all remaining ASM emission in `parser.pas`, replacing with API calls and `EmitComment` / `EmitBlankLine` where appropriate.
 
+
+
 ---
 
-## Task 4.3: Complete the migration of the ~385 residual `writln` in parser.pas
+## Task 4.2: Complete the migration of any residual `writln` in parser.pas
 
-**Current status:** ~385 active `writln` in `parser.pas` + 8 in `CodeGen.pas`.
-These are concentrated in:
--   `StoreVariable` (~80 writtn): store byte/word/float for register, local, xram, array
--   `LoadVariable` (~60 writln): loading variables
--   `Assignment` (~40 writln): optimized increment/decrement (INC*/DEC*)
--   Control flow: `DoIf`, `DoWhile`, `DoFor`, `DoLoop`, `DoDoWhile`, `Switch`, `DoReturn`, `DoBreak`, `DoGoto`, `DoLabel` (~60 writln)
--   `Expression` (~5 writln): shift operator comments
--   `ProcCall`, `Block`, `SecondScan` (~140 writln): procedure call, prologue/epilogue, final output
-
-**Goal:** eliminate direct `writln` in `parser.pas`, using only `CodeGen.EmitInst`/`EmitComment`/`PostLabel` and high-level CodeGen functions.
-
-**Prerequisite for porting**: as long as the parser emits inline ASM, it's not possible to separate the frontend from the backend.
+**Goal:** eliminate direct `writln` in `parser.pas`, using only `CodeGen.Emit...` and high-level CodeGen functions.
 
 -   Verification: `test.bat` → NO_DIFF
 
 
 
 ---
-## Task 4.4: Fixing compiler issues
+## Task 4.3: Fixing compiler issues
 
 This task addresses preexisting compiler bugs discovered during refactoring.
 
 *Possibly not required if embracing the Flex/Bison rewrite (Phases 5 on)*
 
-**Step 4.4.1 — Wrong array init code**  ✅
+**Step 4.3.1 — Wrong array init code**  ✅
 
 **Problem description:**
 
@@ -505,7 +502,7 @@ fixed to
 if (typ = 'byte') or (typ = 'char') or (typ = 'float') then
 ```
 
-**Step 4.4.2 — Fix word array XRAM expression parsing**
+**Step 4.3.2 — Fix word array XRAM expression parsing**
 
 **Problem description:**
 
@@ -586,7 +583,7 @@ EXAB
 ```
 
 
-**Step 4.4.3 — Complete fix to "Possible Stack corruption!" warning**
+**Step 4.3.3 — Complete fix to "Possible Stack corruption!" warning**
 
 **Problem description:**
 
@@ -600,6 +597,7 @@ The warning appears during compilation of the Array demo, for example.
 It also appears in `Demos/ProcCallStack/main.c` for the float-argument call `consumeFloat(1.25)`. 
 Both the reference and refactored compilers report `main: Possible Stack corruption!` and emit identical assembly, 
 so this case remains a compiler issue rather than a regression from the `ProcCall` refactor.
+
 
 ---
 # Phase 5 — Introduction of AST and frontend/backend separation

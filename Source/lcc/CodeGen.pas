@@ -25,6 +25,7 @@ procedure EmitPop(const comment: string); overload;
 
 // Raw asm passthrough for #asm blocks
 procedure EmitRawAsmLine(const s: string);
+procedure EmitRawAsmBlock(const block: string);
 procedure EmitProgramStartup(const org: string; saveRegisters: boolean);
 
 // Finalize current asm buffers and write to output file
@@ -255,6 +256,30 @@ procedure EmitRawAsmLine(const s: string);
 begin
   // forward raw asm line to Output unit; Output.writeln will respect outfile/addasm
   WritLn(s);
+end;
+
+procedure EmitRawAsmBlock(const block: string);
+var
+  i: integer;
+  line: string;
+begin
+  line := '';
+  i := 1;
+  while i <= Length(block) do
+  begin
+    if block[i] in [#10, #13] then
+    begin
+      EmitRawAsmLine(#9 + line);
+      line := '';
+      if (block[i] = #13) and (i < Length(block)) and (block[i + 1] = #10) then
+        Inc(i);
+    end
+    else
+      line := line + block[i];
+    Inc(i);
+  end;
+  if line <> '' then
+    EmitRawAsmLine(#9 + line);
 end;
 
 procedure EmitProgramStartup(const org: string; saveRegisters: boolean);

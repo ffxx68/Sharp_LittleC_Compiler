@@ -2030,7 +2030,7 @@ end;
 { Parse and Translate a Block }
 
 procedure Block;
-var Name, name2: string;
+var Name, name2, asmBlock: string;
 begin
     repeat
 
@@ -2079,12 +2079,14 @@ begin
                 DoReturn
           else if copy(tok, 1, 4) = '#asm' then
           begin
+                asmBlock := '';
                 tok := ExtrCust(dummy, #13);
                 while copy(trim(tok), 1, 7) <> '#endasm' do
                 begin
-                        writln( #9+tok);
+                        asmBlock := asmBlock + tok + #13;
                         tok := ExtrCust(dummy, #13);
                 end;
+                EmitRawAsmBlock(asmBlock);
           end
           else if pos('=', tok) > 0 then
                 Assignment
