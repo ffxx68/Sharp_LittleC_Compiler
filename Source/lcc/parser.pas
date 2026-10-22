@@ -1235,9 +1235,9 @@ begin
         while i < length(Tok) do
         begin
                 if copy(Tok,i,2) = '<<' then
-                        begin writln ('; << ') ; delete(tok,i,1); tok[i]:=SL; end
+                        begin EmitComment('<<'); delete(tok,i,1); tok[i]:=SL; end
                 else if copy(Tok,i,2) = '>>' then
-                        begin writln ('; >> ') ; delete(tok,i,1); tok[i]:=SR; end
+                        begin EmitComment('>>'); delete(tok,i,1); tok[i]:=SR; end
                 else if copy(Tok,i,2) = '++' then
                         begin delete(tok,i,1); tok[i]:=PP; end
                 else if copy(Tok,i,2) = '--' then
@@ -1317,7 +1317,7 @@ begin
                         if findvar(name)
                         and ((varlist[varfound].typ = 'char') or (varlist[varfound].typ = 'byte')) then
                         begin
-                                if look = '+' then writln(#9'; '+name+'++') else writln(#9'; '+name+'--');
+                                if look = '+' then EmitComment(name+'++') else EmitComment(name+'--');
                                 if ( not(varlist[varfound].Local)
                                 and ( varlist[varfound].address<12 )
                                 and ( varlist[varfound].address>=0 ) ) then
@@ -2094,7 +2094,7 @@ begin
                 ProcCall
           else
                 Assignment;
-          writln('');
+          EmitBlankLine;
         end;
         dummy := trim(dummy);
     until (trim(dummy) = '') or (trim(dummy)[1] = '}');

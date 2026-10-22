@@ -447,9 +447,32 @@ Checklist (short verifiable steps; full `test.bat` after each step: NO_DIFF):
    - Added `CodeGen.EmitRawAsmBlock`; `Parser.Block` now gathers each body line through `#endasm` and delegates emission without changing the existing whitespace/output routing.
    - Verification: build succeeded; `Float`, `bounce`, `bug2/main1.c`, and `bug2/main2.c` all match the reference compiler (`NO DIFF`), including blocks containing blank lines.
 
-8. Remove all remaining ASM emission in `parser.pas`, replacing with API calls and `EmitComment` / `EmitBlankLine` where appropriate.
+8. Remove remaining ASM emission from `parser.pas`, migrating each group to `CodeGen` APIs while preserving output ordering, formatting, and `outfile` routing.
 
+   Run `test.bat` after each substep and require all 10 demos to report NO DIFF.
 
+   8.1. ✅ Migrate the simple residual emissions: shift and increment/decrement comments in `Expression` / `Assignment`, and the trailing blank line in `Block`.
+   - Use `EmitComment` and `EmitBlankLine`; preserve the exact comment text and placement.
+   - `Expression` and `Assignment` now route shift/increment comments through `EmitComment`; `Block` routes its trailing blank line through `EmitBlankLine`.
+   - Verification: build and `test.bat` — all 10 demos NO DIFF.
+
+   8.2. Migrate pointer dereference, pointer store, and address-of instruction sequences in `Factor` and `Assignment`.
+   - Reuse existing CodeGen pointer/address helpers where applicable; add focused APIs for any remaining instruction sequences rather than emitting ASM from Parser.
+   - Verify register and XRAM pointers, byte and word pointees, and address-of expressions; add a focused fixture if the demos do not cover a case.
+
+   8.3. Migrate `DoSwitch`.
+   - Preserve the current `outfile` toggling and the ordering/routing of case labels, case bodies, `RTN`, and `ENDCASE`.
+
+   8.4. Migrate conditional and transfer statements: `DoIf`, `DoGoto`, `DoLabel`, `DoBreak`, and `DoReturn`.
+   - Use the existing branch and label APIs, plus `EmitInst`, `EmitComment`, and `EmitBlankLine`; preserve current label placement and return formatting.
+
+   8.5. Migrate loop statements: `DoLoop`, `DoWhile`, `DoFor`, and `DoDoWhile`.
+   - Preserve loop labels, branch instructions, break targets, comments, and blank-line placement.
+
+   8.6. Migrate procedure-related ASM emission in `SecondScan`.
+   - Move procedure labels/comments, `RTN` instructions, skipped-procedure comments, and associated blank lines to CodeGen; keep missing-`main` and stack-corruption diagnostics in Parser.
+
+   - Scope: diagnostic/debug `writeln`, file serialization, and commented-out legacy code are not ASM emission and are not part of this step.
 
 ---
 
