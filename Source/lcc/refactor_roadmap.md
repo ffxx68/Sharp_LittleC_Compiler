@@ -228,7 +228,7 @@ For each component I list responsibilities, minimal API, dependencies and priori
 ---
 # Phase 4 — Reduce Parser: separate syntax from emission
 
-##  Task 4.1: Create high-level CodeGen functions to replace repetitive EmitInst blocks in parser.pas (~341 calls)
+##  Task 4.1: ✅ Create high-level CodeGen functions to replace repetitive EmitInst blocks in parser.pas (~341 calls)
 
 ```
 **Step 4.1.1 — Store functions for global variables in registers** ✅ Create in `CodeGen.pas`:
@@ -472,11 +472,15 @@ Checklist (short verifiable steps; full `test.bat` after each step: NO_DIFF):
    - These statements now delegate instruction, comment, blank-line, and user-label emission to CodeGen while retaining the existing branch targets and output formatting.
    - Verification: build succeeded; `test.bat` in an isolated copy — all 13 demos NO DIFF.
 
-   8.5. Migrate loop statements: `DoLoop`, `DoWhile`, `DoFor`, and `DoDoWhile`.
+   8.5. ✅ Migrate loop statements: `DoLoop`, `DoWhile`, `DoFor`, and `DoDoWhile`.
    - Preserve loop labels, branch instructions, break targets, comments, and blank-line placement.
+   - Loop comments, blank lines, and back-edge instructions now go through CodeGen; existing labels, branch targets, and break behavior are unchanged.
+   - Verification: build succeeded; `test.bat` in an isolated copy — all 13 demos NO DIFF.
 
-   8.6. Migrate procedure-related ASM emission in `SecondScan`.
+   8.6. ✅ Migrate procedure-related ASM emission in `SecondScan`.
    - Move procedure labels/comments, `RTN` instructions, skipped-procedure comments, and associated blank lines to CodeGen; keep missing-`main` and stack-corruption diagnostics in Parser.
+   - `SecondScan` now delegates procedure labels, skipped-procedure comments, `RTN`, and blank lines to CodeGen; diagnostics remain in Parser.
+   - Verification: build succeeded; `test.bat` in an isolated copy — all 13 demos NO DIFF.
 
    - Scope: diagnostic/debug `writeln`, file serialization, and commented-out legacy code are not ASM emission and are not part of this step.
 

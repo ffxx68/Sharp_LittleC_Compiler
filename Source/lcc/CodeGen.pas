@@ -43,6 +43,8 @@ procedure FinalizeAndWrite(const filename: string);
 function NewLabel: string;
 procedure PostLabel(L: string);
 procedure PostUserLabel(const L: string);
+procedure PostProcedureLabel(const name: string);
+procedure EmitSkippedProcedureComment(const name: string);
 
 // Register load helpers
 procedure load_x(s: string);
@@ -393,6 +395,16 @@ end;
 procedure PostUserLabel(const L: string);
 begin
    WritLn('  '+L+':'#9'; User label');
+end;
+
+procedure PostProcedureLabel(const name: string);
+begin
+   WritLn(name+':'#9'; Procedure');
+end;
+
+procedure EmitSkippedProcedureComment(const name: string);
+begin
+   WritLn('; Skipping procedure '+name+' (never used)');
 end;
 
 {--------------------------------------------------------------}

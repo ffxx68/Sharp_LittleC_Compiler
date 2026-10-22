@@ -1616,8 +1616,8 @@ begin
         L1 := NewLabel;
         L2 := NewLabel;
         ExitLabel := L2;
-        writln( #9'; Loop');
-        writln('');
+        EmitComment('Loop');
+        EmitBlankLine;
         delete(tok, 1, 6); tok := trim(tok); //delete(tok, length(tok), 1);
 	      Rd(Look, Tok); tok := trim(tok);
         Expression;
@@ -1630,9 +1630,9 @@ begin
                 inc(level);
         end;
         Block;
-        writln( #9'LOOP'#9+L1);
+        EmitInst('LOOP', L1);
         PostLabel(L2);
-        writln( #9'; End of loop');
+        EmitComment('End of loop');
 end;
 {-------------------------------------------------------------}
 
@@ -1647,22 +1647,22 @@ begin
         L1 := NewLabel;
         L2 := NewLabel;
         ExitLabel := L2;
-        writln( #9'; While');
-        writln('');
+        EmitComment('While');
+        EmitBlankLine;
         PostLabel(L1);
         delete(Tok, 1, 7); //delete(Tok, length(Tok), 1);
         BoolExpression;
         BranchAbsFalse(L2); // potentially large jump
-        writln( #9'; While expression = true');
+        EmitComment('While expression = true');
         if tok <> '' then
         begin
                 dummy := tok + ';}' + dummy;
                 inc(level);
         end;
         Block;
-        writln( #9'RJMP'#9+L1);
+        EmitInst('RJMP', L1);
         PostLabel(L2);
-        writln( #9'; End of while');
+        EmitComment('End of while');
 end;
 {-------------------------------------------------------------}
 
@@ -1675,7 +1675,7 @@ var L1, L2, temp: string;
 begin
         InnerLoop := 'for';
         delete(tok, 1, 5);
-        writln( #9'; For loop');
+        EmitComment('For loop');
         Assignment;
         L1 := NewLabel;
         L2 := NewLabel;
@@ -1713,9 +1713,9 @@ begin
         end;
 
         block;
-        writln( #9'RJMP'#9+L1);
+        EmitInst('RJMP', L1);
         PostLabel(L2);
-        writln( #9'; End of for');
+        EmitComment('End of for');
 end;
 {-------------------------------------------------------------}
 
@@ -1747,8 +1747,8 @@ begin
         L1 := NewLabel;
         L2 := NewLabel;
         ExitLabel := L2;
-        writln( #9'; Do..while');
-        writln('');
+        EmitComment('Do..while');
+        EmitBlankLine;
         PostLabel(L1);
 //        GetToken(MODESTR, dummy);
         extrword(tok); tok := trim(tok);
@@ -1762,10 +1762,10 @@ begin
         delete(Tok, 1, 7); delete(Tok, length(Tok), 1);
         BoolExpression;
         BranchFalse(L2);
-        writln( #9'; While expression = true');
-        writln( #9'RJMP'#9+L1);
+        EmitComment('While expression = true');
+        EmitInst('RJMP', L1);
         PostLabel(L2);
-        writln( #9'; End of do..while');
+        EmitComment('End of do..while');
 end;
 {-------------------------------------------------------------}
 
@@ -2243,8 +2243,8 @@ begin
                    if true // proclist[i].iscalled
                    then
                    begin
-                        writln('');
-                        writln( proclist[i].procname+':'#9'; Procedure');
+                        EmitBlankLine;
+                        PostProcedureLabel(proclist[i].procname);
                         dummy := proclist[i].proccode;
                         Level := 1;
                         currproc := i;
@@ -2254,10 +2254,10 @@ begin
                            writeln(proclist[i].procname+': Possible Stack corruption!');
                         removelocvars(proclist[i].procname);
                         if proclist[i].procname = 'main' then
-                           writln( #9'RTN'#9'; end of main');
-                        writln('');
+                           EmitInst('RTN', #9+'; end of main');
+                        EmitBlankLine;
                    end else
-                        writln('; Skipping procedure '+ proclist[i].procname +' (never used)');
+                        EmitSkippedProcedureComment(proclist[i].procname);
 
                    if proclist[i].procname = 'main' then
                       mainfound := true;
