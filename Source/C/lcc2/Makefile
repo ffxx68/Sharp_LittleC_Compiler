@@ -4,9 +4,10 @@ BISON ?= bison
 CFLAGS ?= -Wall -Wextra -Werror -O2 -std=c99
 BUILD_DIR := build
 TARGET := lcc2.exe
-OBJECTS := $(BUILD_DIR)/main.o $(BUILD_DIR)/ast.o $(BUILD_DIR)/lexer.o
+OBJECTS := $(BUILD_DIR)/main.o $(BUILD_DIR)/ast.o $(BUILD_DIR)/parser.o $(BUILD_DIR)/lexer.o
 TEST_TARGET := $(BUILD_DIR)/test_ast.exe
 LEXER_TEST_TARGET := $(BUILD_DIR)/test_lexer.exe
+PARSER_TEST_TARGET := $(BUILD_DIR)/test_parser.exe
 
 .PHONY: all check-tools test clean
 
@@ -26,8 +27,17 @@ $(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
 $(BUILD_DIR)/lexer.c: lexer.l lexer_tokens.h | $(BUILD_DIR)
 	$(FLEX) -o $@ lexer.l
 
-$(BUILD_DIR)/lexer.o: $(BUILD_DIR)/lexer.c lexer_tokens.h
-	$(CC) $(CFLAGS) -I. -c -o $@ $<
+$(BUILD_DIR)/parser.c: parser.y parser.h ast.h lexer_tokens.h | $(BUILD_DIR)
+	$(BISON) -Wall -Werror --defines=$(BUILD_DIR)/parser_tokens.h -o $@ parser.y
+
+$(BUILD_DIR)/parser_tokens.h: $(BUILD_DIR)/parser.c
+	@test -f $@ || $(BISON) -Wall -Werror --defines=$@ -o $(BUILD_DIR)/parser.c parser.y
+
+$(BUILD_DIR)/parser.o: $(BUILD_DIR)/parser.c $(BUILD_DIR)/parser_tokens.h
+	$(CC) $(CFLAGS) -I$(BUILD_DIR) -I. -c -o $@ $<
+
+$(BUILD_DIR)/lexer.o: $(BUILD_DIR)/lexer.c $(BUILD_DIR)/parser_tokens.h lexer_tokens.h
+	$(CC) $(CFLAGS) -I$(BUILD_DIR) -I. -c -o $@ $<
 
 $(BUILD_DIR):
 	mkdir -p $@
@@ -35,12 +45,16 @@ $(BUILD_DIR):
 $(TEST_TARGET): tests/test_ast.c ast.c ast.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -I. -o $@ tests/test_ast.c ast.c
 
-$(LEXER_TEST_TARGET): tests/test_lexer.c $(BUILD_DIR)/lexer.c lexer_tokens.h | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -I. -o $@ tests/test_lexer.c $(BUILD_DIR)/lexer.c
+$(LEXER_TEST_TARGET): tests/test_lexer.c $(BUILD_DIR)/parser.c $(BUILD_DIR)/lexer.c lexer_tokens.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -I$(BUILD_DIR) -I. -o $@ tests/test_lexer.c $(BUILD_DIR)/parser.c $(BUILD_DIR)/lexer.c ast.c
 
-test: all $(TEST_TARGET) $(LEXER_TEST_TARGET)
+$(PARSER_TEST_TARGET): tests/test_parser.c $(BUILD_DIR)/parser.c $(BUILD_DIR)/lexer.c ast.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -I$(BUILD_DIR) -I. -o $@ tests/test_parser.c $(BUILD_DIR)/parser.c $(BUILD_DIR)/lexer.c ast.c
+
+test: all $(TEST_TARGET) $(LEXER_TEST_TARGET) $(PARSER_TEST_TARGET)
 	./$(TEST_TARGET)
 	./$(LEXER_TEST_TARGET)
+	./$(PARSER_TEST_TARGET)
 	./$(TARGET) --help
 	./$(TARGET) --version
 

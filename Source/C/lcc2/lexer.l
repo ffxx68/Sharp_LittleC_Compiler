@@ -2,17 +2,21 @@
 
 %{
 #include "lexer_tokens.h"
+#include "parser_tokens.h"
 
+#include <stddef.h>
 #include <stdio.h>
 
 static unsigned long current_line = 1;
 static unsigned long current_column = 1;
 static void record_location(const char *text, int length);
+int lcc2_parser_is_typedef_name(const char *name, size_t length);
 
 unsigned long lcc2_token_line;
 unsigned long lcc2_token_column;
 
 #define YY_USER_ACTION record_location(yytext, yyleng);
+#define TEXT_TOKEN(token) do { yylval.text = yytext; return (token); } while (0)
 %}
 
 %x COMMENT ASM_BODY_WAIT ASM_BODY
@@ -97,16 +101,22 @@ ESCAPE      \\([\\'"?abfnrtv]|[0-7]{1,3}|x{HEX_DIGIT}+)
 "^="                           { return LCC2_TOK_XOR_ASSIGN; }
 "|="                           { return LCC2_TOK_OR_ASSIGN; }
 
-0[xX]{HEX_DIGIT}+{INT_SUFFIX}? { return LCC2_TOK_INTEGER_CONSTANT; }
-0[bB][01]+{INT_SUFFIX}?        { return LCC2_TOK_INTEGER_CONSTANT; }
-0[0-7]*{INT_SUFFIX}?           { return LCC2_TOK_INTEGER_CONSTANT; }
-[1-9]{DIGIT}*{INT_SUFFIX}?      { return LCC2_TOK_INTEGER_CONSTANT; }
-({DIGIT}+"."{DIGIT}*|"."{DIGIT}+){EXPONENT}?[fFlL]? { return LCC2_TOK_FLOATING_CONSTANT; }
-{DIGIT}+{EXPONENT}[fFlL]?       { return LCC2_TOK_FLOATING_CONSTANT; }
-\'([^\'\\\r\n]|{ESCAPE})+\'     { return LCC2_TOK_CHARACTER_CONSTANT; }
-\"([^\"\\\r\n]|{ESCAPE})*\"    { return LCC2_TOK_STRING_LITERAL; }
+0[xX]{HEX_DIGIT}+{INT_SUFFIX}? { TEXT_TOKEN(LCC2_TOK_INTEGER_CONSTANT); }
+0[bB][01]+{INT_SUFFIX}?        { TEXT_TOKEN(LCC2_TOK_INTEGER_CONSTANT); }
+0[0-7]*{INT_SUFFIX}?           { TEXT_TOKEN(LCC2_TOK_INTEGER_CONSTANT); }
+[1-9]{DIGIT}*{INT_SUFFIX}?      { TEXT_TOKEN(LCC2_TOK_INTEGER_CONSTANT); }
+({DIGIT}+"."{DIGIT}*|"."{DIGIT}+){EXPONENT}?[fFlL]? { TEXT_TOKEN(LCC2_TOK_FLOATING_CONSTANT); }
+{DIGIT}+{EXPONENT}[fFlL]?       { TEXT_TOKEN(LCC2_TOK_FLOATING_CONSTANT); }
+\'([^\'\\\r\n]|{ESCAPE})+\'     { TEXT_TOKEN(LCC2_TOK_CHARACTER_CONSTANT); }
+\"([^\"\\\r\n]|{ESCAPE})*\"    { TEXT_TOKEN(LCC2_TOK_STRING_LITERAL); }
 
-{ID_START}{ID_CONT}*            { return LCC2_TOK_IDENTIFIER; }
+{ID_START}{ID_CONT}*            {
+                                    if (lcc2_parser_is_typedef_name(yytext,
+                                                                    (size_t)yyleng)) {
+                                        TEXT_TOKEN(LCC2_TOK_TYPEDEF_NAME);
+                                    }
+                                    TEXT_TOKEN(LCC2_TOK_IDENTIFIER);
+                                }
 
 <ASM_BODY_WAIT>[ \t\v\f\r\n]+  ;
 <ASM_BODY_WAIT>"{"              { BEGIN(ASM_BODY); return '{'; }
@@ -118,7 +128,7 @@ ESCAPE      \\([\\'"?abfnrtv]|[0-7]{1,3}|x{HEX_DIGIT}+)
                                     return LCC2_TOK_LEX_ERROR;
                                 }
 <ASM_BODY>"}"                   { BEGIN(INITIAL); return '}'; }
-<ASM_BODY>[^}]+                 { return LCC2_TOK_ASM_TEXT; }
+<ASM_BODY>[^}]+                 { TEXT_TOKEN(LCC2_TOK_ASM_TEXT); }
 
 "{"|"}"|"("|")"|"["|"]"|";"|","|"."|"?"|":"|"~"|"!"|"+"|"-"|"*"|"/"|"%"|"<"|"="|"&"|"^"|"|" { return (unsigned char)yytext[0]; }
 
