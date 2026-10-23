@@ -2,6 +2,7 @@
 #define LCC2_CODEGEN_H
 
 #include "ast.h"
+#include "symtab.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -29,6 +30,8 @@ int codegen_pop_add(CodegenContext *ctx, size_t width);
 int codegen_pop_sub(CodegenContext *ctx, size_t width);
 int codegen_load_constant(CodegenContext *ctx, size_t width,
                           unsigned long value);
+int codegen_load_scalar(CodegenContext *ctx, ScalarLocation location);
+int codegen_store_scalar(CodegenContext *ctx, ScalarLocation location);
 
 int codegen_translation_unit(CodegenContext *ctx, AstTranslationUnit *tu);
 int codegen_program(CodegenContext *ctx, AstTranslationUnit *tu);

@@ -1,0 +1,42 @@
+#ifndef LCC2_SYMTAB_H
+#define LCC2_SYMTAB_H
+
+#include "ast.h"
+
+typedef enum ScalarStorage {
+    SCALAR_REGISTER,
+    SCALAR_LOCAL,
+    SCALAR_XRAM
+} ScalarStorage;
+
+typedef struct ScalarLocation {
+    ScalarStorage storage;
+    size_t width;
+    int address; /* Absolute address, or legacy local offset relative to the frame. */
+    unsigned char is_unsigned;
+} ScalarLocation;
+
+typedef struct ScalarSymbol {
+    const AstVarDecl *declaration;
+    const AstFunctionDecl *function;
+    ScalarLocation location;
+    size_t scope;
+    unsigned char active;
+} ScalarSymbol;
+
+typedef struct ScalarSymbols ScalarSymbols;
+
+ScalarSymbols *symtab_create(void);
+void symtab_destroy(ScalarSymbols *table);
+int symtab_resolve(ScalarSymbols *table, AstTranslationUnit *unit);
+const char *symtab_error(const ScalarSymbols *table);
+const ScalarSymbol *symtab_identifier(const ScalarSymbols *table,
+                                      const AstExpr *expression);
+const ScalarSymbol *symtab_declaration(const ScalarSymbols *table,
+                                       const AstVarDecl *declaration);
+size_t symtab_frame_size(const ScalarSymbols *table,
+                         const AstFunctionDecl *function);
+size_t symtab_type_width(const AstType *type);
+int symtab_constant(const AstExpr *expression, unsigned long *value);
+
+#endif

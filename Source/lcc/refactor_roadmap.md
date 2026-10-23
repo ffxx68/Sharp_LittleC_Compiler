@@ -873,7 +873,7 @@ control flow, or general stack frames.
 
 Binary generation remains the assembler's responsibility. Global
 initialization and full code/data/library integration remain in Task
-5.3.4.6; this early slice does not complete that milestone.
+5.3.4.7; this early slice does not complete that milestone.
 
 Implemented the CLI and minimal startup wrapper, with backend/CLI regression
 coverage and `tests/pc1403_smoke.c` / `tests/pc1403_smoke.lua`. The generated
@@ -892,53 +892,101 @@ apparent memory corruption was reported before the binary had been loaded,
 so it is not evidence of a generated-code defect. No physical-device
 execution has been verified.
 
-#### Task 5.3.4.3: Scalar storage access
+#### Task 5.3.4.3 ✅: Minimal scalar symbols and storage layout
+
+Bring forward the scalar prerequisite from Task 5.3.5 before extending the
+tree-walker. Implement it in `symtab.c`, separately from instruction emission.
+
+- Resolve byte/word scalar declarations and identifier uses with C
+  case-sensitive lookup, block scopes, and local-over-global shadowing.
+- Produce explicit type, width, storage-class, fixed-address, and local-offset
+  results for backend consumers.
+- Validate duplicate declarations, overlapping/out-of-range fixed placements,
+  undeclared identifiers, and assignment to non-modifiable objects.
+- Establish and document the local layout contract for parameterless leaf
+  functions. Keep frame allocation/cleanup in the subsequent backend slice,
+  not in symbol resolution.
+- Cover the resolver independently, including scope exit and shadowing.
+  Unsupported declaration and expression forms must fail explicitly.
+
+This is a partial extraction of Task 5.3.5, not completion of the full symbol
+table. General allocation, parameters, aggregate layout, and tag namespaces
+remain follow-up work.
+
+Implemented `symtab.h` / `symtab.c` with independent resolver coverage in
+`tests/test_symtab.c`. The initial subset requires explicit fixed addresses
+for global scalars, separates register and XRAM overlap checks, and lays out
+block-scoped locals in a single function-wide frame (initially capped at
+32 bytes). Local offsets follow the Pascal reverse-word stack convention;
+the backend owns allocation and cleanup. Combined `__xram __at(...)`
+declarations and unsigned plain `char` are wired through the parser.
+
+#### Task 5.3.4.4 ✅: Scalar storage access
 
 Port byte/word loads and stores for register, local-stack, and XRAM storage.
-Consume explicit symbol/type/layout results from Task 5.3.5 rather than
+Consume explicit symbol/type/layout results from Task 5.3.4.3 rather than
 performing allocation or symbol lookup in the instruction emitter.
 Cover assignments and scalar expressions in the tree-walker.
+Include the minimal frame allocation/restoration needed to exercise local
+scalars in parameterless leaf functions; general calls and frames remain in
+Task 5.3.4.6. Global initialization and symbolic XRAM data allocation remain
+in Task 5.3.4.7. Validate storage primitives, byte promotions/conversions,
+assignment-expression values, and stack-relative access while expression
+temporaries are live.
 
-#### Task 5.3.4.4: Comparisons, branches, and structured control flow
+Implemented explicit-location byte/word load/store primitives and the
+scalar tree-walker, including leaf frame allocation/cleanup, byte promotion,
+local initialization, nested-block shadowing, and assignment values.
+Instruction tests cover the LP/LIP boundary, XRAM page crossings, local
+offsets with live temporaries, and invalid locations. CLI checks cover the
+scalar source path and preservation of output on rejected input.
+`tests/pc1403_scalars.c` assembles to 436 bytes. Using `pc1403_key.lua`,
+`tests/pc1403_scalars.lua` reserves memory, enters a BASIC caller, deploys the
+binary, and verifies ten RUNs through memory dumps: `2A 00 3B FF` at `&E600`
+and `5E 12` across `&E7FF`/`&E800`, with BASIC program bytes unchanged.
+Global initialization, automatic/symbolic global allocation, parameters,
+and general calls remain explicitly unsupported.
+
+#### Task 5.3.4.5: Comparisons, branches, and structured control flow
 
 Port equality and unsigned relational operations and branch helpers.
 Extend the tree-walker with conditionals and loops, including correct
 `break`, `continue`, and standard-C `for` step ordering.
 
-#### Task 5.3.4.5: Functions, calls, and stack frames
+#### Task 5.3.4.6: Functions, calls, and stack frames
 
 Add parameters, local storage, calls, return-value handling, and stack
 allocation/restoration. Verify cleanup thresholds, nested calls, and
 byte-accurate stack balance at function boundaries.
 
-#### Task 5.3.4.6: Program startup, data, and output integration
+#### Task 5.3.4.7: Program startup, data, and output integration
 
 Extend the minimal startup and CLI integration from Task 5.3.4.2 with global
 initialization and separate code/data/library output ordering. Produce
 complete assembly for the expanded supported subset, suitable for the
 existing assembler; binary generation remains the assembler's responsibility.
 
-#### Task 5.3.4.7: Arrays, pointers, and aggregate access
+#### Task 5.3.4.8: Arrays, pointers, and aggregate access
 
 Port array and pointer operations by storage class and element width.
 Use compiler-computed aggregate offsets for member access; keep type checking
 and layout outside the instruction emitter.
 
-#### Task 5.3.4.8: Remaining arithmetic and standard-C extensions
+#### Task 5.3.4.9: Remaining arithmetic and standard-C extensions
 
 Port remaining arithmetic/library operations and floating-point support as
 their AST constructs become supported. Implement signed operations and
 standard-C switch semantics separately from legacy unsigned/switch behavior.
 Track and deduplicate required runtime libraries in the context.
 
-#### Task 5.3.4.9: Operation-parity checklist and completion gates
+#### Task 5.3.4.10: Operation-parity checklist and completion gates
 
 Maintain a checklist against the Task 5.1.4 fixture inventory, recording
 ported and deferred operations explicitly. Compare equivalent output with
 the Pascal reference and functionally validate intentional semantic changes.
 Cover library requirements as well as output text and stack effects.
 Task 5.3.4 remains incomplete until the required slices and their validation
-gates are satisfied; only Tasks 5.3.4.1 and 5.3.4.2 are currently marked complete.
+gates are satisfied; Tasks 5.3.4.1 through 5.3.4.4 are currently marked complete.
 
 The C compiler will additionally need behaviors not supplied by the current littleC backend:
 - `signed` arithmetic: need `SBB` (subtract with borrow) and signed comparisons
@@ -948,6 +996,12 @@ The C compiler will additionally need behaviors not supplied by the current litt
 - Standard `for`: step executed **after** the body (fix to littleC bug)
 
 ### Task 5.3.5: Symbol table (`symtab.c`)
+
+Complete the symbol table incrementally from the minimal scalar resolver
+introduced in Task 5.3.4.3. Execution order follows actual dependencies:
+finish that resolver before scalar backend integration (Task 5.3.4.4), and
+extend symbol/layout support before each later backend slice that needs it.
+The numbering of this umbrella task does not postpone those prerequisites.
 
 - Nested scopes (scope stack: global → function → block) — required for standard C
 - Lookup with shadowing (local variable hides global)

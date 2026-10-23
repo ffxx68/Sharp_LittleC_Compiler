@@ -10,8 +10,11 @@ struct CodegenContext {
     size_t output_length;
     size_t output_capacity;
     size_t stack_depth;
+    size_t frame_depth;
     unsigned long label_count;
     unsigned char library_used[101];
+    ScalarSymbols *symbols;
+    AstTranslationUnit *resolved_unit;
     char error[256];
 };
 
@@ -109,6 +112,7 @@ CodegenContext *codegen_context_create(void)
 void codegen_context_destroy(CodegenContext *ctx)
 {
     if (ctx != NULL) {
+        symtab_destroy(ctx->symbols);
         free(ctx->output);
         free(ctx);
     }
@@ -126,7 +130,7 @@ const char *codegen_error(const CodegenContext *ctx)
 
 size_t codegen_stack_depth(const CodegenContext *ctx)
 {
-    return ctx == NULL ? 0 : ctx->stack_depth;
+    return ctx == NULL ? 0 : ctx->stack_depth + ctx->frame_depth;
 }
 
 void emit_inst(CodegenContext *ctx, const char *inst)
@@ -370,56 +374,130 @@ int codegen_load_constant(CodegenContext *ctx, size_t width,
     return ctx->error[0] == '\0' ? 0 : -1;
 }
 
-static size_t expression_width(const AstExpr *expression);
-
-static int validate_expression(const AstExpr *expression)
+static void emit_number(CodegenContext *ctx, const char *instruction, int value)
 {
-    if (expression == NULL) {
-        return 0;
-    }
-    switch (expression->node.kind) {
-    case AST_NODE_CONSTANT_EXPR: {
-        const AstConstantExpr *constant = (const AstConstantExpr *)expression;
-        size_t width = expression_width(expression);
-        unsigned long value;
-        if (constant->constant_kind == AST_CONSTANT_INTEGER) {
-            if (constant->value.integer < 0) {
-                return 0;
-            }
-            value = (unsigned long)constant->value.integer;
-        } else if (constant->constant_kind == AST_CONSTANT_CHARACTER) {
-            value = constant->value.character;
-        } else {
-            return 0;
-        }
-        return value <= (width == 1 ? 255UL : 65535UL);
-    }
-    case AST_NODE_BINARY_EXPR: {
-        const AstBinaryExpr *binary = (const AstBinaryExpr *)expression;
-        return (binary->op == AST_BINARY_ADD ||
-                binary->op == AST_BINARY_SUB) &&
-               expression_width(binary->left) == 2 &&
-               expression_width(binary->right) == 2 &&
-               validate_expression(binary->left) &&
-               validate_expression(binary->right);
-    }
-    default:
-        return 0;
-    }
+    char operand[32];
+    (void)snprintf(operand, sizeof(operand), "%d", value);
+    emit_inst_op(ctx, instruction, operand);
 }
 
-static size_t expression_width(const AstExpr *expression)
+static int scalar_offset(CodegenContext *ctx, ScalarLocation location, int store)
 {
-    if (expression != NULL &&
-        expression->node.kind == AST_NODE_CONSTANT_EXPR) {
-        const AstConstantExpr *constant = (const AstConstantExpr *)expression;
-        if (constant->type != NULL &&
-            constant->type->kind == AST_TYPE_BASE &&
-            constant->type->as.base.base == AST_TYPE_CHAR) {
-            return 1;
-        }
+    int extra = location.width == 2 && !store ? 1 : 2;
+    if (ctx == NULL || ctx->error[0] != '\0') {
+        return -1;
     }
-    return 2;
+    if (location.width != 1 && location.width != 2) {
+        return set_error(ctx, "scalar access requires byte or word width");
+    }
+    if (location.storage == SCALAR_LOCAL) {
+        if (ctx->stack_depth > 253 ||
+            location.address < -(location.width == 1 ? 2 : 1) ||
+            location.address > 255 - extra - (int)ctx->stack_depth -
+                               (store && location.width == 2 ? 1 : 0)) {
+            return set_error(ctx, "local scalar offset exceeds target addressing");
+        }
+    } else if (location.storage == SCALAR_REGISTER || location.storage == SCALAR_XRAM) {
+        int limit = location.storage == SCALAR_REGISTER ? 96 : 65536;
+        if (location.address < 0 || location.address > limit - (int)location.width) {
+            return set_error(ctx, "scalar address exceeds target memory");
+        }
+    } else {
+        return set_error(ctx, "invalid scalar storage class");
+    }
+    return 0;
+}
+
+int codegen_load_scalar(CodegenContext *ctx, ScalarLocation location)
+{
+    int address = location.address;
+    if (scalar_offset(ctx, location, 0) != 0) {
+        return -1;
+    }
+    if (location.storage == SCALAR_LOCAL) {
+        emit_inst(ctx, "LDR");
+        emit_number(ctx, "ADIA", address + (int)ctx->stack_depth +
+                    (location.width == 1 ? 2 : 1));
+        emit_inst(ctx, "STP");
+    } else if (location.storage == SCALAR_REGISTER) {
+        address += (int)location.width - 1;
+        emit_number(ctx, address < 64 ? "LP" : "LIP", address);
+    } else {
+        emit_number(ctx, "LIDP", address + (int)location.width - 1);
+    }
+    emit_inst(ctx, location.storage == SCALAR_XRAM ? "LDD" : "LDM");
+    if (location.width == 2) {
+        emit_inst(ctx, "EXAB");
+        if (location.storage == SCALAR_XRAM) {
+            if (address / 256 == (address + 1) / 256) {
+                emit_number(ctx, "LIDL", address & 255);
+            } else {
+                emit_number(ctx, "LIDP", address);
+            }
+        } else {
+            emit_inst(ctx, location.storage == SCALAR_LOCAL ? "INCP" : "DECP");
+        }
+        emit_inst(ctx, location.storage == SCALAR_XRAM ? "LDD" : "LDM");
+    }
+    return ctx->error[0] == '\0' ? 0 : -1;
+}
+
+int codegen_store_scalar(CodegenContext *ctx, ScalarLocation location)
+{
+    if (scalar_offset(ctx, location, 1) != 0) {
+        return -1;
+    }
+    if (location.storage == SCALAR_LOCAL) {
+        if (location.width == 1) {
+            emit_inst(ctx, "EXAB");
+        } else if (codegen_emit_push(ctx, 1) != 0) {
+            return -1;
+        }
+        emit_inst(ctx, "LDR");
+        emit_number(ctx, "ADIA", location.address + 2 + (int)ctx->stack_depth);
+        emit_inst(ctx, "STP");
+        if (location.width == 1) {
+            emit_inst(ctx, "EXAB");
+        } else if (codegen_emit_pop(ctx, 1) != 0) {
+            return -1;
+        }
+    } else {
+        emit_number(ctx, location.storage == SCALAR_XRAM ? "LIDP" :
+                    location.address < 64 ? "LP" : "LIP", location.address);
+    }
+    emit_inst(ctx, location.storage == SCALAR_XRAM ? "STD" : "EXAM");
+    if (location.width == 2) {
+        emit_inst(ctx, "EXAB");
+        if (location.storage == SCALAR_XRAM) {
+            if (location.address / 256 == (location.address + 1) / 256) {
+                emit_number(ctx, "LIDL", (location.address + 1) & 255);
+            } else {
+                emit_number(ctx, "LIDP", location.address + 1);
+            }
+        } else {
+            emit_inst(ctx, location.storage == SCALAR_LOCAL ? "DECP" : "INCP");
+        }
+        emit_inst(ctx, location.storage == SCALAR_XRAM ? "STD" : "EXAM");
+    }
+    return ctx->error[0] == '\0' ? 0 : -1;
+}
+
+static void promote_byte(CodegenContext *ctx, int is_unsigned)
+{
+    char *done;
+    emit_inst_op(ctx, "LIB", "0");
+    if (is_unsigned) {
+        return;
+    }
+    done = new_label(ctx);
+    if (done == NULL) {
+        return;
+    }
+    emit_inst_op(ctx, "TSIA", "128");
+    emit_inst_op(ctx, "JPZ", done);
+    emit_inst_op(ctx, "LIB", "255");
+    emit_label(ctx, done);
+    free(done);
 }
 
 static int emit_expression(CodegenContext *ctx, const AstExpr *expression)
@@ -433,12 +511,37 @@ static int emit_expression(CodegenContext *ctx, const AstExpr *expression)
         } else {
             value = (unsigned long)constant->value.integer;
         }
-        return codegen_load_constant(ctx, expression_width(expression), value);
+        return codegen_load_constant(ctx, 2, value);
+    }
+    if (expression->node.kind == AST_NODE_IDENT_EXPR) {
+        const ScalarSymbol *symbol = symtab_identifier(ctx->symbols, expression);
+        if (symbol == NULL) {
+            return set_error(ctx, "unresolved scalar reached code generation");
+        }
+        if (codegen_load_scalar(ctx, symbol->location) != 0) {
+            return -1;
+        }
+        if (symbol->location.width == 1) {
+            promote_byte(ctx, symbol->location.is_unsigned);
+        }
+        return ctx->error[0] == '\0' ? 0 : -1;
     }
     if (expression->node.kind == AST_NODE_BINARY_EXPR) {
         const AstBinaryExpr *binary = (const AstBinaryExpr *)expression;
         size_t width = 2;
 
+        if (binary->op == AST_BINARY_ASSIGN) {
+            const ScalarSymbol *symbol = symtab_identifier(ctx->symbols, binary->left);
+            if (emit_expression(ctx, binary->right) != 0 ||
+                codegen_store_scalar(ctx, symbol->location) != 0 ||
+                codegen_load_scalar(ctx, symbol->location) != 0) {
+                return -1;
+            }
+            if (symbol->location.width == 1) {
+                promote_byte(ctx, symbol->location.is_unsigned);
+            }
+            return ctx->error[0] == '\0' ? 0 : -1;
+        }
         if (emit_expression(ctx, binary->left) != 0 ||
             codegen_emit_push(ctx, width) != 0 ||
             emit_expression(ctx, binary->right) != 0) {
@@ -451,67 +554,52 @@ static int emit_expression(CodegenContext *ctx, const AstExpr *expression)
     return set_error(ctx, "unsupported expression reached during code generation");
 }
 
-static int validate_function(const AstFunctionDecl *function)
-{
-    AstStmt *statement;
-    AstType *return_type;
-
-    if (function->is_prototype) {
-        return 1;
-    }
-    return_type = function->return_type;
-    if (return_type == NULL || return_type->kind != AST_TYPE_BASE ||
-        (return_type->as.base.base != AST_TYPE_VOID &&
-         return_type->as.base.base != AST_TYPE_CHAR &&
-         return_type->as.base.base != AST_TYPE_INT)) {
-        return 0;
-    }
-    if (function->parameter_count != 0 || function->body == NULL ||
-        function->body->item_count > 1) {
-        return 0;
-    }
-    if (function->body->item_count == 0) {
-        return return_type->as.base.base == AST_TYPE_VOID;
-    }
-    if (function->body->items[0].kind != AST_BLOCK_STATEMENT) {
-        return 0;
-    }
-    statement = function->body->items[0].as.statement;
-    if (statement == NULL || statement->node.kind != AST_NODE_RETURN_STMT) {
-        return 0;
-    }
-    {
-        AstReturnStmt *return_statement = (AstReturnStmt *)statement;
-        if (return_statement->expression == NULL) {
-            return return_type->as.base.base == AST_TYPE_VOID;
-        }
-        return return_type->as.base.base != AST_TYPE_VOID &&
-               expression_width(return_statement->expression) ==
-                   (return_type->as.base.base == AST_TYPE_CHAR ? 1u : 2u) &&
-               validate_expression(return_statement->expression);
-    }
-}
-
 static int validate_translation_unit(CodegenContext *ctx, AstTranslationUnit *tu)
 {
-    size_t index;
-
     if (ctx == NULL || tu == NULL) {
         return set_error(ctx, "invalid translation unit");
     }
     if (ctx->error[0] != '\0') {
         return -1;
     }
-    for (index = 0; index < tu->declarations.count; ++index) {
-        AstDecl *declaration = tu->declarations.items[index];
-        if (declaration->node.kind != AST_NODE_FUNCTION_DECL ||
-            !validate_function((AstFunctionDecl *)declaration)) {
-            return set_error(ctx,
-                "unsupported translation unit construct (only parameterless "
-                "functions returning constants or + / - expressions are supported)");
-        }
+    if (ctx->resolved_unit == tu) {
+        return 0;
     }
+    symtab_destroy(ctx->symbols);
+    ctx->symbols = symtab_create();
+    if (ctx->symbols == NULL || symtab_resolve(ctx->symbols, tu) != 0) {
+        return set_error(ctx, symtab_error(ctx->symbols));
+    }
+    ctx->resolved_unit = tu;
     return 0;
+}
+
+static int emit_statement(CodegenContext *ctx, const AstStmt *statement)
+{
+    if (statement->node.kind == AST_NODE_COMPOUND_STMT) {
+        const AstCompoundStmt *block = (const AstCompoundStmt *)statement;
+        size_t index;
+        for (index = 0; index < block->item_count; ++index) {
+            const AstBlockItem *item = &block->items[index];
+            if (item->kind == AST_BLOCK_DECLARATION) {
+                const AstVarDecl *variable = (const AstVarDecl *)item->as.declaration;
+                if (variable->initializer != NULL &&
+                    (emit_expression(ctx, variable->initializer->as.expression) != 0 ||
+                     codegen_store_scalar(ctx,
+                         symtab_declaration(ctx->symbols, variable)->location) != 0)) {
+                    return -1;
+                }
+            } else if (emit_statement(ctx, item->as.statement) != 0) {
+                return -1;
+            }
+        }
+    } else if (statement->node.kind == AST_NODE_EXPR_STMT) {
+        return emit_expression(ctx, ((const AstExprStmt *)statement)->expression);
+    } else if (statement->node.kind == AST_NODE_RETURN_STMT) {
+        const AstExpr *value = ((const AstReturnStmt *)statement)->expression;
+        return value == NULL ? 0 : emit_expression(ctx, value);
+    }
+    return ctx->error[0] == '\0' ? 0 : -1;
 }
 
 int codegen_translation_unit(CodegenContext *ctx, AstTranslationUnit *tu)
@@ -524,29 +612,45 @@ int codegen_translation_unit(CodegenContext *ctx, AstTranslationUnit *tu)
     for (index = 0; index < tu->declarations.count; ++index) {
         AstFunctionDecl *function =
             (AstFunctionDecl *)tu->declarations.items[index];
-        AstReturnStmt *return_statement = NULL;
-        if (function->is_prototype) {
+        size_t frame_size, byte;
+        if (function->declaration.node.kind != AST_NODE_FUNCTION_DECL || function->is_prototype) {
             continue;
         }
-        if (ctx->stack_depth != 0) {
+        if (codegen_stack_depth(ctx) != 0) {
             return set_error(ctx, "evaluation stack is not empty at function entry");
         }
         (void)append_format(ctx, "%s:\t; Procedure\n", function->name, NULL,
                             NULL);
-        if (function->body->item_count != 0) {
-            return_statement = (AstReturnStmt *)
-                function->body->items[0].as.statement;
-            if (return_statement->expression != NULL &&
-                emit_expression(ctx, return_statement->expression) != 0) {
-                return -1;
+        frame_size = symtab_frame_size(ctx->symbols, function);
+        for (byte = 0; byte < frame_size; ++byte) {
+            emit_inst(ctx, "PUSH");
+            ++ctx->frame_depth;
+        }
+        if (emit_statement(ctx, (const AstStmt *)function->body) != 0) {
+            return -1;
+        }
+        if (frame_size != 0) {
+            emit_inst_op(ctx, "LP", "0");
+            emit_inst(ctx, "EXAM");
+            emit_inst(ctx, "EXAB");
+            emit_inst_op(ctx, "LP", "1");
+            emit_inst(ctx, "EXAM");
+            for (byte = 0; byte < frame_size; ++byte) {
+                emit_inst(ctx, "POP");
+                --ctx->frame_depth;
             }
+            emit_inst_op(ctx, "LP", "1");
+            emit_inst(ctx, "LDM");
+            emit_inst(ctx, "EXAB");
+            emit_inst_op(ctx, "LP", "0");
+            emit_inst(ctx, "LDM");
         }
         emit_inst(ctx, "RTN");
         (void)append_text(ctx, "\n", 1);
         if (ctx->error[0] != '\0') {
             return -1;
         }
-        if (ctx->stack_depth != 0) {
+        if (codegen_stack_depth(ctx) != 0) {
             return set_error(ctx, "evaluation stack is unbalanced at function exit");
         }
     }
@@ -555,32 +659,7 @@ int codegen_translation_unit(CodegenContext *ctx, AstTranslationUnit *tu)
 
 static int origin_value(const AstExpr *expression, unsigned long *value)
 {
-    if (expression->node.kind == AST_NODE_CONSTANT_EXPR) {
-        const AstConstantExpr *constant = (const AstConstantExpr *)expression;
-        if (constant->constant_kind != AST_CONSTANT_INTEGER ||
-            constant->value.integer < 0 || constant->value.integer > 65535) {
-            return -1;
-        }
-        *value = (unsigned long)constant->value.integer;
-        return 0;
-    }
-    if (expression->node.kind == AST_NODE_BINARY_EXPR) {
-        const AstBinaryExpr *binary = (const AstBinaryExpr *)expression;
-        unsigned long left, right;
-        if (origin_value(binary->left, &left) != 0 ||
-            origin_value(binary->right, &right) != 0) {
-            return -1;
-        }
-        if (binary->op == AST_BINARY_ADD && left + right <= 65535) {
-            *value = left + right;
-            return 0;
-        }
-        if (binary->op == AST_BINARY_SUB && left >= right) {
-            *value = left - right;
-            return 0;
-        }
-    }
-    return -1;
+    return symtab_constant(expression, value);
 }
 
 static int same_assembler_name(const char *left, const char *right)
@@ -603,7 +682,7 @@ int codegen_program(CodegenContext *ctx, AstTranslationUnit *tu)
     if (validate_translation_unit(ctx, tu) != 0) {
         return -1;
     }
-    if (ctx->output_length != 0 || ctx->stack_depth != 0) {
+    if (ctx->output_length != 0 || codegen_stack_depth(ctx) != 0) {
         return set_error(ctx, "program generation requires an empty context");
     }
     if (tu->has_pc_pragma) {
@@ -615,6 +694,14 @@ int codegen_program(CodegenContext *ctx, AstTranslationUnit *tu)
     }
     for (index = 0; index < tu->declarations.count; ++index) {
         AstFunctionDecl *function = (AstFunctionDecl *)tu->declarations.items[index];
+        if (function->declaration.node.kind != AST_NODE_FUNCTION_DECL) {
+            continue;
+        }
+        if (toupper((unsigned char)function->name[0]) == 'L' &&
+            toupper((unsigned char)function->name[1]) == 'B' &&
+            isdigit((unsigned char)function->name[2])) {
+            return set_error(ctx, "LB followed by digits is reserved for compiler labels");
+        }
         if (!tu->no_save && same_assembler_name(function->name, "SREG")) {
             return set_error(ctx, "SREG is reserved for the register-save wrapper");
         }
@@ -626,7 +713,7 @@ int codegen_program(CodegenContext *ctx, AstTranslationUnit *tu)
         }
         for (other = 0; other < index; ++other) {
             AstFunctionDecl *previous = (AstFunctionDecl *)tu->declarations.items[other];
-            if (!previous->is_prototype &&
+            if (previous->declaration.node.kind == AST_NODE_FUNCTION_DECL && !previous->is_prototype &&
                 same_assembler_name(function->name, previous->name)) {
                 return set_error(ctx, "function definitions collide in PASM's case-insensitive namespace");
             }

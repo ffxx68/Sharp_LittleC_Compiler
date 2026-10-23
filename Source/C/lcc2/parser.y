@@ -868,6 +868,22 @@ declaration_specifiers
           if ($$ == NULL) YYABORT;
           $$->attributes.is_xram = 1;
       }
+    | LCC2_TOK_XRAM LCC2_TOK_AT '(' conditional_expression ')' type_specifier
+      {
+          $$ = new_spec($6);
+          if ($$ == NULL) YYABORT;
+          $$->attributes.is_xram = 1;
+          $$->attributes.has_address = 1;
+          $$->attributes.address = $4;
+      }
+    | LCC2_TOK_AT '(' conditional_expression ')' LCC2_TOK_XRAM type_specifier
+      {
+          $$ = new_spec($6);
+          if ($$ == NULL) YYABORT;
+          $$->attributes.is_xram = 1;
+          $$->attributes.has_address = 1;
+          $$->attributes.address = $3;
+      }
     | type_specifier LCC2_TOK_AT '(' conditional_expression ')'
       {
           $$ = new_spec($1);
@@ -890,7 +906,7 @@ declaration_specifiers
 
 type_specifier
     : LCC2_TOK_VOID { $$ = base_type(AST_TYPE_VOID, 0); if ($$ == NULL) YYABORT; }
-    | LCC2_TOK_CHAR { $$ = base_type(AST_TYPE_CHAR, 0); if ($$ == NULL) YYABORT; }
+    | LCC2_TOK_CHAR { $$ = base_type(AST_TYPE_CHAR, 1); if ($$ == NULL) YYABORT; }
     | LCC2_TOK_INT { $$ = base_type(AST_TYPE_INT, 0); if ($$ == NULL) YYABORT; }
     | LCC2_TOK_FLOAT { $$ = base_type(AST_TYPE_FLOAT, 0); if ($$ == NULL) YYABORT; }
     | LCC2_TOK_SIGNED { $$ = base_type(AST_TYPE_INT, 0); if ($$ == NULL) YYABORT; }

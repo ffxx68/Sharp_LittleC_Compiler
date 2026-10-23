@@ -211,6 +211,7 @@ static void test_invalid_programs(void)
         "void SREG(void) {} void main(void) {}",
         "void sreg(void) {} void main(void) {}",
         "void Main(void) {} void main(void) {}",
+        "void LB0(void) {} void main(void) {}",
         "#pragma org(65536)\nvoid main(void) {}",
         "#pragma org(1 - 2)\nvoid main(void) {}",
         "#pragma org(1 * 2)\nvoid main(void) {}",
@@ -230,6 +231,103 @@ static void test_invalid_programs(void)
     }
 }
 
+static void test_scalar_access_sequences(void)
+{
+    static const struct {
+        ScalarLocation location;
+        int store;
+        const char *expected;
+    } cases[] = {
+        {{SCALAR_REGISTER, 1, 8, 1}, 0, "\tLP\t8\n\tLDM\n"},
+        {{SCALAR_REGISTER, 1, 64, 1}, 1, "\tLIP\t64\n\tEXAM\n"},
+        {{SCALAR_REGISTER, 2, 63, 1}, 0,
+         "\tLIP\t64\n\tLDM\n\tEXAB\n\tDECP\n\tLDM\n"},
+        {{SCALAR_REGISTER, 2, 63, 1}, 1,
+         "\tLP\t63\n\tEXAM\n\tEXAB\n\tINCP\n\tEXAM\n"},
+        {{SCALAR_XRAM, 1, 0xE500, 1}, 0, "\tLIDP\t58624\n\tLDD\n"},
+        {{SCALAR_XRAM, 1, 0xE500, 1}, 1, "\tLIDP\t58624\n\tSTD\n"},
+        {{SCALAR_XRAM, 2, 0xE500, 1}, 0,
+         "\tLIDP\t58625\n\tLDD\n\tEXAB\n\tLIDL\t0\n\tLDD\n"},
+        {{SCALAR_XRAM, 2, 0xE500, 1}, 1,
+         "\tLIDP\t58624\n\tSTD\n\tEXAB\n\tLIDL\t1\n\tSTD\n"},
+        {{SCALAR_XRAM, 2, 0xE5FF, 1}, 0,
+         "\tLIDP\t58880\n\tLDD\n\tEXAB\n\tLIDP\t58879\n\tLDD\n"},
+        {{SCALAR_XRAM, 2, 0xE5FF, 1}, 1,
+         "\tLIDP\t58879\n\tSTD\n\tEXAB\n\tLIDP\t58880\n\tSTD\n"},
+        {{SCALAR_LOCAL, 1, -2, 1}, 0, "\tLDR\n\tADIA\t0\n\tSTP\n\tLDM\n"},
+        {{SCALAR_LOCAL, 1, -2, 1}, 1,
+         "\tEXAB\n\tLDR\n\tADIA\t0\n\tSTP\n\tEXAB\n\tEXAM\n"},
+        {{SCALAR_LOCAL, 2, -1, 1}, 0,
+         "\tLDR\n\tADIA\t0\n\tSTP\n\tLDM\n\tEXAB\n\tINCP\n\tLDM\n"},
+        {{SCALAR_LOCAL, 2, -1, 1}, 1,
+         "\tPUSH ; byte\n\tLDR\n\tADIA\t2\n\tSTP\n\tPOP\n\tEXAM\n\tEXAB\n\tDECP\n\tEXAM\n"}
+    };
+    size_t index;
+    for (index = 0; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+        CodegenContext *ctx = codegen_context_create();
+        assert(ctx != NULL);
+        assert((cases[index].store ?
+            codegen_store_scalar(ctx, cases[index].location) :
+            codegen_load_scalar(ctx, cases[index].location)) == 0);
+        assert(strcmp(codegen_output(ctx), cases[index].expected) == 0);
+        assert(codegen_stack_depth(ctx) == 0);
+        codegen_context_destroy(ctx);
+    }
+    {
+        CodegenContext *ctx = codegen_context_create();
+        ScalarLocation local = {SCALAR_LOCAL, 2, -1, 1};
+        assert(codegen_emit_push(ctx, 2) == 0);
+        assert(codegen_load_scalar(ctx, local) == 0);
+        assert(strstr(codegen_output(ctx), "\tADIA\t2\n") != NULL);
+        assert(codegen_store_scalar(ctx, local) == 0);
+        assert(strstr(codegen_output(ctx), "\tADIA\t4\n") != NULL);
+        assert(codegen_stack_depth(ctx) == 2);
+        assert(codegen_emit_pop(ctx, 2) == 0);
+        codegen_context_destroy(ctx);
+    }
+}
+
+static void test_scalar_validation(void)
+{
+    static const ScalarLocation invalid[] = {
+        {SCALAR_REGISTER, 2, 95, 1},
+        {SCALAR_REGISTER, 1, -1, 1},
+        {SCALAR_XRAM, 2, 65535, 1},
+        {SCALAR_LOCAL, 2, -2, 1},
+        {SCALAR_LOCAL, 1, 254, 1},
+        {SCALAR_REGISTER, 8, 8, 1}
+    };
+    size_t index;
+    for (index = 0; index < sizeof(invalid) / sizeof(invalid[0]); ++index) {
+        CodegenContext *ctx = codegen_context_create();
+        assert(codegen_load_scalar(ctx, invalid[index]) != 0);
+        assert(codegen_output(ctx)[0] == '\0');
+        codegen_context_destroy(ctx);
+        ctx = codegen_context_create();
+        assert(codegen_store_scalar(ctx, invalid[index]) != 0);
+        assert(codegen_output(ctx)[0] == '\0');
+        codegen_context_destroy(ctx);
+    }
+}
+
+static void test_scalar_tree_walker(void)
+{
+    AstArena *arena = ast_arena_create();
+    CodegenContext *ctx = codegen_context_create();
+    AstTranslationUnit *unit = parse(arena,
+        "__xram __at(0xE500) unsigned int result;"
+        "unsigned int main(void) {"
+        " unsigned int x = 40; unsigned char b = 3;"
+        " { unsigned int x = 7; result = x; }"
+        " result = (b = 258) + x; return result; }");
+    assert(codegen_program(ctx, unit) == 0);
+    assert(codegen_stack_depth(ctx) == 0);
+    assert(strstr(codegen_output(ctx), "\tLIDP\t58624\n\tSTD\n") != NULL);
+    assert(strstr(codegen_output(ctx), "\tADIA\t") != NULL);
+    codegen_context_destroy(ctx);
+    ast_arena_destroy(arena);
+}
+
 int main(void)
 {
     test_word_return_addition();
@@ -239,5 +337,8 @@ int main(void)
     test_unsupported_unit_is_not_partially_emitted();
     test_complete_program();
     test_invalid_programs();
+    test_scalar_access_sequences();
+    test_scalar_validation();
+    test_scalar_tree_walker();
     return 0;
 }
