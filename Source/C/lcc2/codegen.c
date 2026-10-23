@@ -10,6 +10,44 @@ typedef struct LoopLabels {
     const char *continue_label;
 } LoopLabels;
 
+/* Unsigned B:A versus J:I comparisons from the legacy .lib files.
+   Results are 0 or 255 in A; the caller clears B. */
+static const struct {
+    const char *name;
+    const char *labels[3];
+    const char *source;
+} runtime_routines[] = {
+    {"LIB_CPE16", {"LIB_CPE16", "CPQ1", NULL},
+     "LIB_CPE16:\n\tLP\t0\n\tCPMA\n\tJRNZP\tCPQ1\n"
+     "\tLP\t1\n\tEXAB\n\tCPMA\n\tJRNZP\tCPQ1\n"
+     "\tLIA\t255\n\tRTN\nCPQ1:\n\tLIA\t0\n\tRTN\n"},
+    {"LIB_CPNE16", {"LIB_CPNE16", "CPN1", NULL},
+     "LIB_CPNE16:\n\tLP\t0\n\tCPMA\n\tJRNZP\tCPN1\n"
+     "\tLP\t1\n\tEXAB\n\tCPMA\n\tJRNZP\tCPN1\n"
+     "\tLIA\t0\n\tRTN\nCPN1:\n\tLIA\t255\n\tRTN\n"},
+    {"LIB_CPS16", {"LIB_CPS16", "CPS0", "CPS1"},
+     "LIB_CPS16:\n\tEXAB\n\tLP\t1\n\tEXAM\n\tCPMA\n"
+     "\tJRCP\tCPS1\n\tJRNZP\tCPS0\n\tLP\t0\n\tEXAB\n"
+     "\tEXAM\n\tCPMA\n\tJRCP\tCPS1\nCPS0:\n\tLIA\t0\n"
+     "\tRTN\nCPS1:\n\tLIA\t255\n\tRTN\n"},
+    {"LIB_CPSE16", {"LIB_CPSE16", "CPSE0", "CPSE1"},
+     "LIB_CPSE16:\n\tEXAB\n\tLP\t1\n\tEXAM\n\tCPMA\n"
+     "\tJRCP\tCPSE1\n\tJRNZP\tCPSE0\n\tLP\t0\n\tEXAB\n"
+     "\tCPMA\n\tJRNCP\tCPSE1\nCPSE0:\n\tLIA\t0\n"
+     "\tRTN\nCPSE1:\n\tLIA\t255\n\tRTN\n"},
+    {"LIB_CPG16", {"LIB_CPG16", "CPG0", "CPG1"},
+     "LIB_CPG16:\n\tEXAB\n\tLP\t1\n\tCPMA\n\tJRCP\tCPG1\n"
+     "\tJRNZP\tCPG0\n\tLP\t0\n\tEXAB\n\tCPMA\n\tJRCP\tCPG1\n"
+     "CPG0:\n\tLIA\t0\n\tRTN\nCPG1:\n\tLIA\t255\n\tRTN\n"},
+    {"LIB_CPGE16", {"LIB_CPGE16", "CPGE0", "CPGE1"},
+     "LIB_CPGE16:\n\tEXAB\n\tLP\t1\n\tCPMA\n\tJRCP\tCPGE1\n"
+     "\tJRNZP\tCPGE0\n\tLP\t0\n\tEXAB\n\tEXAM\n\tCPMA\n"
+     "\tJRNCP\tCPGE1\nCPGE0:\n\tLIA\t0\n\tRTN\n"
+     "CPGE1:\n\tLIA\t255\n\tRTN\n"}
+};
+
+#define RUNTIME_COUNT (sizeof(runtime_routines) / sizeof(runtime_routines[0]))
+
 struct CodegenContext {
     char *output;
     size_t output_length;
@@ -17,7 +55,8 @@ struct CodegenContext {
     size_t stack_depth;
     size_t frame_depth;
     unsigned long label_count;
-    unsigned char library_used[101];
+    unsigned char library_used[RUNTIME_COUNT];
+    char *runtime_output;
     ScalarSymbols *symbols;
     AstTranslationUnit *resolved_unit;
     char *return_label;
@@ -126,6 +165,7 @@ void codegen_context_destroy(CodegenContext *ctx)
         free(ctx->return_label);
         free(ctx->loops);
         free(ctx->output);
+        free(ctx->runtime_output);
         free(ctx);
     }
 }
@@ -133,6 +173,60 @@ void codegen_context_destroy(CodegenContext *ctx)
 const char *codegen_output(const CodegenContext *ctx)
 {
     return ctx == NULL || ctx->output == NULL ? "" : ctx->output;
+}
+
+const char *codegen_runtime_output(const CodegenContext *ctx)
+{
+    return ctx == NULL || ctx->runtime_output == NULL ? "" : ctx->runtime_output;
+}
+
+int codegen_require_runtime(CodegenContext *ctx, const char *routine)
+{
+    size_t index;
+    char message[256];
+    if (ctx == NULL || routine == NULL) {
+        return set_error(ctx, "invalid runtime routine request");
+    }
+    if (ctx->error[0] != '\0') {
+        return -1;
+    }
+    for (index = 0; index < RUNTIME_COUNT; ++index) {
+        if (strcmp(routine, runtime_routines[index].name) == 0) {
+            ctx->library_used[index] = 1;
+            return 0;
+        }
+    }
+    (void)snprintf(message, sizeof(message),
+                   "unresolved runtime routine: %s", routine);
+    return set_error(ctx, message);
+}
+
+static int resolve_runtime(CodegenContext *ctx)
+{
+    size_t index, length = 0;
+    char *output, *next;
+    for (index = 0; index < RUNTIME_COUNT; ++index) {
+        if (ctx->library_used[index]) {
+            length += strlen(runtime_routines[index].source) + 1;
+        }
+    }
+    output = (char *)malloc(length + 1);
+    if (output == NULL) {
+        return set_error(ctx, "out of memory while including runtime routines");
+    }
+    next = output;
+    for (index = 0; index < RUNTIME_COUNT; ++index) {
+        if (ctx->library_used[index]) {
+            size_t size = strlen(runtime_routines[index].source);
+            memcpy(next, runtime_routines[index].source, size);
+            next += size;
+            *next++ = '\n';
+        }
+    }
+    *next = '\0';
+    free(ctx->runtime_output);
+    ctx->runtime_output = output;
+    return 0;
 }
 
 const char *codegen_error(const CodegenContext *ctx)
@@ -528,6 +622,9 @@ static int emit_comparison(CodegenContext *ctx, AstBinaryOp op)
     case AST_BINARY_GREATER: routine = "LIB_CPG16"; break;
     case AST_BINARY_GREATER_EQUAL: routine = "LIB_CPGE16"; break;
     default: return set_error(ctx, "invalid comparison operator");
+    }
+    if (codegen_require_runtime(ctx, routine) != 0) {
+        return -1;
     }
     emit_inst_op(ctx, "LP", "0");
     emit_inst(ctx, "EXAM");
@@ -1009,7 +1106,7 @@ int codegen_translation_unit(CodegenContext *ctx, AstTranslationUnit *tu)
             return set_error(ctx, "evaluation stack is unbalanced at function exit");
         }
     }
-    return ctx->error[0] == '\0' ? 0 : -1;
+    return ctx->error[0] == '\0' ? resolve_runtime(ctx) : -1;
 }
 
 static int origin_value(const AstExpr *expression, unsigned long *value)
@@ -1146,5 +1243,30 @@ int codegen_program(CodegenContext *ctx, AstTranslationUnit *tu)
         (void)append_text(ctx, "SREG:\t.DW 0, 0, 0, 0, 0, 0\n\n",
                           strlen("SREG:\t.DW 0, 0, 0, 0, 0, 0\n\n"));
     }
-    return codegen_translation_unit(ctx, tu);
+    if (codegen_translation_unit(ctx, tu) != 0) {
+        return -1;
+    }
+    for (index = 0; index < tu->declarations.count; ++index) {
+        const AstFunctionDecl *function =
+            (const AstFunctionDecl *)tu->declarations.items[index];
+        size_t routine, label;
+        if (function->declaration.node.kind != AST_NODE_FUNCTION_DECL ||
+            function->is_prototype) {
+            continue;
+        }
+        for (routine = 0; routine < RUNTIME_COUNT; ++routine) {
+            if (!ctx->library_used[routine]) {
+                continue;
+            }
+            for (label = 0; label < 3; ++label) {
+                const char *name = runtime_routines[routine].labels[label];
+                if (name != NULL && same_assembler_name(function->name, name)) {
+                    return set_error(ctx,
+                        "function definition collides with a runtime library label");
+                }
+            }
+        }
+    }
+    return append_text(ctx, codegen_runtime_output(ctx),
+                       strlen(codegen_runtime_output(ctx)));
 }

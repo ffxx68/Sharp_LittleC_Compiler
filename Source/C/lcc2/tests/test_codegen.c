@@ -2,6 +2,7 @@
 #include "parser.h"
 
 #include <assert.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -461,6 +462,71 @@ static void test_function_calls_parameters_and_frames(void)
     ast_arena_destroy(arena);
 }
 
+static size_t occurrences(const char *source, const char *text)
+{
+    size_t count = 0;
+    while ((source = strstr(source, text)) != NULL) {
+        ++count;
+        source += strlen(text);
+    }
+    return count;
+}
+
+static void test_runtime_libraries(void)
+{
+    static const char *operators[] = {"==", "!=", "<", "<=", ">", ">="};
+    static const char *routines[] = {
+        "LIB_CPE16", "LIB_CPNE16", "LIB_CPS16", "LIB_CPSE16",
+        "LIB_CPG16", "LIB_CPGE16"
+    };
+    size_t index;
+    for (index = 0; index < 6; ++index) {
+        AstArena *arena = ast_arena_create();
+        CodegenContext *ctx = codegen_context_create();
+        char source[256], label[40];
+        AstTranslationUnit *unit;
+        (void)snprintf(source, sizeof(source),
+            "unsigned int main(void) {"
+            " unsigned int x = 1; x = x %s 2; return x %s 3; }",
+            operators[index], operators[index]);
+        unit = parse(arena, source);
+        assert(codegen_program(ctx, unit) == 0);
+        (void)snprintf(label, sizeof(label), "%s:", routines[index]);
+        assert(occurrences(codegen_runtime_output(ctx), label) == 1);
+        assert(occurrences(codegen_output(ctx), label) == 1);
+        assert(strstr(codegen_output(ctx), label) >
+               strstr(codegen_output(ctx), "main:\t; Procedure"));
+        assert(strstr(codegen_runtime_output(ctx), ".include") == NULL);
+        assert(codegen_stack_depth(ctx) == 0);
+        codegen_context_destroy(ctx);
+        ast_arena_destroy(arena);
+    }
+    {
+        AstArena *arena = ast_arena_create();
+        CodegenContext *ctx = codegen_context_create();
+        AstTranslationUnit *unit = parse(arena, "void main(void) {}");
+        assert(codegen_program(ctx, unit) == 0);
+        assert(codegen_runtime_output(ctx)[0] == '\0');
+        assert(strstr(codegen_output(ctx), "LIB_CP") == NULL);
+        codegen_context_destroy(ctx);
+        ctx = codegen_context_create();
+        assert(codegen_require_runtime(ctx, "LIB_MISSING") != 0);
+        assert(strstr(codegen_error(ctx), "unresolved runtime routine") != NULL);
+        codegen_context_destroy(ctx);
+        ast_arena_destroy(arena);
+    }
+    {
+        AstArena *arena = ast_arena_create();
+        CodegenContext *ctx = codegen_context_create();
+        AstTranslationUnit *unit = parse(arena,
+            "void cpq1(void) {} unsigned int main(void) { return 1 == 2; }");
+        assert(codegen_program(ctx, unit) != 0);
+        assert(strstr(codegen_error(ctx), "runtime library label") != NULL);
+        codegen_context_destroy(ctx);
+        ast_arena_destroy(arena);
+    }
+}
+
 int main(void)
 {
     test_word_return_addition();
@@ -476,5 +542,6 @@ int main(void)
     test_scalar_tree_walker();
     test_comparisons_and_control_flow();
     test_function_calls_parameters_and_frames();
+    test_runtime_libraries();
     return 0;
 }

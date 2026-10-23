@@ -37,11 +37,18 @@ printf 'int __at(8) value = 1.5; void main(void) {}\n' > "$dir/source.c"
 expect_failure "$dir/source.c" -o "$dir/output.asm"
 printf '#pragma pc(57392)\nvoid main(void) {}\n' > "$dir/source.c"
 expect_failure "$dir/source.c" -o "$dir/output.asm"
+printf 'void cpq1(void) {} unsigned int main(void) { return 1 == 2; }\n' > "$dir/source.c"
+expect_failure "$dir/source.c" -o "$dir/output.asm"
 printf 'void main(void) {}\000ignored\n' > "$dir/source.c"
 expect_failure "$dir/source.c" -o "$dir/output.asm"
 ./lcc2.exe tests/pc1403_scalars.c -o "$dir/output.asm"
 grep -q 'LIDP.*59391' "$dir/output.asm"
 ./lcc2.exe tests/pc1403_calls.c -o "$dir/output.asm"
+../../../pasm.exe "$dir/output.asm" "$dir/output.bin"
+./lcc2.exe tests/pc1403_comparisons.c -o "$dir/output.asm"
+for name in CPE16 CPNE16 CPS16 CPSE16 CPG16 CPGE16; do
+    test "$(grep -c "^LIB_$name:" "$dir/output.asm")" = 1
+done
 ../../../pasm.exe "$dir/output.asm" "$dir/output.bin"
 ./lcc2.exe tests/pc1403_global_init.c -o "$dir/output.asm"
 ../../../pasm.exe "$dir/output.asm" "$dir/output.bin"
