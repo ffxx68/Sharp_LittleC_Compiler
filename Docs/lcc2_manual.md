@@ -91,10 +91,12 @@ Arrays, pointers, aggregates, `switch`, `goto`, static/extern objects,
 external function calls, and operators other than those listed above are not
 implemented in the scalar backend. Global initializers are limited to integer
 and character constants combined with `+` and `-`; list and floating-point
-initializers are rejected. Comparison expressions call
-legacy `LIB_CP*16` routines; runtime-library output integration is still
-pending. In particular, use `0 - 1` rather than unary `-1` in this initial
-slice.
+initializers are rejected. Comparison expressions call legacy `LIB_CP*16`
+routines, embedded once after generated functions when needed. Their source
+is built into the compiler, so no external `.lib` files are required.
+Unknown runtime requests and function names colliding with included runtime
+labels are rejected before CLI output is written. In particular, use `0 - 1`
+rather than unary `-1` in this initial slice.
 
 ### Types and conversions
 

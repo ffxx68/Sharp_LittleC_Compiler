@@ -43,8 +43,11 @@ integer constant or `+`/`-` expression. The default startup saves/restores
 registers using the Pascal wrapper and explicitly returns to the caller.
 `#pragma nosave` disables preservation, but still emits the final `RTN`.
 `#pragma pc` is explicitly rejected until its output semantics are implemented.
-Comparison expressions call the legacy `LIB_CP*16` helpers; appending/linking
-runtime libraries remains a later output-integration task. Direct calls to
+Comparison expressions call the legacy `LIB_CP*16` helpers. Required helpers
+are deduplicated in the context and embedded after generated functions from
+a built-in catalog; no external `.lib` files are needed. Unknown helper
+requests and function names colliding with included runtime labels fail.
+Direct calls to
 defined functions use byte/word parameters by value; unresolved external calls
 and other unsupported backend constructs are rejected.
 Function labels must not collide in PASM's case-insensitive namespace;
@@ -95,7 +98,7 @@ Arguments are evaluated left to right and pushed in parameter order. Callees
 access parameters at their computed stack offsets; callers remove argument
 bytes after return while preserving byte/word results. Void-call cleanup uses
 individual pops below four bytes and adjusts the stack pointer at four bytes
-or more. External runtime-library linkage remains deferred.
+or more. General external-function linkage remains deferred.
 
 Expressions are evaluated in the word accumulator B:A. Byte loads are promoted
 (plain `char` and `unsigned char` zero-extend, `signed char` sign-extends).
@@ -144,6 +147,24 @@ caller through the emulated keyboard, deploys the binary, and executes `RUN`
 ten times. Inspect `lcc2_scalar_result`: success requires `status="PASS"`,
 `calls=10`, bytes `2A 00 3B FF` at `&E600`, and `5E 12` at `&E7FF`, with
 the BASIC program unchanged. No screenshots or machine snapshots are used.
+
+## Comparison runtime test in MAME
+
+Compile and assemble `tests\pc1403_comparisons.c` as above. In a **disposable**
+PC-1403 session, load `tests\pc1403_comparisons.lua` and call
+`lcc2_comparison_test` with the binary's absolute path. Inspect
+`lcc2_comparison_result`: success is `status="PASS"`, `calls=130`, and
+`vectors=13`. The harness injects operands immediately before startup calls
+`main`, checks all six unsigned comparisons across equality and byte/word
+boundaries, and verifies stack balance and register restoration on every
+return. It repeats each vector ten times and pauses on success or failure.
+It overwrites CPU state, RAM at `&E000`, generated code, and test globals at
+`&F000`/`&F010`; it does not test BASIC prompt responsiveness.
+
+`codegen_runtime_output` exposes resolved runtime source independently of
+function output. `codegen_translation_unit` leaves it separate; complete
+`codegen_program` appends it once in catalog order after generated functions.
+`codegen_require_runtime` reports an error for unknown routine names.
 
 Run the foundational checks with `make test`. Remove generated build files with
 `make clean`.
