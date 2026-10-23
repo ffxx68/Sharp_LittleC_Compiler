@@ -1,5 +1,6 @@
 #include "symtab.h"
 
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -140,19 +141,72 @@ int symtab_initializer_constant(const AstExpr *expression,
     return -1;
 }
 
+static int array_layout(ScalarSymbols *table, AstType *type,
+                        const AstInitializer *initializer,
+                        size_t *element_width, size_t *length)
+{
+    unsigned long extent;
+
+    if (type == NULL || type->kind != AST_TYPE_ARRAY ||
+        type->as.array.element == NULL ||
+        type->as.array.element->kind != AST_TYPE_BASE ||
+        (*element_width = symtab_type_width(type->as.array.element)) == 0) {
+        return fail(table, "only byte and word arrays are supported", NULL);
+    }
+    if (type->as.array.length == NULL) {
+        if (initializer == NULL || initializer->kind != AST_INITIALIZER_LIST ||
+            initializer->as.list.count == 0) {
+            return fail(table, "array requires a constant extent or nonempty initializer", NULL);
+        }
+        *length = initializer->as.list.count;
+    } else {
+        if (symtab_constant(type->as.array.length, &extent) != 0 || extent == 0 ||
+            extent > 65535) {
+            return fail(table, "array extent must be a positive constant", NULL);
+        }
+        *length = (size_t)extent;
+    }
+    if (*length > (size_t)-1 / *element_width) {
+        return fail(table, "array size exceeds supported range", NULL);
+    }
+    type->as.array.resolved_length = *length;
+    type->as.array.has_resolved_length = 1;
+    if (initializer != NULL &&
+        (initializer->kind != AST_INITIALIZER_LIST ||
+         initializer->as.list.count > *length)) {
+        return fail(table, "array initializer must be a fitting brace list", NULL);
+    }
+    return 0;
+}
+
 static int add_variable(ScalarSymbols *table, const AstVarDecl *variable)
 {
     ScalarSymbol symbol;
     ScalarSymbol *grown;
-    size_t index;
+    size_t index, allocation_width;
     unsigned long address, initial_value;
 
     memset(&symbol, 0, sizeof(symbol));
-    symbol.location.width = symtab_type_width(variable->type);
-    if (symbol.location.width == 0 || variable->name == NULL ||
-        variable->storage != AST_STORAGE_NONE) {
+    if (variable->name == NULL || variable->storage != AST_STORAGE_NONE) {
         return fail(table, "unsupported scalar declaration", variable->name);
     }
+    if (variable->type != NULL && variable->type->kind == AST_TYPE_ARRAY) {
+        size_t element_width;
+        if (array_layout(table, variable->type, variable->initializer,
+                         &element_width, &symbol.array_length) != 0) {
+            return -1;
+        }
+        symbol.is_array = 1;
+        symbol.location.width = element_width;
+        allocation_width = element_width * symbol.array_length;
+    } else {
+        symbol.location.width = symtab_type_width(variable->type);
+        allocation_width = symbol.location.width;
+    }
+    if (symbol.location.width == 0) {
+        return fail(table, "unsupported scalar declaration", variable->name);
+    }
+    symbol.allocation_width = allocation_width;
     for (index = 0; index < table->count; ++index) {
         const ScalarSymbol *other = &table->symbols[index];
         if (other->active && other->scope == table->scope &&
@@ -164,12 +218,17 @@ static int add_variable(ScalarSymbols *table, const AstVarDecl *variable)
     symbol.function = table->function;
     symbol.scope = table->scope;
     symbol.active = 1;
-    symbol.location.is_unsigned = variable->type->as.base.is_unsigned;
+    symbol.location.is_unsigned = symbol.is_array
+        ? variable->type->as.array.element->as.base.is_unsigned
+        : variable->type->as.base.is_unsigned;
     if (table->function != NULL) {
         if (variable->attributes.has_address || variable->attributes.is_xram) {
             return fail(table, "local storage attributes are not supported yet", variable->name);
         }
-        table->local_bytes += symbol.location.width;
+        if (allocation_width > (size_t)-1 - table->local_bytes) {
+            return fail(table, "local array size exceeds supported range", variable->name);
+        }
+        table->local_bytes += allocation_width;
         if (table->local_bytes > 32) {
             return fail(table, "leaf scalar frame exceeds 32 bytes", variable->name);
         }
@@ -177,12 +236,23 @@ static int add_variable(ScalarSymbols *table, const AstVarDecl *variable)
         symbol.location.address = -(int)table->local_bytes -
                                   (symbol.location.width == 1 ? 2 : 1);
     } else {
-        if (variable->initializer != NULL &&
+        if (!symbol.is_array && variable->initializer != NULL &&
             (variable->initializer->kind != AST_INITIALIZER_EXPR ||
              symtab_initializer_constant(variable->initializer->as.expression,
                                          &initial_value) != 0)) {
             return fail(table, "global initializer must be a scalar constant expression",
                         variable->name);
+        }
+        if (symbol.is_array && variable->initializer != NULL) {
+            for (index = 0; index < variable->initializer->as.list.count; ++index) {
+                const AstInitializer *item = variable->initializer->as.list.items[index];
+                if (item->kind != AST_INITIALIZER_EXPR ||
+                    symtab_initializer_constant(item->as.expression,
+                                                &initial_value) != 0) {
+                    return fail(table, "global array initializer must contain scalar constants",
+                                variable->name);
+                }
+            }
         }
         if (!variable->attributes.has_address ||
             symtab_constant(variable->attributes.address, &address) != 0) {
@@ -190,18 +260,18 @@ static int add_variable(ScalarSymbols *table, const AstVarDecl *variable)
         }
         symbol.location.storage = variable->attributes.is_xram ? SCALAR_XRAM : SCALAR_REGISTER;
         if (symbol.location.storage == SCALAR_REGISTER &&
-            (address < 8 || address + symbol.location.width > 96)) {
+            (address < 8 || address + allocation_width > 96)) {
             return fail(table, "register scalar must fit in internal RAM [8, 96)", variable->name);
         }
-        if (address + symbol.location.width > 65536) {
+        if (address + allocation_width > 65536) {
             return fail(table, "scalar address exceeds target memory", variable->name);
         }
         symbol.location.address = (int)address;
         for (index = 0; index < table->count; ++index) {
             const ScalarLocation *other = &table->symbols[index].location;
             if (other->storage == symbol.location.storage &&
-                (int)address < other->address + (int)other->width &&
-                other->address < (int)address + (int)symbol.location.width) {
+                (int)address < other->address + (int)table->symbols[index].allocation_width &&
+                other->address < (int)address + (int)allocation_width) {
                 return fail(table, "overlapping scalar storage", variable->name);
             }
         }
@@ -282,8 +352,33 @@ static int expression_contains_void_call(const ScalarSymbols *table,
         const AstBinaryExpr *binary = (const AstBinaryExpr *)expression;
         return expression_contains_void_call(table, binary->left) ||
                expression_contains_void_call(table, binary->right);
+    } else if (expression->node.kind == AST_NODE_INDEX_EXPR) {
+        return expression_contains_void_call(table,
+            ((const AstIndexExpr *)expression)->index);
     }
     return 0;
+}
+
+static int bind_identifier(ScalarSymbols *table, const AstExpr *expression,
+                           const char *name, size_t *symbol_index)
+{
+    size_t index = table->count;
+    while (index != 0) {
+        const ScalarSymbol *symbol = &table->symbols[--index];
+        if (symbol->active && strcmp(symbol_name(symbol), name) == 0) {
+            Binding *grown = realloc(table->bindings,
+                (table->binding_count + 1) * sizeof(*grown));
+            if (grown == NULL) {
+                return fail(table, "out of memory binding scalar", name);
+            }
+            table->bindings = grown;
+            grown[table->binding_count].expression = expression;
+            grown[table->binding_count++].symbol = index;
+            *symbol_index = index;
+            return 0;
+        }
+    }
+    return fail(table, "undeclared scalar", name);
 }
 
 static int resolve_expression(ScalarSymbols *table, const AstExpr *expression)
@@ -303,22 +398,42 @@ static int resolve_expression(ScalarSymbols *table, const AstExpr *expression)
     }
     if (expression->node.kind == AST_NODE_IDENT_EXPR) {
         const char *name = ((const AstIdentExpr *)expression)->name;
-        size_t index = table->count;
-        while (index != 0) {
-            const ScalarSymbol *symbol = &table->symbols[--index];
-            if (symbol->active && strcmp(symbol_name(symbol), name) == 0) {
-                Binding *grown = realloc(table->bindings,
-                    (table->binding_count + 1) * sizeof(*grown));
-                if (grown == NULL) {
-                    return fail(table, "out of memory binding scalar", name);
-                }
-                table->bindings = grown;
-                grown[table->binding_count].expression = expression;
-                grown[table->binding_count++].symbol = index;
-                return 0;
-            }
+        size_t symbol_index;
+        if (bind_identifier(table, expression, name, &symbol_index) != 0) {
+            return -1;
         }
-        return fail(table, "undeclared scalar", name);
+        return table->symbols[symbol_index].is_array
+            ? fail(table, "array value requires an index", name) : 0;
+    }
+    if (expression->node.kind == AST_NODE_INDEX_EXPR) {
+        const AstIndexExpr *index = (const AstIndexExpr *)expression;
+        const AstIdentExpr *array;
+        const ScalarSymbol *symbol;
+        unsigned long element;
+        size_t symbol_index;
+        if (index->array == NULL ||
+            index->array->node.kind != AST_NODE_IDENT_EXPR) {
+            return fail(table, "array base must be a declared array", NULL);
+        }
+        array = (const AstIdentExpr *)index->array;
+        if (bind_identifier(table, index->array, array->name, &symbol_index) != 0) {
+            return -1;
+        }
+        symbol = &table->symbols[symbol_index];
+        if (!symbol->is_array) {
+            return fail(table, "subscripted object is not an array", array->name);
+        }
+        if (symtab_initializer_constant(index->index, &element) == 0) {
+            if (element >= symbol->array_length) {
+                return fail(table, "constant array index is out of bounds", array->name);
+            }
+            return 0;
+        }
+        if (expression_contains_void_call(table, index->index) ||
+            resolve_expression(table, index->index) != 0) {
+            return fail(table, "array index requires an integer value", array->name);
+        }
+        return 0;
     }
     if (expression->node.kind == AST_NODE_CALL_EXPR) {
         const AstCallExpr *call = (const AstCallExpr *)expression;
@@ -378,12 +493,18 @@ static int resolve_expression(ScalarSymbols *table, const AstExpr *expression)
             return fail(table, "signed relational comparison is not supported", NULL);
         }
         if (binary->op == AST_BINARY_ASSIGN) {
-            const ScalarSymbol *symbol = symtab_identifier(table, binary->left);
-            if (symbol == NULL ||
-                (symbol->declaration != NULL &&
-                 (symbol->declaration->type->qualifiers & AST_QUALIFIER_CONST) != 0) ||
-                (symbol->parameter != NULL &&
-                 (symbol->parameter->type->qualifiers & AST_QUALIFIER_CONST) != 0)) {
+            const ScalarSymbol *symbol = binary->left->node.kind == AST_NODE_INDEX_EXPR
+                ? symtab_identifier(table,
+                    ((const AstIndexExpr *)binary->left)->array)
+                : symtab_identifier(table, binary->left);
+            const AstType *target_type = symbol == NULL ? NULL :
+                symbol->is_array ? symbol->declaration->type->as.array.element :
+                symbol->declaration != NULL ? symbol->declaration->type :
+                symbol->parameter->type;
+            if (symbol == NULL || target_type == NULL ||
+                (target_type->qualifiers & AST_QUALIFIER_CONST) != 0 ||
+                (binary->left->node.kind != AST_NODE_IDENT_EXPR &&
+                 binary->left->node.kind != AST_NODE_INDEX_EXPR)) {
                 return fail(table, "assignment requires a modifiable scalar lvalue", NULL);
             }
         }
@@ -395,8 +516,11 @@ static int resolve_expression(ScalarSymbols *table, const AstExpr *expression)
 static int expression_unsigned_word(const ScalarSymbols *table,
                                     const AstExpr *expression)
 {
-    if (expression->node.kind == AST_NODE_IDENT_EXPR) {
-        const ScalarSymbol *symbol = symtab_identifier(table, expression);
+    if (expression->node.kind == AST_NODE_IDENT_EXPR ||
+        expression->node.kind == AST_NODE_INDEX_EXPR) {
+        const AstExpr *identifier = expression->node.kind == AST_NODE_INDEX_EXPR
+            ? ((const AstIndexExpr *)expression)->array : expression;
+        const ScalarSymbol *symbol = symtab_identifier(table, identifier);
         return symbol != NULL && symbol->location.width == 2 &&
                symbol->location.is_unsigned;
     }
@@ -426,8 +550,11 @@ static int expression_nonnegative(const ScalarSymbols *table,
                (constant->constant_kind == AST_CONSTANT_INTEGER &&
                 constant->value.integer >= 0);
     }
-    if (expression->node.kind == AST_NODE_IDENT_EXPR) {
-        const ScalarSymbol *symbol = symtab_identifier(table, expression);
+    if (expression->node.kind == AST_NODE_IDENT_EXPR ||
+        expression->node.kind == AST_NODE_INDEX_EXPR) {
+        const AstExpr *identifier = expression->node.kind == AST_NODE_INDEX_EXPR
+            ? ((const AstIndexExpr *)expression)->array : expression;
+        const ScalarSymbol *symbol = symtab_identifier(table, identifier);
         return symbol != NULL && symbol->location.is_unsigned;
     }
     if (expression->node.kind == AST_NODE_BINARY_EXPR) {
@@ -459,16 +586,28 @@ static int expression_nonnegative(const ScalarSymbols *table,
 static int resolve_local_declaration(ScalarSymbols *table,
                                      const AstVarDecl *variable)
 {
+    size_t index;
     if (variable->declaration.node.kind != AST_NODE_VARIABLE_DECL ||
         add_variable(table, variable) != 0) {
         return -1;
     }
-    if (variable->initializer != NULL &&
-        (variable->initializer->kind != AST_INITIALIZER_EXPR ||
-         expression_contains_void_call(table,
-             variable->initializer->as.expression) ||
-         resolve_expression(table, variable->initializer->as.expression) != 0)) {
-        return fail(table, "unsupported scalar initializer", variable->name);
+    if (variable->initializer != NULL) {
+        if (variable->type->kind == AST_TYPE_ARRAY) {
+            for (index = 0; index < variable->initializer->as.list.count; ++index) {
+                const AstInitializer *item = variable->initializer->as.list.items[index];
+                if (item->kind != AST_INITIALIZER_EXPR ||
+                    expression_contains_void_call(table, item->as.expression) ||
+                    resolve_expression(table, item->as.expression) != 0) {
+                    return fail(table, "unsupported array initializer", variable->name);
+                }
+            }
+        } else if (variable->initializer->kind != AST_INITIALIZER_EXPR ||
+                   expression_contains_void_call(table,
+                       variable->initializer->as.expression) ||
+                   resolve_expression(table,
+                       variable->initializer->as.expression) != 0) {
+            return fail(table, "unsupported scalar initializer", variable->name);
+        }
     }
     return 0;
 }
@@ -800,6 +939,36 @@ const ScalarSymbol *symtab_identifier(const ScalarSymbols *table, const AstExpr 
     return NULL;
 }
 
+int symtab_index_location(const ScalarSymbols *table,
+                          const AstIndexExpr *expression,
+                          ScalarLocation *location)
+{
+    const ScalarSymbol *symbol;
+    unsigned long element;
+    size_t offset;
+
+    if (table == NULL || expression == NULL || location == NULL ||
+        expression->array == NULL ||
+        expression->array->node.kind != AST_NODE_IDENT_EXPR ||
+        symtab_constant(expression->index, &element) != 0) {
+        return -1;
+    }
+    symbol = symtab_identifier(table, expression->array);
+    if (symbol == NULL || !symbol->is_array ||
+        element >= symbol->array_length ||
+        element > (size_t)-1 / symbol->location.width) {
+        return -1;
+    }
+    offset = (size_t)element * symbol->location.width;
+    if (offset > (size_t)INT_MAX ||
+        symbol->location.address > INT_MAX - (int)offset) {
+        return -1;
+    }
+    *location = symbol->location;
+    location->address += (int)offset;
+    return 0;
+}
+
 const ScalarSymbol *symtab_declaration(const ScalarSymbols *table, const AstVarDecl *declaration)
 {
     size_t index;
@@ -854,7 +1023,7 @@ size_t symtab_frame_size(const ScalarSymbols *table, const AstFunctionDecl *func
     for (index = 0; index < table->count; ++index) {
         if (table->symbols[index].function == function &&
             table->symbols[index].declaration != NULL) {
-            size += table->symbols[index].location.width;
+            size += table->symbols[index].allocation_width;
         }
     }
     return size;

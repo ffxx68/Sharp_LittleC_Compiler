@@ -1119,20 +1119,61 @@ after generated functions finish, avoiding corruption of their entry bytes.
 All three subtasks have now passed their acceptance checks, completing the
 parent milestone.
 
-#### Task 5.3.4.8: Arrays, pointers, and aggregate access
+#### Task 5.3.4.8 ✅: Array access
 
-Port array and pointer operations by storage class and element width.
-Use compiler-computed aggregate offsets for member access; keep type checking
-and layout outside the instruction emitter.
+Port single-dimensional array indexing and element loads/stores by storage
+class and element width. Extend the resolver to provide array extents,
+element types, and storage locations; the emitter consumes those results
+rather than performing lookup or layout. Cover index scaling, reads, writes,
+and the supported initialization forms. Keep multidimensional and
+variable-length arrays explicitly unsupported unless separately planned.
 
-#### Task 5.3.4.9: Remaining arithmetic and standard-C extensions
+Implemented fixed register/XRAM globals and function-local
+byte/word arrays: positive constant extents (or extent inference from a
+nonempty brace list), overlap/frame-size accounting, constant and runtime-index
+reads/writes, and brace-list initialization with zero fill for omitted elements.
+Runtime subscripts accept supported integer expressions and are evaluated
+once; address calculation retains full 16-bit indices and word-element scaling.
+Constant out-of-bounds subscripts are rejected. Runtime bounds are unchecked,
+as in C; multidimensional/variable-length arrays and array-to-pointer decay
+remain explicitly unsupported.
+
+`make test` passes resolver, codegen, CLI, and PASM checks, including rejection
+without replacing existing CLI output. `tests/pc1403_arrays.c` and
+`tests/pc1403_arrays_wide.c` assemble to 1964 and 3721 bytes respectively.
+Using `tests/pc1403_arrays.lua`, both fixtures passed ten BASIC RUNs and ten
+machine-code returns in PC-1403 MAME. The first covers byte/word register,
+XRAM, and local reads/writes, zero initialization, page crossings, signed-byte
+promotion, assignment values, and single evaluation of an index function.
+The wide-index fixture, rerun after a device reset, verifies byte index 256,
+word index 128 (byte offset 256), and expression indices; outputs were
+`FF 00 EF BE FF 00 00 00`. Both verify stack balance (R=86), register
+restoration, BASIC program retention, and a responsive BASIC caller.
+
+#### Task 5.3.4.9: Pointer operations
+
+Port address-of, pointer loads/stores, dereference, and pointer assignment
+using explicit pointee type, width, and storage information from the resolver.
+Cover register and XRAM addresses, byte and word pointees, and pointers passed
+as parameters. Keep function pointers and unsupported pointer arithmetic
+explicitly rejected.
+
+#### Task 5.3.4.10: Aggregate layout and member access
+
+Extend the symbol table/layout work in Task 5.3.5 to compute aggregate member
+offsets and sizes. Port member reads and writes using those compiler-computed
+offsets; keep type checking and layout outside the instruction emitter. Cover
+the supported structure member forms, including `.` and `->` where applicable,
+and explicitly reject unsupported aggregate forms.
+
+#### Task 5.3.4.11: Remaining arithmetic and standard-C extensions
 
 Port remaining arithmetic/library operations and floating-point support as
 their AST constructs become supported. Implement signed operations and
 standard-C switch semantics separately from legacy unsigned/switch behavior.
 Track and deduplicate required runtime libraries in the context.
 
-#### Task 5.3.4.10: Operation-parity checklist and completion gates
+#### Task 5.3.4.12: Operation-parity checklist and completion gates
 
 Maintain a checklist against the Task 5.1.4 fixture inventory, recording
 ported and deferred operations explicitly. Compare equivalent output with

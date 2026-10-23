@@ -89,6 +89,26 @@ the legacy switch helpers emit a separate assembler dialect.
 
 ## Pascal behavioral fixtures
 
+### C array slice (Task 5.3.4.8)
+
+The C implementation retains the Pascal storage conventions but extends
+subscripts to full 16-bit integer expressions and supports local arrays.
+Constant subscripts resolve to scalar locations; dynamic subscripts compute
+an address once, with 16-bit word scaling, then use P for register/local RAM
+or X/Y with `IXL`/`IYS` for XRAM. Local words retain reversed stack byte order.
+Stores preserve the converted assignment value without reevaluating the
+index, including when the index or RHS calls a function.
+
+These intentional extensions do not preserve the legacy array instruction
+text (which uses byte index scaling and has no local-array stores).
+`tests/test_codegen.c` covers addressing and stack effects, and
+`tests/pc1403_arrays.c`, `tests/pc1403_arrays_wide.c`, and
+`tests/pc1403_arrays.lua` supply functional gates across storage classes,
+widths, page crossings, and byte offsets of 256. Unsupported array forms are
+diagnosed; dynamic out-of-bounds accesses retain C's undefined behavior.
+
+### Reference fixture inventory
+
 The existing `Source/lcc/test_C` inputs are the fixtures; compare output to
 the reference compiler with the existing `Source/lcc/test.bat` flow (the
 script rebuilds the compiler and recreates its test directories, so preserve

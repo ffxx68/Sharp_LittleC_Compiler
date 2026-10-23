@@ -671,6 +671,106 @@ static int emit_comparison(CodegenContext *ctx, AstBinaryOp op)
     return ctx->error[0] == '\0' ? 0 : -1;
 }
 
+static int emit_dynamic_array_access(CodegenContext *ctx,
+                                     const AstIndexExpr *index,
+                                     const AstExpr *value,
+                                     int store)
+{
+    const ScalarSymbol *symbol = symtab_identifier(ctx->symbols, index->array);
+    ScalarLocation location;
+    int offset;
+
+    if (symbol == NULL || !symbol->is_array) {
+        return set_error(ctx, "unresolved dynamic array access");
+    }
+    location = symbol->location;
+    /* Save the RHS across index evaluation, which can itself call functions. */
+    if (store && (emit_expression(ctx, value) != 0 ||
+                  codegen_emit_push(ctx, 2) != 0)) {
+        return -1;
+    }
+    if (emit_expression(ctx, index->index) != 0) {
+        return -1;
+    }
+    if (location.width == 2) {
+        if (codegen_emit_push(ctx, 2) != 0) {
+            return -1;
+        }
+        emit_inst(ctx, "EXAB");
+        if (codegen_pop_add(ctx, 2) != 0) {
+            return -1;
+        }
+    }
+    if (codegen_emit_push(ctx, 2) != 0) {
+        return -1;
+    }
+    if (location.storage == SCALAR_LOCAL) {
+        offset = location.address + (location.width == 1 ? 2 : 1);
+        if (offset < 0 || ctx->stack_depth > 255 ||
+            offset > 255 - (int)ctx->stack_depth) {
+            return set_error(ctx, "local array offset exceeds target addressing");
+        }
+        emit_inst(ctx, "LDR");
+        emit_number(ctx, "ADIA", offset + (int)ctx->stack_depth);
+        emit_inst_op(ctx, "LIB", "0");
+    } else if (codegen_load_constant(ctx, 2,
+                    (unsigned long)location.address) != 0) {
+        return -1;
+    }
+    if (codegen_pop_add(ctx, 2) != 0) {
+        return -1;
+    }
+    if (location.storage == SCALAR_XRAM) {
+        emit_number(ctx, "LP", store ? 6 : 4);
+        emit_inst(ctx, "EXAM");
+        emit_inst(ctx, "EXAB");
+        emit_number(ctx, "LP", store ? 7 : 5);
+        emit_inst(ctx, "EXAM");
+        emit_inst(ctx, store ? "DY" : "DX");
+    } else {
+        emit_inst(ctx, "STP");
+        if (store && location.storage == SCALAR_LOCAL && location.width == 2) {
+            emit_inst(ctx, "INCP");
+        }
+    }
+    if (store) {
+        if (codegen_emit_pop(ctx, 2) != 0) {
+            return -1;
+        }
+        emit_inst(ctx, location.storage == SCALAR_XRAM ? "IYS" : "EXAM");
+        if (location.storage != SCALAR_XRAM) {
+            emit_inst(ctx, "LDM");
+        }
+        if (location.width == 2) {
+            emit_inst(ctx, "EXAB");
+            if (location.storage != SCALAR_XRAM) {
+                emit_inst(ctx, location.storage == SCALAR_LOCAL ? "DECP" : "INCP");
+            }
+            emit_inst(ctx, location.storage == SCALAR_XRAM ? "IYS" : "EXAM");
+            if (location.storage != SCALAR_XRAM) {
+                emit_inst(ctx, "LDM");
+            }
+            emit_inst(ctx, "EXAB");
+        }
+    } else {
+        emit_inst(ctx, location.storage == SCALAR_XRAM ? "IXL" : "LDM");
+        if (location.width == 2) {
+            emit_inst(ctx, "EXAB");
+            if (location.storage != SCALAR_XRAM) {
+                emit_inst(ctx, "INCP");
+            }
+            emit_inst(ctx, location.storage == SCALAR_XRAM ? "IXL" : "LDM");
+            if (location.storage != SCALAR_LOCAL) {
+                emit_inst(ctx, "EXAB");
+            }
+        }
+    }
+    if (location.width == 1) {
+        promote_byte(ctx, location.is_unsigned);
+    }
+    return ctx->error[0] == '\0' ? 0 : -1;
+}
+
 static int emit_branch_false(CodegenContext *ctx, const AstExpr *expression,
                              const char *label)
 {
@@ -730,7 +830,7 @@ static int emit_expression(CodegenContext *ctx, const AstExpr *expression)
     }
     if (expression->node.kind == AST_NODE_IDENT_EXPR) {
         const ScalarSymbol *symbol = symtab_identifier(ctx->symbols, expression);
-        if (symbol == NULL) {
+        if (symbol == NULL || symbol->is_array) {
             return set_error(ctx, "unresolved scalar reached code generation");
         }
         if (codegen_load_scalar(ctx, symbol->location) != 0) {
@@ -738,6 +838,20 @@ static int emit_expression(CodegenContext *ctx, const AstExpr *expression)
         }
         if (symbol->location.width == 1) {
             promote_byte(ctx, symbol->location.is_unsigned);
+        }
+        return ctx->error[0] == '\0' ? 0 : -1;
+    }
+    if (expression->node.kind == AST_NODE_INDEX_EXPR) {
+        const AstIndexExpr *index = (const AstIndexExpr *)expression;
+        ScalarLocation location;
+        if (symtab_index_location(ctx->symbols, index, &location) != 0) {
+            return emit_dynamic_array_access(ctx, index, NULL, 0);
+        }
+        if (codegen_load_scalar(ctx, location) != 0) {
+            return -1;
+        }
+        if (location.width == 1) {
+            promote_byte(ctx, location.is_unsigned);
         }
         return ctx->error[0] == '\0' ? 0 : -1;
     }
@@ -804,14 +918,27 @@ static int emit_expression(CodegenContext *ctx, const AstExpr *expression)
         size_t width = 2;
 
         if (binary->op == AST_BINARY_ASSIGN) {
-            const ScalarSymbol *symbol = symtab_identifier(ctx->symbols, binary->left);
+            ScalarLocation location;
+            const ScalarSymbol *symbol = NULL;
+            if (binary->left->node.kind == AST_NODE_INDEX_EXPR) {
+                const AstIndexExpr *index = (const AstIndexExpr *)binary->left;
+                if (symtab_index_location(ctx->symbols, index, &location) != 0) {
+                    return emit_dynamic_array_access(ctx, index, binary->right, 1);
+                }
+            } else {
+                symbol = symtab_identifier(ctx->symbols, binary->left);
+                if (symbol == NULL || symbol->is_array) {
+                    return set_error(ctx, "unresolved scalar assignment reached code generation");
+                }
+                location = symbol->location;
+            }
             if (emit_expression(ctx, binary->right) != 0 ||
-                codegen_store_scalar(ctx, symbol->location) != 0 ||
-                codegen_load_scalar(ctx, symbol->location) != 0) {
+                codegen_store_scalar(ctx, location) != 0 ||
+                codegen_load_scalar(ctx, location) != 0) {
                 return -1;
             }
-            if (symbol->location.width == 1) {
-                promote_byte(ctx, symbol->location.is_unsigned);
+            if (location.width == 1) {
+                promote_byte(ctx, location.is_unsigned);
             }
             return ctx->error[0] == '\0' ? 0 : -1;
         }
@@ -873,10 +1000,31 @@ static int emit_statement(CodegenContext *ctx, const AstStmt *statement)
             const AstBlockItem *item = &block->items[index];
             if (item->kind == AST_BLOCK_DECLARATION) {
                 const AstVarDecl *variable = (const AstVarDecl *)item->as.declaration;
-                if (variable->initializer != NULL &&
+                const ScalarSymbol *symbol =
+                    symtab_declaration(ctx->symbols, variable);
+                size_t element;
+                if (variable->initializer != NULL && symbol == NULL) {
+                    return set_error(ctx, "unresolved local declaration reached code generation");
+                }
+                if (variable->initializer != NULL && symbol->is_array) {
+                    for (element = 0; element < symbol->array_length; ++element) {
+                        ScalarLocation location = symbol->location;
+                        location.address += (int)(element * location.width);
+                        if (element < variable->initializer->as.list.count) {
+                            if (emit_expression(ctx, variable->initializer->as.list.items[element]
+                                    ->as.expression) != 0) {
+                                return -1;
+                            }
+                        } else if (codegen_load_constant(ctx, location.width, 0) != 0) {
+                            return -1;
+                        }
+                        if (codegen_store_scalar(ctx, location) != 0) {
+                            return -1;
+                        }
+                    }
+                } else if (variable->initializer != NULL &&
                     (emit_expression(ctx, variable->initializer->as.expression) != 0 ||
-                     codegen_store_scalar(ctx,
-                         symtab_declaration(ctx->symbols, variable)->location) != 0)) {
+                     codegen_store_scalar(ctx, symbol->location) != 0)) {
                     return -1;
                 }
             } else if (emit_statement(ctx, item->as.statement) != 0) {
@@ -1171,6 +1319,27 @@ static int emit_global_initializers(CodegenContext *ctx,
         symbol = symtab_declaration(ctx->symbols, variable);
         if (symbol == NULL) {
             return set_error(ctx, "unresolved global reached code generation");
+        }
+        if (symbol->is_array) {
+            size_t element;
+            for (element = 0; element < symbol->array_length; ++element) {
+                ScalarLocation location = symbol->location;
+                location.address += (int)(element * location.width);
+                value = 0;
+                if (variable->initializer != NULL &&
+                    element < variable->initializer->as.list.count &&
+                    symtab_initializer_constant(variable->initializer->as.list.items[element]
+                        ->as.expression, &value) != 0) {
+                    return set_error(ctx,
+                        "unsupported global array initializer reached code generation");
+                }
+                value &= location.width == 1 ? 255UL : 65535UL;
+                if (codegen_load_constant(ctx, location.width, value) != 0 ||
+                    codegen_store_scalar(ctx, location) != 0) {
+                    return -1;
+                }
+            }
+            continue;
         }
         if (variable->initializer != NULL) {
             if (variable->initializer->kind != AST_INITIALIZER_EXPR ||

@@ -58,17 +58,30 @@ is reserved for compiler labels.
 
 `symtab.c` resolves declarations and identifier bindings independently of
 instruction emission. Names are case-sensitive, with block scopes and local
-shadowing. Byte/word scalar declarations, local expression initializers,
-plain assignments, `+`/`-`, equality, unsigned relational comparisons,
-conditionals, `while`, `do`/`while`, and expression-initialized `for` loops are
-supported, including `break` and `continue`. Functions accept named byte/word
+shadowing. Byte/word scalar declarations, single-dimensional byte/word arrays
+with declared or inferred extents, brace-list initialization, and
+constant and runtime-index reads/writes are supported, alongside local expression
+initializers, plain assignments, `+`/`-`, equality, unsigned relational
+comparisons, conditionals, `while`, `do`/`while`, and expression-initialized
+`for` loops, including `break` and `continue`. Functions accept named byte/word
 parameters by value and support direct calls, including recursion and nested
 calls. Prototypes must match definitions; calls require a definition in the
 translation unit. The entry-point `main` remains parameterless. A `for` step
 executes after its body, and `continue` targets the step. Signed relational
 comparisons are rejected. Non-void functions require a return. Static/extern
-storage, arrays, pointers, aggregates, and statements after a return are not
-yet supported by the resolver.
+storage, pointers, aggregates, and statements after a
+return are not yet supported by the resolver. Array extents must be positive
+constants (or inferred from a nonempty initializer); multidimensional arrays
+remain unsupported.
+
+Array subscripts accept supported integer expressions, including calls and
+nested subscripts. Constant out-of-range subscripts are rejected. Runtime
+bounds are not checked: an out-of-range runtime subscript has undefined
+behavior, not a zero result or ignored store. Runtime addressing retains the
+full 16-bit index, scales word offsets by two, and evaluates each index once.
+Register/XRAM elements are little-endian; local words use the reversed stack
+byte order described below. Array storage consumes the full extent in overlap
+and local-frame checks.
 
 Globals require an explicit constant `__at` placement. Internal-RAM globals
 must fit in `[8,96)`; cells 0-7 are reserved for arithmetic/addressing registers.
@@ -177,8 +190,8 @@ section independently. PASM source is concatenated in this order:
 2. Function definitions in translation-unit order, with generated `LB` labels.
 3. Data declarations: currently the twelve-byte `SREG` save area, omitted
    with `#pragma nosave`. Fixed-address globals need startup stores, not
-   symbolic data declarations; arrays and automatic global allocation remain
-   unsupported.
+   symbolic data declarations; arrays are fixed-address globals initialized
+   through startup stores, and automatic global allocation remains unsupported.
 4. Required comparison routines in catalog order, each emitted once.
 
 The startup `RTN` prevents falling through into functions or data. SREG and
@@ -200,6 +213,25 @@ memory preservation. A subsequent keyboard-entered `POKE&E607,42` verifies
 that BASIC has resumed interpreting commands. Success is
 `lcc2_program_result.status="PASS"`, `calls=10`, `returns=10`, with final
 outputs `37 12 23 00 FF FF FF 2A`; the emulator pauses at completion.
+
+## Array functional tests in MAME
+
+Compile and assemble `tests\pc1403_arrays.c` and
+`tests\pc1403_arrays_wide.c`. In a **disposable** PC-1403 session, load
+`pc1403_key.lua` and `tests\pc1403_arrays.lua`, then invoke
+`lcc2_array_test` with the first binary's absolute path. The test clears BASIC
+and reserves four KiB; it runs ten BASIC calls covering byte/word register,
+XRAM, and local arrays, page crossings, zero initialization, signed-byte
+promotion, assignment values, and single evaluation of an index function.
+It also checks the returned word, stack balance, register restoration, BASIC
+program retention, and a keyboard-entered `POKE` after each return.
+
+After success, resume emulation and invoke `lcc2_array_test` with the second
+binary's path and `true` as its second argument. This reserves six KiB and
+checks a byte index of 256 and a word index of 128 (byte offset 256), including
+expression indices and assignment truncation. Both tests pause at completion;
+require `lcc2_array_result.status="PASS"`, `calls=10`, and `returns=10` for
+each run. The result table is replaced when starting the next test.
 
 Run the foundational checks with `make test`. Remove generated build files with
 `make clean`.

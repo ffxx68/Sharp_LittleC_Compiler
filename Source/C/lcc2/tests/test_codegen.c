@@ -373,6 +373,99 @@ static void test_scalar_tree_walker(void)
     ast_arena_destroy(arena);
 }
 
+static void test_array_access_and_initialization(void)
+{
+    AstArena *arena = ast_arena_create();
+    CodegenContext *ctx = codegen_context_create();
+    AstTranslationUnit *unit = parse(arena,
+        "unsigned char __at(8) bytes[3] = {1, 2};"
+        "__xram __at(0xE600) unsigned int words[2] = {0x1234};"
+        "unsigned int main(void) {"
+        " unsigned char local[3] = {4, 5};"
+        " unsigned int local_words[2] = {0x1234};"
+        " local[2] = bytes[1]; words[1] = local[2];"
+        " local_words[1] = words[1]; return local_words[1]; }");
+    const char *assembly;
+
+    assert(codegen_program(ctx, unit) == 0);
+    assembly = codegen_output(ctx);
+    assert(strstr(assembly, "\tLP\t8\n\tEXAM\n") != NULL);
+    assert(strstr(assembly, "\tLP\t9\n\tLDM\n") != NULL);
+    assert(strstr(assembly, "\tLIDP\t58882\n\tSTD\n") != NULL);
+    assert(strstr(assembly, "LIA\tLB(4660)") != NULL);
+    assert(strstr(assembly, "\tLDR\n\tADIA\t") != NULL);
+    assert(strstr(assembly, "\tINCP\n\tLDM\n") != NULL);
+    assert(codegen_stack_depth(ctx) == 0);
+    codegen_context_destroy(ctx);
+    ast_arena_destroy(arena);
+
+    arena = ast_arena_create();
+    ctx = codegen_context_create();
+    unit = parse(arena,
+        "void index(void) {} int main(void) { int values[2]; return values[index()]; }");
+    assert(codegen_program(ctx, unit) != 0);
+    assert(codegen_output(ctx)[0] == '\0');
+    assert(strstr(codegen_error(ctx),
+        "void function call used as a value") != NULL);
+    codegen_context_destroy(ctx);
+    ast_arena_destroy(arena);
+}
+
+static void test_dynamic_array_access(void)
+{
+    AstArena *arena = ast_arena_create();
+    CodegenContext *ctx = codegen_context_create();
+    AstTranslationUnit *unit = parse(arena,
+        "__xram __at(0xE600) unsigned int result;"
+        "unsigned int main(void) {"
+        " unsigned int values[4] = {10, 20, 30, 40};"
+        " unsigned int i = 2;"
+        " values[i] = values[i + 0] + 1;"
+        " result = values[i]; return result; }");
+    const char *assembly;
+
+    assert(codegen_program(ctx, unit) == 0);
+    assembly = codegen_output(ctx);
+    assert(strstr(assembly, "CALL\tLIB_CPE16") == NULL);
+    assert(strstr(assembly, "\tSTP\n\tINCP\n\tPOP\n\tEXAB\n\tPOP\n") != NULL);
+    assert(strstr(assembly, "\tEXAM\n\tLDM\n\tEXAB\n\tDECP\n\tEXAM\n\tLDM\n") != NULL);
+    assert(strstr(assembly, "\tLDM\n\tEXAB\n\tINCP\n\tLDM\n") != NULL);
+    assert(codegen_stack_depth(ctx) == 0);
+    codegen_context_destroy(ctx);
+    ast_arena_destroy(arena);
+}
+
+static void test_dynamic_array_extent_independence(void)
+{
+    static const char *sources[] = {
+        "__xram __at(0xF000) unsigned int values[4];"
+        "unsigned int fetch(unsigned int i) { return values[i + 1]; }",
+        "__xram __at(0xF000) unsigned int values[1024];"
+        "unsigned int fetch(unsigned int i) { return values[i + 1]; }"
+    };
+    AstArena *arenas[2];
+    CodegenContext *contexts[2];
+    size_t index;
+
+    for (index = 0; index < 2; ++index) {
+        AstTranslationUnit *unit;
+        arenas[index] = ast_arena_create();
+        contexts[index] = codegen_context_create();
+        unit = parse(arenas[index], sources[index]);
+        assert(codegen_translation_unit(contexts[index], unit) == 0);
+        assert(codegen_stack_depth(contexts[index]) == 0);
+        assert(codegen_runtime_output(contexts[index])[0] == '\0');
+        assert(strstr(codegen_output(contexts[index]),
+            "\tLP\t4\n\tEXAM\n\tEXAB\n\tLP\t5\n\tEXAM\n\tDX\n\tIXL\n"
+            "\tEXAB\n\tIXL\n\tEXAB\n") != NULL);
+    }
+    assert(strcmp(codegen_output(contexts[0]), codegen_output(contexts[1])) == 0);
+    for (index = 0; index < 2; ++index) {
+        codegen_context_destroy(contexts[index]);
+        ast_arena_destroy(arenas[index]);
+    }
+}
+
 static void test_comparisons_and_control_flow(void)
 {
     AstArena *arena = ast_arena_create();
@@ -594,6 +687,9 @@ int main(void)
     test_scalar_access_sequences();
     test_scalar_validation();
     test_scalar_tree_walker();
+    test_array_access_and_initialization();
+    test_dynamic_array_access();
+    test_dynamic_array_extent_independence();
     test_comparisons_and_control_flow();
     test_function_calls_parameters_and_frames();
     test_runtime_libraries();

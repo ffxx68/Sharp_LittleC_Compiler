@@ -8,10 +8,10 @@ and does not compile the full language described in
 [the target C subset](sc61860_c_subset.md). Parser acceptance alone does not
 mean a construct can be compiled.
 
-The current implementation supports byte/word scalar variables, parameterized
-functions, direct calls, assignments, and addition/subtraction. Earlier
-execution checks were made in PC-1403 MAME sessions; physical-device execution
-and compatibility with other Sharp models have not been verified.
+The current implementation supports byte/word scalars and arrays, parameterized
+functions, direct calls, assignments, comparisons, and structured control flow.
+Earlier execution checks were made in PC-1403 MAME sessions; physical-device
+execution and compatibility with other Sharp models have not been verified.
 
 See the [project README](../Source/C/lcc2/README.md) for implementation details
 and test harnesses, and the [roadmap](../Source/lcc/refactor_roadmap.md) for
@@ -80,11 +80,11 @@ collisions. See the project README for the integrated BASIC-caller test.
 |---------|-----------------|
 | Types | `char`, `unsigned char`, `signed char`, `int`, `unsigned int`; `void` function returns |
 | Functions | Byte/word parameters by value, compatible prototypes, direct calls to definitions in the same translation unit; CLI `main` must be parameterless |
-| Variables | Fixed-address globals with scalar constant initialization; automatic block-scope locals with expression initializers |
+| Variables | Fixed-address globals, automatic locals, and single-dimensional byte/word arrays; scalar and brace-list initialization |
 | Statements | Compound blocks, expression statements, empty statements, `if`/`else`, `while`, `do`/`while`, expression-initialized `for`, `break`, `continue`, `return` |
-| Expressions | Nonnegative 16-bit integer constants, character constants, scalar identifiers, direct function calls, `=`, `+`, `-`, `==`, `!=`, unsigned `<`, `<=`, `>`, `>=`, parentheses |
+| Expressions | Nonnegative 16-bit integer constants, character constants, scalar identifiers, constant/runtime array subscripts, direct function calls, `=`, `+`, `-`, `==`, `!=`, unsigned `<`, `<=`, `>`, `>=`, parentheses |
 | Names | Case-sensitive lookup, nested block scopes, and local-over-global shadowing |
-| `const` | Const-qualified scalar objects cannot be assigned after initialization |
+| `const` | Const-qualified scalar objects and array elements cannot be assigned after initialization |
 
 Declarations precede statements within a block. Non-void functions require a
 return expression; void functions may use `return;` or an empty body.
@@ -95,11 +95,19 @@ named scalar parameters; prototypes may omit parameter names. Calls are
 left-to-right and may be nested or recursive. Argument and return values use
 the byte/word stack convention described below.
 
-Arrays, pointers, aggregates, `switch`, `goto`, static/extern objects,
+Pointers, aggregates, `switch`, `goto`, static/extern objects,
 external function calls, and operators other than those listed above are not
-implemented in the scalar backend. Global initializers are limited to integer
-and character constants combined with `+` and `-`; list and floating-point
-initializers are rejected. Comparison expressions call legacy `LIB_CP*16`
+implemented. Global scalar initializers are limited to integer and character
+constants combined with `+` and `-`; scalar list and floating-point
+initializers are rejected. Array subscripts accept supported integer
+expressions, including function calls and other array accesses; each subscript
+is evaluated once. Constant out-of-range subscripts are rejected. Runtime
+bounds are not checked, and out-of-range runtime access has undefined behavior.
+Multidimensional arrays, variable-length arrays, array-to-pointer decay, and
+non-byte/word element types remain unsupported.
+Array brace lists may be shorter than the declared extent; omitted elements
+are zero-initialized, including local arrays. An extent may be inferred from a
+nonempty brace list. Comparison expressions call legacy `LIB_CP*16`
 routines, embedded once after generated functions when needed. Their source
 is built into the compiler, so no external `.lib` files are required.
 Unknown runtime requests and function names colliding with included runtime
@@ -134,6 +142,15 @@ globals with no initializer are zeroed before `main`. Explicit scalar
 initializers are constant expressions using integer/character constants and
 `+`/`-`; results are truncated to the declared width (8 or 16 bits) and stored
 before `main` as part of startup.
+
+Single-dimensional byte and word arrays use the same fixed register/XRAM
+placement rules as scalars. Global array initializers require brace lists of
+constant expressions; local array initializers accept supported scalar
+expressions. Both zero-fill omitted elements; uninitialized local arrays are
+not zeroed. Element loads/stores support constant or runtime subscripts.
+Word-element address scaling preserves the full 16-bit offset; XRAM arrays
+are not restricted to a single 256-byte page. Array extents count toward
+storage-overlap checks and the local frame limit.
 
 **Placement is the programmer's responsibility:** the compiler does not prove
 that objects avoid generated code, the runtime stack, or BASIC/firmware state.

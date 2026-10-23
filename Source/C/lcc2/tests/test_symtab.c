@@ -76,7 +76,6 @@ static void test_rejections(void)
         "int __at(8) x; void x(void) {}",
         "int main(void) { static int x; return x; }",
         "int main(void) { int __at(8) x; return x; }",
-        "int main(void) { int x[2]; return 0; }",
         "int main(void) { float x; return 0; }",
         "int main(void) { return 65536; }",
         "void main(void) { return 1; }",
@@ -126,6 +125,102 @@ static void test_parameter_layout_and_calls(void)
     assert(right != NULL && right->location.width == 1);
     assert(right->location.address == 2);
     assert(local != NULL && local->location.width == 2);
+    symtab_destroy(table);
+    ast_arena_destroy(arena);
+}
+
+static void test_array_layout_and_binding(void)
+{
+    AstArena *arena = ast_arena_create();
+    ScalarSymbols *table = symtab_create();
+    AstTranslationUnit *unit = parse(arena,
+        "unsigned char __at(8) bytes[3] = {1, 2};"
+        "__xram __at(0xE600) unsigned int words[2];"
+        "unsigned int main(void) {"
+        " unsigned char local[3] = {4, 5};"
+        " unsigned int values[2];"
+        " local[2] = bytes[1]; values[1] = words[0];"
+        " return local[2] + values[1]; }");
+    AstFunctionDecl *function = (AstFunctionDecl *)unit->declarations.items[2];
+    AstVarDecl *local = (AstVarDecl *)function->body->items[0].as.declaration;
+    AstVarDecl *values = (AstVarDecl *)function->body->items[1].as.declaration;
+    AstExpr *assignment = ((AstExprStmt *)function->body->items[2].as.statement)->expression;
+    AstIndexExpr *destination = (AstIndexExpr *)((AstBinaryExpr *)assignment)->left;
+    ScalarLocation location;
+
+    assert(symtab_resolve(table, unit) == 0);
+    assert(symtab_frame_size(table, function) == 7);
+    assert(symtab_declaration(table, local)->is_array);
+    assert(symtab_declaration(table, local)->array_length == 3);
+    assert(symtab_declaration(table, values)->allocation_width == 4);
+    assert(symtab_index_location(table, destination, &location) == 0);
+    assert(location.storage == SCALAR_LOCAL && location.width == 1);
+    assert(location.address == 4);
+    {
+        AstExpr *source = ((AstBinaryExpr *)assignment)->right;
+        AstIndexExpr *source_index = (AstIndexExpr *)source;
+        assert(symtab_index_location(table, source_index, &location) == 0);
+        assert(location.storage == SCALAR_REGISTER && location.address == 9);
+    }
+    symtab_destroy(table);
+    ast_arena_destroy(arena);
+}
+
+static void test_array_rejections(void)
+{
+    static const char *sources[] = {
+        "int main(void) { int values[2]; return values[2]; }",
+        "int main(void) { int values[2]; return values[-1]; }",
+        "void index(void) {} int main(void) { int values[2]; return values[index()]; }",
+        "int main(void) { int values[2]; return values[0 - 1]; }",
+        "int main(void) { const int values[2] = {1}; values[0] = 2; return 0; }",
+        "int main(void) { int values[0]; return 0; }",
+        "int main(void) { int values[17]; return 0; }",
+        "int main(void) { int n = 2; int values[n]; return 0; }",
+        "int main(void) { int values[]; return 0; }",
+        "int main(void) { int values[2] = {1, 2, 3}; return 0; }",
+        "int main(void) { int values[2] = {{1}}; return 0; }",
+        "int main(void) { char values[2] = \"a\"; return 0; }",
+        "int main(void) { int values[2]; return values; }",
+        "__xram __at(65534) int values[2]; void main(void) {}",
+        "unsigned char __at(95) values[2]; void main(void) {}",
+        "int main(void) { float values[2]; return 0; }",
+        "int main(void) { int *values[2]; return 0; }",
+        "int main(void) { int value = 1; return value[0]; }",
+        "int main(void) { int values[2]; values = 1; return 0; }",
+        "int main(void) { const int values[2] = {1}; int i = 0;"
+            " values[i] = 2; return 0; }",
+        "int main(void) { int values[2]; return 0; } "
+            "unsigned int __at(8) collision[2]; "
+            "unsigned char __at(9) overlap;"
+    };
+    size_t index;
+    for (index = 0; index < sizeof(sources) / sizeof(sources[0]); ++index) {
+        AstArena *arena = ast_arena_create();
+        ScalarSymbols *table = symtab_create();
+        AstTranslationUnit *unit = parse(arena, sources[index]);
+        assert(symtab_resolve(table, unit) != 0);
+        assert(symtab_error(table)[0] != '\0');
+        symtab_destroy(table);
+        ast_arena_destroy(arena);
+    }
+}
+
+static void test_dynamic_array_index_resolution(void)
+{
+    AstArena *arena = ast_arena_create();
+    ScalarSymbols *table = symtab_create();
+    AstTranslationUnit *unit = parse(arena,
+        "unsigned int main(void) {"
+        " unsigned int values[4]; unsigned int i = 0;"
+        " values[i] = values[i + 1] + 1; return values[i]; }");
+    AstFunctionDecl *function = (AstFunctionDecl *)unit->declarations.items[0];
+    AstExpr *assignment = ((AstExprStmt *)function->body->items[2].as.statement)->expression;
+    AstIndexExpr *destination = (AstIndexExpr *)((AstBinaryExpr *)assignment)->left;
+
+    assert(symtab_resolve(table, unit) == 0);
+    assert(symtab_identifier(table, destination->index) != NULL);
+    assert(symtab_identifier(table, destination->index)->declaration != NULL);
     symtab_destroy(table);
     ast_arena_destroy(arena);
 }
@@ -242,5 +337,8 @@ int main(void)
     test_frame_limit();
     test_control_flow_resolution();
     test_parameter_layout_and_calls();
+    test_array_layout_and_binding();
+    test_array_rejections();
+    test_dynamic_array_index_resolution();
     return 0;
 }

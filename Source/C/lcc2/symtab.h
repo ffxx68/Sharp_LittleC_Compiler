@@ -21,7 +21,10 @@ typedef struct ScalarSymbol {
     const AstParamDecl *parameter;
     const AstFunctionDecl *function;
     ScalarLocation location;
+    size_t allocation_width;
+    size_t array_length;
     size_t scope;
+    unsigned char is_array;
     unsigned char active;
 } ScalarSymbol;
 
@@ -33,6 +36,9 @@ int symtab_resolve(ScalarSymbols *table, AstTranslationUnit *unit);
 const char *symtab_error(const ScalarSymbols *table);
 const ScalarSymbol *symtab_identifier(const ScalarSymbols *table,
                                       const AstExpr *expression);
+int symtab_index_location(const ScalarSymbols *table,
+                          const AstIndexExpr *expression,
+                          ScalarLocation *location);
 const ScalarSymbol *symtab_declaration(const ScalarSymbols *table,
                                        const AstVarDecl *declaration);
 const ScalarSymbol *symtab_parameter(const ScalarSymbols *table,
