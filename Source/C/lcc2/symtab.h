@@ -18,6 +18,7 @@ typedef struct ScalarLocation {
 
 typedef struct ScalarSymbol {
     const AstVarDecl *declaration;
+    const AstParamDecl *parameter;
     const AstFunctionDecl *function;
     ScalarLocation location;
     size_t scope;
@@ -34,6 +35,10 @@ const ScalarSymbol *symtab_identifier(const ScalarSymbols *table,
                                       const AstExpr *expression);
 const ScalarSymbol *symtab_declaration(const ScalarSymbols *table,
                                        const AstVarDecl *declaration);
+const ScalarSymbol *symtab_parameter(const ScalarSymbols *table,
+                                     const AstParamDecl *parameter);
+const AstFunctionDecl *symtab_function(const ScalarSymbols *table,
+                                      const char *name);
 size_t symtab_frame_size(const ScalarSymbols *table,
                          const AstFunctionDecl *function);
 size_t symtab_type_width(const AstType *type);

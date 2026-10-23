@@ -21,6 +21,7 @@ struct CodegenContext {
     ScalarSymbols *symbols;
     AstTranslationUnit *resolved_unit;
     char *return_label;
+    const AstType *return_type;
     LoopLabels *loops;
     size_t loop_count;
     size_t loop_capacity;
@@ -613,6 +614,64 @@ static int emit_expression(CodegenContext *ctx, const AstExpr *expression)
         }
         return ctx->error[0] == '\0' ? 0 : -1;
     }
+    if (expression->node.kind == AST_NODE_CALL_EXPR) {
+        const AstCallExpr *call = (const AstCallExpr *)expression;
+        const AstIdentExpr *identifier = (const AstIdentExpr *)call->function;
+        const AstFunctionDecl *function =
+            symtab_function(ctx->symbols, identifier->name);
+        size_t index, argument_bytes = 0, result_width;
+        if (function == NULL || function->is_prototype) {
+            return set_error(ctx, "unresolved function call reached code generation");
+        }
+        for (index = 0; index < call->arguments.count; ++index) {
+            size_t width = symtab_type_width(function->parameters[index]->type);
+            if (emit_expression(ctx, call->arguments.items[index]) != 0 ||
+                codegen_emit_push(ctx, width) != 0) {
+                return -1;
+            }
+            if (argument_bytes > (size_t)-1 - width) {
+                return set_error(ctx, "function argument stack size overflow");
+            }
+            argument_bytes += width;
+            if (argument_bytes > 255) {
+                return set_error(ctx, "function arguments exceed target stack addressing");
+            }
+        }
+        emit_inst_op_comment(ctx, "CALL", function->name, "Function call");
+        result_width = symtab_type_width(function->return_type);
+        if (argument_bytes != 0) {
+            if (ctx->stack_depth < argument_bytes) {
+                return set_error(ctx, "function argument stack underflow");
+            }
+            if (result_width == 2) {
+                emit_inst_op(ctx, "LP", "0");
+                emit_inst(ctx, "EXAM");
+                emit_inst(ctx, "LDR");
+                emit_number(ctx, "ADIA", (int)argument_bytes);
+                emit_inst(ctx, "STR");
+                emit_inst(ctx, "EXAM");
+            } else if (result_width == 1) {
+                emit_inst(ctx, "EXAB");
+                emit_inst(ctx, "LDR");
+                emit_number(ctx, "ADIA", (int)argument_bytes);
+                emit_inst(ctx, "STR");
+                emit_inst(ctx, "EXAB");
+            } else if (argument_bytes < 4) {
+                for (index = 0; index < argument_bytes; ++index) {
+                    emit_inst(ctx, "POP");
+                }
+            } else {
+                emit_inst(ctx, "LDR");
+                emit_number(ctx, "ADIA", (int)argument_bytes);
+                emit_inst(ctx, "STR");
+            }
+            ctx->stack_depth -= argument_bytes;
+        }
+        if (result_width == 1) {
+            promote_byte(ctx, function->return_type->as.base.is_unsigned);
+        }
+        return ctx->error[0] == '\0' ? 0 : -1;
+    }
     if (expression->node.kind == AST_NODE_BINARY_EXPR) {
         const AstBinaryExpr *binary = (const AstBinaryExpr *)expression;
         size_t width = 2;
@@ -701,9 +760,12 @@ static int emit_statement(CodegenContext *ctx, const AstStmt *statement)
         return emit_expression(ctx, ((const AstExprStmt *)statement)->expression);
     } else if (statement->node.kind == AST_NODE_RETURN_STMT) {
         const AstExpr *value = ((const AstReturnStmt *)statement)->expression;
-        if ((value != NULL && emit_expression(ctx, value) != 0) ||
-            ctx->return_label == NULL) {
+        if (ctx->return_label == NULL ||
+            (value != NULL && emit_expression(ctx, value) != 0)) {
             return set_error(ctx, "return statement has no function epilogue");
+        }
+        if (value != NULL && symtab_type_width(ctx->return_type) == 1) {
+            promote_byte(ctx, ctx->return_type->as.base.is_unsigned);
         }
         emit_inst_op(ctx, "JP", ctx->return_label);
     } else if (statement->node.kind == AST_NODE_IF_STMT) {
@@ -906,7 +968,11 @@ int codegen_translation_unit(CodegenContext *ctx, AstTranslationUnit *tu)
         if (ctx->return_label == NULL) {
             return -1;
         }
+        ctx->return_type = function->return_type;
         frame_size = symtab_frame_size(ctx->symbols, function);
+        if (frame_size > 255) {
+            return set_error(ctx, "function frame exceeds target stack addressing");
+        }
         for (byte = 0; byte < frame_size; ++byte) {
             emit_inst(ctx, "PUSH");
             ++ctx->frame_depth;
@@ -935,6 +1001,7 @@ int codegen_translation_unit(CodegenContext *ctx, AstTranslationUnit *tu)
         (void)append_text(ctx, "\n", 1);
         free(ctx->return_label);
         ctx->return_label = NULL;
+        ctx->return_type = NULL;
         if (ctx->error[0] != '\0') {
             return -1;
         }
@@ -1009,6 +1076,15 @@ int codegen_program(CodegenContext *ctx, AstTranslationUnit *tu)
     }
     if (!has_main) {
         return set_error(ctx, "program requires a parameterless main definition");
+    }
+    for (index = 0; index < tu->declarations.count; ++index) {
+        const AstFunctionDecl *function =
+            (const AstFunctionDecl *)tu->declarations.items[index];
+        if (function->declaration.node.kind == AST_NODE_FUNCTION_DECL &&
+            !function->is_prototype && strcmp(function->name, "main") == 0 &&
+            function->parameter_count != 0) {
+            return set_error(ctx, "program main definition must be parameterless");
+        }
     }
     emit_comment(ctx, "pasm file - assemble with pasm!");
     emit_comment(ctx, "Compiled with lcc2");

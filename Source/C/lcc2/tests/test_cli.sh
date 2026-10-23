@@ -3,7 +3,7 @@ set -eu
 
 dir=build/cli-tests
 mkdir -p "$dir"
-trap 'rm -f "$dir/source.c" "$dir/output.asm" "$dir/expected.asm" "$dir/error.txt"; rmdir "$dir"' EXIT
+trap 'rm -f "$dir/source.c" "$dir/output.asm" "$dir/output.bin" "$dir/expected.asm" "$dir/error.txt"; rmdir "$dir"' EXIT
 
 ./lcc2.exe tests/pc1403_smoke.c -o "$dir/output.asm"
 grep -q '^.ORG.*57392' "$dir/output.asm"
@@ -35,3 +35,5 @@ printf 'void main(void) {}\000ignored\n' > "$dir/source.c"
 expect_failure "$dir/source.c" -o "$dir/output.asm"
 ./lcc2.exe tests/pc1403_scalars.c -o "$dir/output.asm"
 grep -q 'LIDP.*59391' "$dir/output.asm"
+./lcc2.exe tests/pc1403_calls.c -o "$dir/output.asm"
+../../../pasm.exe "$dir/output.asm" "$dir/output.bin"

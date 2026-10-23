@@ -20,8 +20,8 @@ The project target builds the command-line compiler, AST arena, Flex scanner,
 Bison parser, scalar resolver, and code-generation module. The parser can be
 exercised through `lcc2_parse_string`; the backend emits byte/word constants,
 scalar access, stack operations, add/sub/comparison operations, labels,
-structured control flow, and parameterless leaf functions. The resolver
-validates the supported subset before emission.
+structured control flow, and parameterized functions with direct calls. The
+resolver validates the supported subset before emission.
 
 ## Compile and run the PC-1403 smoke program
 
@@ -44,8 +44,9 @@ registers using the Pascal wrapper and explicitly returns to the caller.
 `#pragma nosave` disables preservation, but still emits the final `RTN`.
 `#pragma pc` is explicitly rejected until its output semantics are implemented.
 Comparison expressions call the legacy `LIB_CP*16` helpers; appending/linking
-runtime libraries remains a later output-integration task. General calls and
-other unsupported backend constructs are still rejected.
+runtime libraries remains a later output-integration task. Direct calls to
+defined functions use byte/word parameters by value; unresolved external calls
+and other unsupported backend constructs are rejected.
 Function labels must not collide in PASM's case-insensitive namespace;
 `SREG` is reserved when preservation is enabled, and `LB` followed by digits
 is reserved for compiler labels.
@@ -57,9 +58,12 @@ instruction emission. Names are case-sensitive, with block scopes and local
 shadowing. Byte/word scalar declarations, local expression initializers,
 plain assignments, `+`/`-`, equality, unsigned relational comparisons,
 conditionals, `while`, `do`/`while`, and expression-initialized `for` loops are
-supported, including `break` and `continue`. A `for` step executes after its
-body, and `continue` targets the step. Signed relational comparisons are
-rejected. Non-void functions require a return. Parameters, static/extern
+supported, including `break` and `continue`. Functions accept named byte/word
+parameters by value and support direct calls, including recursion and nested
+calls. Prototypes must match definitions; calls require a definition in the
+translation unit. The entry-point `main` remains parameterless. A `for` step
+executes after its body, and `continue` targets the step. Signed relational
+comparisons are rejected. Non-void functions require a return. Static/extern
 storage, arrays, pointers, aggregates, and statements after a return are not
 yet supported by the resolver.
 
@@ -74,9 +78,9 @@ over live stack slots, generated code, or BASIC/firmware memory. Registers
 there do not persist after returning to BASIC.
 
 Local bytes and words use one function-wide frame, including declarations in
-nested blocks, without reusing slots. The initial leaf slice limits the frame
-to 32 bytes; actual safe stack capacity still depends on the caller and live
-expression temporaries. General stack frames remain a later milestone.
+nested blocks, without reusing slots. The local frame is limited to 32 bytes;
+actual safe stack capacity still depends on the caller, parameters, nested
+calls, and live expression temporaries.
 For a frame of N bytes, an object whose cumulative allocation ends at C has
 legacy local offset `N-C-2` for a byte or `N-C-1` for a word. Its byte (or word
 high byte) is at `R + N-C + temporary_depth`. Words are reversed on the stack:
@@ -84,6 +88,12 @@ the low byte follows the high byte. Register and XRAM words are little-endian.
 Frame allocation/cleanup is owned by codegen, not the resolver. Codegen tracks
 frame bytes separately from expression temporaries and reports their total
 through `codegen_stack_depth`.
+
+Arguments are evaluated left to right and pushed in parameter order. Callees
+access parameters at their computed stack offsets; callers remove argument
+bytes after return while preserving byte/word results. Void-call cleanup uses
+individual pops below four bytes and adjusts the stack pointer at four bytes
+or more. External runtime-library linkage remains deferred.
 
 Expressions are evaluated in the word accumulator B:A. Byte loads are promoted
 (plain `char` and `unsigned char` zero-extend, `signed char` sign-extends).

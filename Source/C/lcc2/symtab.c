@@ -17,7 +17,9 @@ struct ScalarSymbols {
     const AstFunctionDecl *function;
     size_t scope;
     size_t local_bytes;
+    size_t parameter_bytes;
     size_t loop_depth;
+    AstTranslationUnit *unit;
     int returned;
     int resolved;
     char error[256];
@@ -30,6 +32,12 @@ static int fail(ScalarSymbols *table, const char *message, const char *name)
                        message, name == NULL ? "" : ": ", name == NULL ? "" : name);
     }
     return -1;
+}
+
+static const char *symbol_name(const ScalarSymbol *symbol)
+{
+    return symbol->declaration != NULL ? symbol->declaration->name :
+           symbol->parameter != NULL ? symbol->parameter->name : NULL;
 }
 
 ScalarSymbols *symtab_create(void)
@@ -110,7 +118,7 @@ static int add_variable(ScalarSymbols *table, const AstVarDecl *variable)
     for (index = 0; index < table->count; ++index) {
         const ScalarSymbol *other = &table->symbols[index];
         if (other->active && other->scope == table->scope &&
-            strcmp(other->declaration->name, variable->name) == 0) {
+            strcmp(symbol_name(other), variable->name) == 0) {
             return fail(table, "duplicate scalar declaration", variable->name);
         }
     }
@@ -165,10 +173,76 @@ static int add_variable(ScalarSymbols *table, const AstVarDecl *variable)
     return 0;
 }
 
+static int add_parameter(ScalarSymbols *table, const AstParamDecl *parameter)
+{
+    ScalarSymbol symbol;
+    ScalarSymbol *grown;
+    size_t width = symtab_type_width(parameter->type);
+    size_t index;
+
+    if (width == 0 || parameter->name == NULL) {
+        return fail(table, "function definition requires named scalar parameters",
+                    parameter->name);
+    }
+    for (index = 0; index < table->count; ++index) {
+        const ScalarSymbol *other = &table->symbols[index];
+        if (other->active && other->scope == table->scope &&
+            strcmp(symbol_name(other), parameter->name) == 0) {
+            return fail(table, "duplicate parameter name", parameter->name);
+        }
+    }
+    memset(&symbol, 0, sizeof(symbol));
+    symbol.parameter = parameter;
+    symbol.function = table->function;
+    symbol.scope = table->scope;
+    symbol.active = 1;
+    symbol.location.storage = SCALAR_LOCAL;
+    symbol.location.width = width;
+    symbol.location.is_unsigned = parameter->type->as.base.is_unsigned;
+    table->parameter_bytes += width;
+    grown = (ScalarSymbol *)realloc(table->symbols,
+        (table->count + 1) * sizeof(*grown));
+    if (grown == NULL) {
+        return fail(table, "out of memory adding parameter", parameter->name);
+    }
+    table->symbols = grown;
+    table->symbols[table->count++] = symbol;
+    return 0;
+}
+
 static int expression_unsigned_word(const ScalarSymbols *table,
                                     const AstExpr *expression);
 static int expression_nonnegative(const ScalarSymbols *table,
                                   const AstExpr *expression);
+
+static int expression_contains_void_call(const ScalarSymbols *table,
+                                         const AstExpr *expression)
+{
+    if (expression == NULL) {
+        return 0;
+    }
+    if (expression->node.kind == AST_NODE_CALL_EXPR) {
+        const AstCallExpr *call = (const AstCallExpr *)expression;
+        size_t index;
+        if (call->function->node.kind == AST_NODE_IDENT_EXPR) {
+            const AstFunctionDecl *function = symtab_function(table,
+                ((const AstIdentExpr *)call->function)->name);
+            if (function != NULL && symtab_type_width(function->return_type) == 0) {
+                return 1;
+            }
+        }
+        for (index = 0; index < call->arguments.count; ++index) {
+            if (expression_contains_void_call(table, call->arguments.items[index])) {
+                return 1;
+            }
+        }
+    } else if (expression->node.kind == AST_NODE_BINARY_EXPR) {
+        const AstBinaryExpr *binary = (const AstBinaryExpr *)expression;
+        return expression_contains_void_call(table, binary->left) ||
+               expression_contains_void_call(table, binary->right);
+    }
+    return 0;
+}
 
 static int resolve_expression(ScalarSymbols *table, const AstExpr *expression)
 {
@@ -190,7 +264,7 @@ static int resolve_expression(ScalarSymbols *table, const AstExpr *expression)
         size_t index = table->count;
         while (index != 0) {
             const ScalarSymbol *symbol = &table->symbols[--index];
-            if (symbol->active && strcmp(symbol->declaration->name, name) == 0) {
+            if (symbol->active && strcmp(symbol_name(symbol), name) == 0) {
                 Binding *grown = realloc(table->bindings,
                     (table->binding_count + 1) * sizeof(*grown));
                 if (grown == NULL) {
@@ -204,6 +278,33 @@ static int resolve_expression(ScalarSymbols *table, const AstExpr *expression)
         }
         return fail(table, "undeclared scalar", name);
     }
+    if (expression->node.kind == AST_NODE_CALL_EXPR) {
+        const AstCallExpr *call = (const AstCallExpr *)expression;
+        const AstIdentExpr *identifier;
+        const AstFunctionDecl *function;
+        size_t index;
+        if (call->function == NULL ||
+            call->function->node.kind != AST_NODE_IDENT_EXPR) {
+            return fail(table, "only direct function calls are supported", NULL);
+        }
+        identifier = (const AstIdentExpr *)call->function;
+        function = symtab_function(table, identifier->name);
+        if (function == NULL) {
+            return fail(table, "call to undeclared function", identifier->name);
+        }
+        if (call->arguments.count != function->parameter_count) {
+            return fail(table, "function call has the wrong number of arguments",
+                        function->name);
+        }
+        for (index = 0; index < call->arguments.count; ++index) {
+            if (symtab_type_width(function->parameters[index]->type) == 0 ||
+                expression_contains_void_call(table, call->arguments.items[index]) ||
+                resolve_expression(table, call->arguments.items[index]) != 0) {
+                return fail(table, "unsupported function argument", function->name);
+            }
+        }
+        return 0;
+    }
     if (expression->node.kind == AST_NODE_BINARY_EXPR) {
         const AstBinaryExpr *binary = (const AstBinaryExpr *)expression;
         if (binary->op != AST_BINARY_ADD && binary->op != AST_BINARY_SUB &&
@@ -215,6 +316,10 @@ static int resolve_expression(ScalarSymbols *table, const AstExpr *expression)
             binary->op != AST_BINARY_EQUAL &&
             binary->op != AST_BINARY_NOT_EQUAL) {
             return fail(table, "unsupported scalar operator", NULL);
+        }
+        if (expression_contains_void_call(table, binary->left) ||
+            expression_contains_void_call(table, binary->right)) {
+            return fail(table, "void function call used as a value", NULL);
         }
         if (resolve_expression(table, binary->left) != 0 ||
             resolve_expression(table, binary->right) != 0) {
@@ -233,7 +338,10 @@ static int resolve_expression(ScalarSymbols *table, const AstExpr *expression)
         if (binary->op == AST_BINARY_ASSIGN) {
             const ScalarSymbol *symbol = symtab_identifier(table, binary->left);
             if (symbol == NULL ||
-                (symbol->declaration->type->qualifiers & AST_QUALIFIER_CONST) != 0) {
+                (symbol->declaration != NULL &&
+                 (symbol->declaration->type->qualifiers & AST_QUALIFIER_CONST) != 0) ||
+                (symbol->parameter != NULL &&
+                 (symbol->parameter->type->qualifiers & AST_QUALIFIER_CONST) != 0)) {
                 return fail(table, "assignment requires a modifiable scalar lvalue", NULL);
             }
         }
@@ -315,6 +423,8 @@ static int resolve_local_declaration(ScalarSymbols *table,
     }
     if (variable->initializer != NULL &&
         (variable->initializer->kind != AST_INITIALIZER_EXPR ||
+         expression_contains_void_call(table,
+             variable->initializer->as.expression) ||
          resolve_expression(table, variable->initializer->as.expression) != 0)) {
         return fail(table, "unsupported scalar initializer", variable->name);
     }
@@ -356,10 +466,20 @@ static int resolve_statement(ScalarSymbols *table, const AstStmt *statement)
     case AST_NODE_EMPTY_STMT:
         return 0;
     case AST_NODE_EXPR_STMT:
+        if (((const AstExprStmt *)statement)->expression != NULL &&
+            ((const AstExprStmt *)statement)->expression->node.kind !=
+                AST_NODE_CALL_EXPR &&
+            expression_contains_void_call(table,
+                ((const AstExprStmt *)statement)->expression)) {
+            return fail(table, "void function call used as a value", NULL);
+        }
         return resolve_expression(table, ((const AstExprStmt *)statement)->expression);
     case AST_NODE_IF_STMT: {
         const AstIfStmt *conditional = (const AstIfStmt *)statement;
         int then_returns, else_returns;
+        if (expression_contains_void_call(table, conditional->condition)) {
+            return fail(table, "void function call used as a value", NULL);
+        }
         if (resolve_expression(table, conditional->condition) != 0 ||
             resolve_statement(table, conditional->then_branch) != 0) {
             return -1;
@@ -380,6 +500,9 @@ static int resolve_statement(ScalarSymbols *table, const AstStmt *statement)
     case AST_NODE_WHILE_STMT: {
         const AstWhileStmt *loop = (const AstWhileStmt *)statement;
         int was_returned = table->returned;
+        if (expression_contains_void_call(table, loop->condition)) {
+            return fail(table, "void function call used as a value", NULL);
+        }
         if (resolve_expression(table, loop->condition) != 0) {
             return -1;
         }
@@ -402,6 +525,9 @@ static int resolve_statement(ScalarSymbols *table, const AstStmt *statement)
         }
         --table->loop_depth;
         table->returned = was_returned;
+        if (expression_contains_void_call(table, loop->condition)) {
+            return fail(table, "void function call used as a value", NULL);
+        }
         return resolve_expression(table, loop->condition);
     }
     case AST_NODE_FOR_STMT: {
@@ -415,9 +541,17 @@ static int resolve_statement(ScalarSymbols *table, const AstStmt *statement)
             return -1;
         }
         if ((loop->init_expression != NULL &&
-             resolve_expression(table, loop->init_expression) != 0) ||
-            (loop->condition != NULL &&
-             resolve_expression(table, loop->condition) != 0)) {
+             resolve_expression(table, loop->init_expression) != 0)) {
+            --table->scope;
+            return -1;
+        }
+        if (loop->condition != NULL &&
+            expression_contains_void_call(table, loop->condition)) {
+            --table->scope;
+            return fail(table, "void function call used as a value", NULL);
+        }
+        if (loop->condition != NULL &&
+            resolve_expression(table, loop->condition) != 0) {
             --table->scope;
             return -1;
         }
@@ -457,12 +591,40 @@ static int resolve_statement(ScalarSymbols *table, const AstStmt *statement)
         if ((width == 0 && value != NULL) || (width != 0 && value == NULL)) {
             return fail(table, "return expression does not match function type", NULL);
         }
+        if (value != NULL && expression_contains_void_call(table, value)) {
+            return fail(table, "void function call used as a value", NULL);
+        }
         table->returned = 1;
         return value == NULL ? 0 : resolve_expression(table, value);
     }
     default:
         return fail(table, "unsupported scalar statement", NULL);
     }
+}
+
+static int compatible_type(const AstType *left, const AstType *right)
+{
+    return left != NULL && right != NULL &&
+           left->kind == AST_TYPE_BASE && right->kind == AST_TYPE_BASE &&
+           left->as.base.base == right->as.base.base &&
+           left->as.base.is_unsigned == right->as.base.is_unsigned;
+}
+
+static int compatible_function(const AstFunctionDecl *left,
+                               const AstFunctionDecl *right)
+{
+    size_t index;
+    if (!compatible_type(left->return_type, right->return_type) ||
+        left->parameter_count != right->parameter_count) {
+        return 0;
+    }
+    for (index = 0; index < left->parameter_count; ++index) {
+        if (!compatible_type(left->parameters[index]->type,
+                             right->parameters[index]->type)) {
+            return 0;
+        }
+    }
+    return 1;
 }
 
 int symtab_resolve(ScalarSymbols *table, AstTranslationUnit *unit)
@@ -475,6 +637,7 @@ int symtab_resolve(ScalarSymbols *table, AstTranslationUnit *unit)
         return fail(table, "symbol table can resolve only one translation unit", NULL);
     }
     table->resolved = 1;
+    table->unit = unit;
     for (index = 0; index < unit->declarations.count; ++index) {
         const AstDecl *declaration = unit->declarations.items[index];
         size_t previous;
@@ -499,11 +662,7 @@ int symtab_resolve(ScalarSymbols *table, AstTranslationUnit *unit)
                     const AstFunctionDecl *left = (const AstFunctionDecl *)declaration;
                     const AstFunctionDecl *right = (const AstFunctionDecl *)other;
                     if ((!left->is_prototype && !right->is_prototype) ||
-                        left->parameter_count != right->parameter_count ||
-                        left->return_type->kind != AST_TYPE_BASE ||
-                        right->return_type->kind != AST_TYPE_BASE ||
-                        left->return_type->as.base.base != right->return_type->as.base.base ||
-                        left->return_type->as.base.is_unsigned != right->return_type->as.base.is_unsigned) {
+                        !compatible_function(left, right)) {
                         return fail(table, "conflicting function declarations", name);
                     }
                 }
@@ -513,7 +672,7 @@ int symtab_resolve(ScalarSymbols *table, AstTranslationUnit *unit)
     for (index = 0; index < unit->declarations.count; ++index) {
         const AstDecl *declaration = unit->declarations.items[index];
         const AstFunctionDecl *function;
-        size_t first_local, local;
+        size_t local;
         if (declaration->node.kind == AST_NODE_VARIABLE_DECL) {
             if (add_variable(table, (const AstVarDecl *)declaration) != 0) {
                 return -1;
@@ -521,28 +680,64 @@ int symtab_resolve(ScalarSymbols *table, AstTranslationUnit *unit)
             continue;
         }
         function = (const AstFunctionDecl *)declaration;
-        if (function->parameter_count != 0 || (!function->is_prototype && function->body == NULL) ||
+        if ((!function->is_prototype && function->body == NULL) ||
             function->storage != AST_STORAGE_NONE ||
             (symtab_type_width(function->return_type) == 0 &&
              (function->return_type->kind != AST_TYPE_BASE ||
               function->return_type->as.base.base != AST_TYPE_VOID))) {
             return fail(table, "unsupported translation unit construct: function signature", function->name);
         }
+        {
+            size_t parameter;
+            for (parameter = 0; parameter < function->parameter_count; ++parameter) {
+                if (symtab_type_width(function->parameters[parameter]->type) == 0) {
+                    return fail(table, "unsupported function parameter type",
+                                function->name);
+                }
+            }
+        }
         if (function->is_prototype) {
             continue;
         }
         table->function = function;
+        table->scope = 0;
         table->local_bytes = 0;
+        table->parameter_bytes = 0;
         table->returned = 0;
-        first_local = table->count;
+        {
+            size_t parameter;
+            for (parameter = 0; parameter < function->parameter_count; ++parameter) {
+                table->scope = 1;
+                if (add_parameter(table, function->parameters[parameter]) != 0) {
+                    return -1;
+                }
+            }
+            table->scope = 0;
+        }
         if (resolve_statement(table, (const AstStmt *)function->body) != 0) {
             return -1;
         }
         if (symtab_type_width(function->return_type) != 0 && !table->returned) {
             return fail(table, "non-void function requires a return", function->name);
         }
-        for (local = first_local; local < table->count; ++local) {
-            table->symbols[local].location.address += (int)table->local_bytes;
+        for (local = 0; local < table->count; ++local) {
+            ScalarSymbol *symbol = &table->symbols[local];
+            if (symbol->function != function) {
+                continue;
+            }
+            if (symbol->parameter != NULL) {
+                size_t parameter, offset = 1;
+                for (parameter = 0; parameter < function->parameter_count; ++parameter) {
+                    if (function->parameters[parameter] == symbol->parameter) {
+                        symbol->location.address = (int)(table->local_bytes +
+                            table->parameter_bytes - offset);
+                        break;
+                    }
+                    offset += symtab_type_width(function->parameters[parameter]->type);
+                }
+            } else {
+                symbol->location.address += (int)table->local_bytes;
+            }
         }
         table->function = NULL;
     }
@@ -574,11 +769,49 @@ const ScalarSymbol *symtab_declaration(const ScalarSymbols *table, const AstVarD
     return NULL;
 }
 
+const ScalarSymbol *symtab_parameter(const ScalarSymbols *table,
+                                     const AstParamDecl *parameter)
+{
+    size_t index;
+    if (table == NULL) {
+        return NULL;
+    }
+    for (index = 0; index < table->count; ++index) {
+        if (table->symbols[index].parameter == parameter) {
+            return &table->symbols[index];
+        }
+    }
+    return NULL;
+}
+
+const AstFunctionDecl *symtab_function(const ScalarSymbols *table,
+                                      const char *name)
+{
+    size_t index;
+    const AstFunctionDecl *prototype = NULL;
+    if (table == NULL || table->unit == NULL || name == NULL) {
+        return NULL;
+    }
+    for (index = 0; index < table->unit->declarations.count; ++index) {
+        const AstDecl *declaration = table->unit->declarations.items[index];
+        if (declaration->node.kind == AST_NODE_FUNCTION_DECL &&
+            strcmp(((const AstFunctionDecl *)declaration)->name, name) == 0) {
+            const AstFunctionDecl *function = (const AstFunctionDecl *)declaration;
+            if (!function->is_prototype) {
+                return function;
+            }
+            prototype = function;
+        }
+    }
+    return prototype;
+}
+
 size_t symtab_frame_size(const ScalarSymbols *table, const AstFunctionDecl *function)
 {
     size_t index, size = 0;
     for (index = 0; index < table->count; ++index) {
-        if (table->symbols[index].function == function) {
+        if (table->symbols[index].function == function &&
+            table->symbols[index].declaration != NULL) {
             size += table->symbols[index].location.width;
         }
     }

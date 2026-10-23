@@ -160,10 +160,10 @@ static void test_unsupported_unit_is_not_partially_emitted(void)
     assert(arena != NULL && ctx != NULL);
     unit = parse(arena,
         "int supported(void) { return 1; } "
-        "int unsupported(int value) { return value; }");
+        "int unsupported(int *value) { return 1; }");
     assert(codegen_translation_unit(ctx, unit) != 0);
     assert(codegen_output(ctx)[0] == '\0');
-    assert(strstr(codegen_error(ctx), "unsupported translation unit") != NULL);
+    assert(strstr(codegen_error(ctx), "unsupported function parameter type") != NULL);
     codegen_context_destroy(ctx);
     ast_arena_destroy(arena);
 }
@@ -368,6 +368,58 @@ static void test_comparisons_and_control_flow(void)
     ast_arena_destroy(arena);
 }
 
+static void test_function_calls_parameters_and_frames(void)
+{
+    AstArena *arena = ast_arena_create();
+    CodegenContext *ctx = codegen_context_create();
+    AstTranslationUnit *unit = parse(arena,
+        "unsigned int pair(unsigned int left, unsigned char right) {"
+        " unsigned int result = left + right;"
+        " return result; }"
+        "unsigned int inner(unsigned int value) { return value + 1; }"
+        "unsigned int outer(void) { return inner(inner(1)); }"
+        "unsigned char narrow(unsigned int value) { return value; }"
+        "void sink(unsigned char first, unsigned char second) {}"
+        "void sink4(char a, char b, char c, char d) {}"
+        "unsigned int main(void) {"
+        " sink(1, 2); sink4(1, 2, 3, 4);"
+        " return pair(outer(), narrow(258)); }");
+    const char *assembly;
+    const char *inner_call;
+    const char *outer_call;
+    const char *cleanup_two;
+    const char *cleanup_four;
+    const char *definition;
+
+    assert(arena != NULL && ctx != NULL);
+    assert(codegen_translation_unit(ctx, unit) == 0);
+    assert(codegen_stack_depth(ctx) == 0);
+    assembly = codegen_output(ctx);
+    assert(strstr(assembly, "LDR\n\tADIA\t5\n\tSTP") != NULL);
+    assert(strstr(assembly, "LDR\n\tADIA\t6\n\tSTP") != NULL);
+    assert(strstr(assembly, "CALL\tinner\t; Function call") != NULL);
+    assert(strstr(assembly, "CALL\tpair\t; Function call") != NULL);
+    assert(strstr(assembly, "CALL\tnarrow\t; Function call") != NULL);
+    assert(strstr(assembly, "CALL\tnarrow\t; Function call\n"
+                            "\tEXAB\n\tLDR\n\tADIA\t2\n\tSTR\n\tEXAB\n"
+                            "\tLIB\t0\n") != NULL);
+    cleanup_two = strstr(assembly, "CALL\tsink\t; Function call");
+    cleanup_four = strstr(assembly, "CALL\tsink4\t; Function call");
+    assert(cleanup_two != NULL && cleanup_four != NULL);
+    cleanup_two = strstr(cleanup_two, "\tPOP\n\tPOP\n");
+    cleanup_four = strstr(cleanup_four, "\tLDR\n\tADIA\t4\n\tSTR\n");
+    assert(cleanup_two != NULL && cleanup_four != NULL);
+    inner_call = strstr(assembly, "CALL\tinner\t; Function call");
+    outer_call = inner_call == NULL ? NULL :
+        strstr(inner_call + 1, "CALL\tinner\t; Function call");
+    assert(inner_call != NULL && outer_call != NULL);
+    definition = strstr(assembly, "pair:\t; Procedure");
+    assert(definition != NULL);
+    assert(strstr(definition, "\tPUSH\n\tPUSH\n") != NULL);
+    codegen_context_destroy(ctx);
+    ast_arena_destroy(arena);
+}
+
 int main(void)
 {
     test_word_return_addition();
@@ -381,5 +433,6 @@ int main(void)
     test_scalar_validation();
     test_scalar_tree_walker();
     test_comparisons_and_control_flow();
+    test_function_calls_parameters_and_frames();
     return 0;
 }

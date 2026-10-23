@@ -8,10 +8,10 @@ and does not compile the full language described in
 [the target C subset](sc61860_c_subset.md). Parser acceptance alone does not
 mean a construct can be compiled.
 
-The current implementation supports parameterless leaf functions, byte/word
-scalar variables, assignments, and addition/subtraction. Execution has been
-checked in PC-1403 MAME sessions; physical-device execution and compatibility
-with other Sharp models have not been verified.
+The current implementation supports byte/word scalar variables, parameterized
+functions, direct calls, assignments, and addition/subtraction. Earlier
+execution checks were made in PC-1403 MAME sessions; physical-device execution
+and compatibility with other Sharp models have not been verified.
 
 See the [project README](../Source/C/lcc2/README.md) for implementation details
 and test harnesses, and the [roadmap](../Source/lcc/refactor_roadmap.md) for
@@ -71,10 +71,10 @@ before returning to BASIC.
 | Feature | Current support |
 |---------|-----------------|
 | Types | `char`, `unsigned char`, `signed char`, `int`, `unsigned int`; `void` function returns |
-| Functions | Parameterless definitions and compatible prototypes; a `main` definition is required for CLI output |
+| Functions | Byte/word parameters by value, compatible prototypes, direct calls to definitions in the same translation unit; CLI `main` must be parameterless |
 | Variables | Fixed-address globals and automatic block-scope locals; local expression initializers |
 | Statements | Compound blocks, expression statements, empty statements, `if`/`else`, `while`, `do`/`while`, expression-initialized `for`, `break`, `continue`, `return` |
-| Expressions | Nonnegative 16-bit integer constants, character constants, scalar identifiers, `=`, `+`, `-`, `==`, `!=`, unsigned `<`, `<=`, `>`, `>=`, parentheses |
+| Expressions | Nonnegative 16-bit integer constants, character constants, scalar identifiers, direct function calls, `=`, `+`, `-`, `==`, `!=`, unsigned `<`, `<=`, `>`, `>=`, parentheses |
 | Names | Case-sensitive lookup, nested block scopes, and local-over-global shadowing |
 | `const` | Const-qualified scalar objects cannot be assigned after initialization |
 
@@ -82,12 +82,15 @@ Declarations precede statements within a block. Non-void functions require a
 return expression; void functions may use `return;` or an empty body.
 Statements after an unconditional return are currently rejected. A `for` step
 executes after the body, and `continue` in a `for` loop targets that step.
-Signed relational comparisons are rejected.
+Signed relational comparisons are rejected. Function definitions require
+named scalar parameters; prototypes may omit parameter names. Calls are
+left-to-right and may be nested or recursive. Argument and return values use
+the byte/word stack convention described below.
 
-Function calls, parameters, arrays, pointers, aggregates, `switch`, `goto`,
-static/extern objects, global initialization, and operators other than those
-listed above are not implemented in the scalar backend. Comparison expressions
-call legacy `LIB_CP*16` routines; runtime-library output integration is still
+Arrays, pointers, aggregates, `switch`, `goto`, static/extern objects, global
+initialization, external function calls, and operators other than those listed
+above are not implemented in the scalar backend. Comparison expressions call
+legacy `LIB_CP*16` routines; runtime-library output integration is still
 pending. In particular, use `0 - 1` rather than unary `-1` in this initial
 slice.
 
@@ -126,8 +129,16 @@ results.
 Local variables occupy a function-wide stack frame, including declarations
 in nested blocks; slots are not reused. The current frame limit is 32 bytes.
 This is an implementation limit, not a guarantee that every caller has enough
-stack space for the frame plus expression temporaries. Register/XRAM words are
-little-endian; stack-local words use the existing reversed-word convention.
+stack space for the frame, parameters, nested calls, and expression
+temporaries. Parameter offsets account for both the local frame and the total
+parameter size; for N local bytes and P parameter bytes, parameter i begins at
+legacy offset `N + P - A`, where A is one plus the total width of preceding
+parameters. The existing byte/word local access rules apply, with live
+expression temporaries added to the offset. Register/XRAM words are
+little-endian; stack words use the reversed-word convention. Callers remove
+argument bytes after return while preserving byte/word results. Void calls
+use individual `POP`s for fewer than four argument bytes and stack-pointer
+adjustment for four or more.
 
 ### Target pragmas and labels
 

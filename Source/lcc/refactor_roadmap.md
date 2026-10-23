@@ -963,11 +963,24 @@ comparison helpers, nested control transfers, out-of-loop `break`/`continue`,
 and `for` step ordering. Runtime-library output integration remains in
 Task 5.3.4.7.
 
-#### Task 5.3.4.6: Functions, calls, and stack frames
+#### Task 5.3.4.6 ✅: Functions, calls, and stack frames
 
 Add parameters, local storage, calls, return-value handling, and stack
 allocation/restoration. Verify cleanup thresholds, nested calls, and
 byte-accurate stack balance at function boundaries.
+
+Implemented named byte/word parameters by value, matching scalar prototypes,
+direct calls to translation-unit definitions (including recursion and nested
+calls), byte/word return conversion, and local-frame allocation/restoration.
+Parameter offsets account for total argument bytes and the callee frame;
+caller cleanup preserves return values and uses individual pops for void-call
+argument sizes below four bytes, otherwise adjusting the stack pointer.
+Resolver/codegen tests cover mismatched prototypes, argument counts,
+parameter layout, nested calls, byte/word/void results, both cleanup paths,
+and zero stack depth at function boundaries. Local frames remain capped at
+32 bytes, and complete-program `main` must remain parameterless. External
+runtime linkage and combined code/data/library output remain in
+Task 5.3.4.7.
 
 #### Task 5.3.4.7: Program startup, data, and output integration
 

@@ -83,8 +83,12 @@ static void test_rejections(void)
         "int main(void) { return; }",
         "int main(void) {}",
         "int main(void) { return 0; ; }",
-        "int main(int x) { return x; }",
-        "int main(void); unsigned int main(void) { return 0; }"
+        "int main(void); unsigned int main(void) { return 0; }",
+        "int f(int value); unsigned int f(unsigned int value) { return value; }",
+        "int main(void) { return missing(1); }",
+        "int f(int value) { return value; } int main(void) { return f(); }",
+        "void f(void) {} int main(void) { return f(); }",
+        "void f(void) {} int main(void) { if (f()) return 1; return 0; }"
     };
     size_t index;
     for (index = 0; index < sizeof(sources) / sizeof(sources[0]); ++index) {
@@ -98,6 +102,34 @@ static void test_rejections(void)
     }
 }
 
+static void test_parameter_layout_and_calls(void)
+{
+    AstArena *arena = ast_arena_create();
+    ScalarSymbols *table = symtab_create();
+    AstTranslationUnit *unit = parse(arena,
+        "unsigned int pair(unsigned int left, unsigned char right) {"
+        " unsigned int local;"
+        " local = left + right;"
+        " return local; }"
+        "unsigned int main(void) { return pair(1, 2); }");
+    AstFunctionDecl *pair = (AstFunctionDecl *)unit->declarations.items[0];
+    const ScalarSymbol *left, *right, *local;
+
+    assert(symtab_resolve(table, unit) == 0);
+    assert(symtab_frame_size(table, pair) == 2);
+    left = symtab_parameter(table, pair->parameters[0]);
+    right = symtab_parameter(table, pair->parameters[1]);
+    local = symtab_declaration(table,
+        (AstVarDecl *)pair->body->items[0].as.declaration);
+    assert(left != NULL && left->location.storage == SCALAR_LOCAL);
+    assert(left->location.width == 2 && left->location.address == 4);
+    assert(right != NULL && right->location.width == 1);
+    assert(right->location.address == 2);
+    assert(local != NULL && local->location.width == 2);
+    symtab_destroy(table);
+    ast_arena_destroy(arena);
+}
+
 static void test_storage_namespaces(void)
 {
     AstArena *arena = ast_arena_create();
@@ -106,7 +138,7 @@ static void test_storage_namespaces(void)
         "unsigned char __at(8) x;"
         "unsigned char __at(9) X;"
         "__xram __at(8) unsigned int other;"
-        "int main(void); int main(void) { return x + X; }");
+        "unsigned int main(void); unsigned int main(void) { return x + X; }");
     assert(symtab_resolve(table, unit) == 0);
     assert(symtab_resolve(table, unit) != 0);
     symtab_destroy(table);
@@ -186,5 +218,6 @@ int main(void)
     test_storage_namespaces();
     test_frame_limit();
     test_control_flow_resolution();
+    test_parameter_layout_and_calls();
     return 0;
 }
