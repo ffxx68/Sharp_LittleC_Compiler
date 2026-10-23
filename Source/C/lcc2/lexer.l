@@ -130,7 +130,7 @@ ESCAPE      \\([\\'"?abfnrtv]|[0-7]{1,3}|x{HEX_DIGIT}+)
 <ASM_BODY>"}"                   { BEGIN(INITIAL); return '}'; }
 <ASM_BODY>[^}]+                 { TEXT_TOKEN(LCC2_TOK_ASM_TEXT); }
 
-"{"|"}"|"("|")"|"["|"]"|";"|","|"."|"?"|":"|"~"|"!"|"+"|"-"|"*"|"/"|"%"|"<"|"="|"&"|"^"|"|" { return (unsigned char)yytext[0]; }
+"{"|"}"|"("|")"|"["|"]"|";"|","|"."|"?"|":"|"~"|"!"|"+"|"-"|"*"|"/"|"%"|"<"|">"|"="|"&"|"^"|"|" { return (unsigned char)yytext[0]; }
 
 "#"                            {
                                     fprintf(stderr,

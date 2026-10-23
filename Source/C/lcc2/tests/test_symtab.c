@@ -142,11 +142,49 @@ static void test_frame_limit(void)
     }
 }
 
+static void test_control_flow_resolution(void)
+{
+    static const char *invalid[] = {
+        "void main(void) { break; }",
+        "void main(void) { continue; }",
+        "int main(void) { int value; if (value < 1) return 0; return 1; }"
+    };
+    AstArena *arena = ast_arena_create();
+    ScalarSymbols *table = symtab_create();
+    AstTranslationUnit *unit = parse(arena,
+        "unsigned int main(void) {"
+        " unsigned int i = 0;"
+        " if (i == 0) i = i + 1; else i = i + 2;"
+        " while (i < 4) {"
+        "   if (i == 2) { i = i + 1; continue; }"
+        "   i = i + 1;"
+        " }"
+        " do { i = i - 1; } while (i > 0);"
+        " for (i = 0; i < 2; i = i + 1) { if (i != 0) break; }"
+        " return i; }");
+    size_t index;
+
+    assert(symtab_resolve(table, unit) == 0);
+    symtab_destroy(table);
+    ast_arena_destroy(arena);
+
+    for (index = 0; index < sizeof(invalid) / sizeof(invalid[0]); ++index) {
+        arena = ast_arena_create();
+        table = symtab_create();
+        unit = parse(arena, invalid[index]);
+        assert(symtab_resolve(table, unit) != 0);
+        assert(symtab_error(table)[0] != '\0');
+        symtab_destroy(table);
+        ast_arena_destroy(arena);
+    }
+}
+
 int main(void)
 {
     test_scopes_and_layout();
     test_rejections();
     test_storage_namespaces();
     test_frame_limit();
+    test_control_flow_resolution();
     return 0;
 }

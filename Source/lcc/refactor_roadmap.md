@@ -947,11 +947,21 @@ and `5E 12` across `&E7FF`/`&E800`, with BASIC program bytes unchanged.
 Global initialization, automatic/symbolic global allocation, parameters,
 and general calls remain explicitly unsupported.
 
-#### Task 5.3.4.5: Comparisons, branches, and structured control flow
+#### Task 5.3.4.5 ✅: Comparisons, branches, and structured control flow
 
 Port equality and unsigned relational operations and branch helpers.
 Extend the tree-walker with conditionals and loops, including correct
 `break`, `continue`, and standard-C `for` step ordering.
+
+Implemented equality and unsigned relational expression emission through the
+existing 16-bit comparison routines, with zero/nonzero branch handling across
+both accumulator bytes. The resolver and tree-walker now support `if`/`else`,
+`while`, `do`/`while`, expression-initialized `for`, `break`, and `continue`;
+`continue` in a `for` loop targets its step expression, which executes after
+the body. Signed relational comparisons are rejected. Tests cover all
+comparison helpers, nested control transfers, out-of-loop `break`/`continue`,
+and `for` step ordering. Runtime-library output integration remains in
+Task 5.3.4.7.
 
 #### Task 5.3.4.6: Functions, calls, and stack frames
 

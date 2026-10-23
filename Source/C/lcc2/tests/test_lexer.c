@@ -123,7 +123,14 @@ int main(void)
     expect_token('}', "}", 1, 360);
     expect_token(';', ";", 1, 362);
     assert(yylex() == 0);
+    yy_delete_buffer(buffer);
 
+    buffer = yy_scan_string("< >");
+    assert(buffer != NULL);
+    lcc2_lexer_reset_location();
+    expect_token('<', "<", 1, 1);
+    expect_token('>', ">", 1, 3);
+    assert(yylex() == 0);
     yy_delete_buffer(buffer);
 
     buffer = yy_scan_string(

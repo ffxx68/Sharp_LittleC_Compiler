@@ -73,19 +73,23 @@ before returning to BASIC.
 | Types | `char`, `unsigned char`, `signed char`, `int`, `unsigned int`; `void` function returns |
 | Functions | Parameterless definitions and compatible prototypes; a `main` definition is required for CLI output |
 | Variables | Fixed-address globals and automatic block-scope locals; local expression initializers |
-| Statements | Compound blocks, expression statements, empty statements, terminal `return` |
-| Expressions | Nonnegative 16-bit integer constants, character constants, scalar identifiers, `=`, `+`, `-`, parentheses |
+| Statements | Compound blocks, expression statements, empty statements, `if`/`else`, `while`, `do`/`while`, expression-initialized `for`, `break`, `continue`, `return` |
+| Expressions | Nonnegative 16-bit integer constants, character constants, scalar identifiers, `=`, `+`, `-`, `==`, `!=`, unsigned `<`, `<=`, `>`, `>=`, parentheses |
 | Names | Case-sensitive lookup, nested block scopes, and local-over-global shadowing |
 | `const` | Const-qualified scalar objects cannot be assigned after initialization |
 
 Declarations precede statements within a block. Non-void functions require a
 return expression; void functions may use `return;` or an empty body.
-Statements after a return are currently rejected.
+Statements after an unconditional return are currently rejected. A `for` step
+executes after the body, and `continue` in a `for` loop targets that step.
+Signed relational comparisons are rejected.
 
-Control flow, function calls, parameters, arrays, pointers, aggregates,
+Function calls, parameters, arrays, pointers, aggregates, `switch`, `goto`,
 static/extern objects, global initialization, and operators other than those
-listed above are not implemented in the scalar backend. In particular, use
-`0 - 1` rather than unary `-1` in this initial slice.
+listed above are not implemented in the scalar backend. Comparison expressions
+call legacy `LIB_CP*16` routines; runtime-library output integration is still
+pending. In particular, use `0 - 1` rather than unary `-1` in this initial
+slice.
 
 ### Types and conversions
 

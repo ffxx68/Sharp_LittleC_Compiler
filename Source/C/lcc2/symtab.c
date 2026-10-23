@@ -17,6 +17,7 @@ struct ScalarSymbols {
     const AstFunctionDecl *function;
     size_t scope;
     size_t local_bytes;
+    size_t loop_depth;
     int returned;
     int resolved;
     char error[256];
@@ -164,6 +165,11 @@ static int add_variable(ScalarSymbols *table, const AstVarDecl *variable)
     return 0;
 }
 
+static int expression_unsigned_word(const ScalarSymbols *table,
+                                    const AstExpr *expression);
+static int expression_nonnegative(const ScalarSymbols *table,
+                                  const AstExpr *expression);
+
 static int resolve_expression(ScalarSymbols *table, const AstExpr *expression)
 {
     if (expression == NULL) {
@@ -201,12 +207,28 @@ static int resolve_expression(ScalarSymbols *table, const AstExpr *expression)
     if (expression->node.kind == AST_NODE_BINARY_EXPR) {
         const AstBinaryExpr *binary = (const AstBinaryExpr *)expression;
         if (binary->op != AST_BINARY_ADD && binary->op != AST_BINARY_SUB &&
-            binary->op != AST_BINARY_ASSIGN) {
+            binary->op != AST_BINARY_ASSIGN &&
+            binary->op != AST_BINARY_LESS &&
+            binary->op != AST_BINARY_LESS_EQUAL &&
+            binary->op != AST_BINARY_GREATER &&
+            binary->op != AST_BINARY_GREATER_EQUAL &&
+            binary->op != AST_BINARY_EQUAL &&
+            binary->op != AST_BINARY_NOT_EQUAL) {
             return fail(table, "unsupported scalar operator", NULL);
         }
         if (resolve_expression(table, binary->left) != 0 ||
             resolve_expression(table, binary->right) != 0) {
             return -1;
+        }
+        if ((binary->op == AST_BINARY_LESS ||
+             binary->op == AST_BINARY_LESS_EQUAL ||
+             binary->op == AST_BINARY_GREATER ||
+             binary->op == AST_BINARY_GREATER_EQUAL) &&
+            !expression_unsigned_word(table, binary->left) &&
+            !expression_unsigned_word(table, binary->right) &&
+            !(expression_nonnegative(table, binary->left) &&
+              expression_nonnegative(table, binary->right))) {
+            return fail(table, "signed relational comparison is not supported", NULL);
         }
         if (binary->op == AST_BINARY_ASSIGN) {
             const ScalarSymbol *symbol = symtab_identifier(table, binary->left);
@@ -218,6 +240,85 @@ static int resolve_expression(ScalarSymbols *table, const AstExpr *expression)
         return 0;
     }
     return fail(table, "unsupported scalar expression", NULL);
+}
+
+static int expression_unsigned_word(const ScalarSymbols *table,
+                                    const AstExpr *expression)
+{
+    if (expression->node.kind == AST_NODE_IDENT_EXPR) {
+        const ScalarSymbol *symbol = symtab_identifier(table, expression);
+        return symbol != NULL && symbol->location.width == 2 &&
+               symbol->location.is_unsigned;
+    }
+    if (expression->node.kind == AST_NODE_CONSTANT_EXPR) {
+        const AstConstantExpr *constant = (const AstConstantExpr *)expression;
+        return constant->type != NULL && constant->type->kind == AST_TYPE_BASE &&
+               constant->type->as.base.base == AST_TYPE_INT &&
+               constant->type->as.base.is_unsigned;
+    }
+    if (expression->node.kind == AST_NODE_BINARY_EXPR) {
+        const AstBinaryExpr *binary = (const AstBinaryExpr *)expression;
+        if (binary->op == AST_BINARY_ASSIGN) {
+            return expression_unsigned_word(table, binary->left);
+        }
+        return expression_unsigned_word(table, binary->left) ||
+               expression_unsigned_word(table, binary->right);
+    }
+    return 0;
+}
+
+static int expression_nonnegative(const ScalarSymbols *table,
+                                 const AstExpr *expression)
+{
+    if (expression->node.kind == AST_NODE_CONSTANT_EXPR) {
+        const AstConstantExpr *constant = (const AstConstantExpr *)expression;
+        return constant->constant_kind == AST_CONSTANT_CHARACTER ||
+               (constant->constant_kind == AST_CONSTANT_INTEGER &&
+                constant->value.integer >= 0);
+    }
+    if (expression->node.kind == AST_NODE_IDENT_EXPR) {
+        const ScalarSymbol *symbol = symtab_identifier(table, expression);
+        return symbol != NULL && symbol->location.is_unsigned;
+    }
+    if (expression->node.kind == AST_NODE_BINARY_EXPR) {
+        const AstBinaryExpr *binary = (const AstBinaryExpr *)expression;
+        if (binary->op == AST_BINARY_ASSIGN) {
+            return expression_nonnegative(table, binary->left) &&
+                   expression_nonnegative(table, binary->right);
+        }
+        if (binary->op == AST_BINARY_ADD) {
+            return expression_nonnegative(table, binary->left) &&
+                   expression_nonnegative(table, binary->right);
+        }
+        if (binary->op == AST_BINARY_SUB) {
+            unsigned long left, right;
+            return symtab_constant(binary->left, &left) == 0 &&
+                   symtab_constant(binary->right, &right) == 0 &&
+                   left >= right;
+        }
+        return binary->op == AST_BINARY_EQUAL ||
+               binary->op == AST_BINARY_NOT_EQUAL ||
+               binary->op == AST_BINARY_LESS ||
+               binary->op == AST_BINARY_LESS_EQUAL ||
+               binary->op == AST_BINARY_GREATER ||
+               binary->op == AST_BINARY_GREATER_EQUAL;
+    }
+    return 0;
+}
+
+static int resolve_local_declaration(ScalarSymbols *table,
+                                     const AstVarDecl *variable)
+{
+    if (variable->declaration.node.kind != AST_NODE_VARIABLE_DECL ||
+        add_variable(table, variable) != 0) {
+        return -1;
+    }
+    if (variable->initializer != NULL &&
+        (variable->initializer->kind != AST_INITIALIZER_EXPR ||
+         resolve_expression(table, variable->initializer->as.expression) != 0)) {
+        return fail(table, "unsupported scalar initializer", variable->name);
+    }
+    return 0;
 }
 
 static int resolve_statement(ScalarSymbols *table, const AstStmt *statement)
@@ -234,16 +335,11 @@ static int resolve_statement(ScalarSymbols *table, const AstStmt *statement)
             const AstBlockItem *item = &block->items[index];
             if (item->kind == AST_BLOCK_DECLARATION) {
                 const AstVarDecl *variable = (const AstVarDecl *)item->as.declaration;
-                if (table->returned || variable->declaration.node.kind != AST_NODE_VARIABLE_DECL) {
+                if (table->returned) {
                     return fail(table, "unsupported block declaration", NULL);
                 }
-                if (add_variable(table, variable) != 0) {
+                if (resolve_local_declaration(table, variable) != 0) {
                     return -1;
-                }
-                if (variable->initializer != NULL &&
-                    (variable->initializer->kind != AST_INITIALIZER_EXPR ||
-                     resolve_expression(table, variable->initializer->as.expression) != 0)) {
-                    return fail(table, "unsupported scalar initializer", variable->name);
                 }
             } else if (resolve_statement(table, item->as.statement) != 0) {
                 return -1;
@@ -261,6 +357,100 @@ static int resolve_statement(ScalarSymbols *table, const AstStmt *statement)
         return 0;
     case AST_NODE_EXPR_STMT:
         return resolve_expression(table, ((const AstExprStmt *)statement)->expression);
+    case AST_NODE_IF_STMT: {
+        const AstIfStmt *conditional = (const AstIfStmt *)statement;
+        int then_returns, else_returns;
+        if (resolve_expression(table, conditional->condition) != 0 ||
+            resolve_statement(table, conditional->then_branch) != 0) {
+            return -1;
+        }
+        then_returns = table->returned;
+        if (conditional->else_branch == NULL) {
+            table->returned = 0;
+            return 0;
+        }
+        table->returned = 0;
+        if (resolve_statement(table, conditional->else_branch) != 0) {
+            return -1;
+        }
+        else_returns = table->returned;
+        table->returned = then_returns && else_returns;
+        return 0;
+    }
+    case AST_NODE_WHILE_STMT: {
+        const AstWhileStmt *loop = (const AstWhileStmt *)statement;
+        int was_returned = table->returned;
+        if (resolve_expression(table, loop->condition) != 0) {
+            return -1;
+        }
+        ++table->loop_depth;
+        if (resolve_statement(table, loop->body) != 0) {
+            --table->loop_depth;
+            return -1;
+        }
+        --table->loop_depth;
+        table->returned = was_returned;
+        return 0;
+    }
+    case AST_NODE_DO_WHILE_STMT: {
+        const AstDoWhileStmt *loop = (const AstDoWhileStmt *)statement;
+        int was_returned = table->returned;
+        ++table->loop_depth;
+        if (resolve_statement(table, loop->body) != 0) {
+            --table->loop_depth;
+            return -1;
+        }
+        --table->loop_depth;
+        table->returned = was_returned;
+        return resolve_expression(table, loop->condition);
+    }
+    case AST_NODE_FOR_STMT: {
+        const AstForStmt *loop = (const AstForStmt *)statement;
+        int was_returned = table->returned;
+        ++table->scope;
+        if (loop->init_declaration != NULL &&
+            resolve_local_declaration(table,
+                (const AstVarDecl *)loop->init_declaration) != 0) {
+            --table->scope;
+            return -1;
+        }
+        if ((loop->init_expression != NULL &&
+             resolve_expression(table, loop->init_expression) != 0) ||
+            (loop->condition != NULL &&
+             resolve_expression(table, loop->condition) != 0)) {
+            --table->scope;
+            return -1;
+        }
+        ++table->loop_depth;
+        if (resolve_statement(table, loop->body) != 0) {
+            --table->loop_depth;
+            --table->scope;
+            return -1;
+        }
+        table->returned = was_returned;
+        if (loop->step != NULL && resolve_expression(table, loop->step) != 0) {
+            --table->loop_depth;
+            --table->scope;
+            return -1;
+        }
+        --table->loop_depth;
+        {
+            size_t index;
+            for (index = 0; index < table->count; ++index) {
+                if (table->symbols[index].scope == table->scope) {
+                    table->symbols[index].active = 0;
+                }
+            }
+        }
+        --table->scope;
+        return 0;
+    }
+    case AST_NODE_BREAK_STMT:
+    case AST_NODE_CONTINUE_STMT:
+        if (table->loop_depth == 0) {
+            return fail(table, "break or continue used outside a loop", NULL);
+        }
+        return 0;
     case AST_NODE_RETURN_STMT: {
         const AstExpr *value = ((const AstReturnStmt *)statement)->expression;
         size_t width = symtab_type_width(table->function->return_type);

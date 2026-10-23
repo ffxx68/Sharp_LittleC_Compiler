@@ -39,6 +39,8 @@ static void test_word_return_addition(void)
         "\tEXAB\n"
         "\tLP\t0\n"
         "\tLDM\n"
+        "\tJP\tLB0\n"
+        "  LB0:\n"
         "\tRTN\n"
         "\n";
     AstArena *arena = ast_arena_create();
@@ -328,6 +330,44 @@ static void test_scalar_tree_walker(void)
     ast_arena_destroy(arena);
 }
 
+static void test_comparisons_and_control_flow(void)
+{
+    AstArena *arena = ast_arena_create();
+    CodegenContext *ctx = codegen_context_create();
+    AstTranslationUnit *unit = parse(arena,
+        "unsigned int main(void) {"
+        " unsigned int i = 0;"
+        " for (; i < 2; i = i + 3) {"
+        "   i = i + 7;"
+        "   if (i == 1) continue;"
+        "   if (i != 0) break;"
+        " }"
+        " while (i >= 1) { i = i - 1; }"
+        " if (i > 0) i = i - 1;"
+        " do { i = i + 1; } while (i <= 2);"
+        " return i; }");
+    const char *condition;
+    const char *body;
+    const char *step;
+
+    assert(codegen_translation_unit(ctx, unit) == 0);
+    assert(codegen_stack_depth(ctx) == 0);
+    assert(strstr(codegen_output(ctx), "CALL\tLIB_CPS16") != NULL);
+    assert(strstr(codegen_output(ctx), "CALL\tLIB_CPE16") != NULL);
+    assert(strstr(codegen_output(ctx), "CALL\tLIB_CPNE16") != NULL);
+    assert(strstr(codegen_output(ctx), "CALL\tLIB_CPG16") != NULL);
+    assert(strstr(codegen_output(ctx), "CALL\tLIB_CPGE16") != NULL);
+    assert(strstr(codegen_output(ctx), "CALL\tLIB_CPSE16") != NULL);
+    condition = strstr(codegen_output(ctx), "LIA\tLB(2)");
+    body = strstr(codegen_output(ctx), "LIA\tLB(7)");
+    step = strstr(codegen_output(ctx), "LIA\tLB(3)");
+    assert(condition != NULL && body != NULL && step != NULL);
+    assert(condition < body && body < step);
+    assert(strstr(codegen_output(ctx), "JP\tLB") != NULL);
+    codegen_context_destroy(ctx);
+    ast_arena_destroy(arena);
+}
+
 int main(void)
 {
     test_word_return_addition();
@@ -340,5 +380,6 @@ int main(void)
     test_scalar_access_sequences();
     test_scalar_validation();
     test_scalar_tree_walker();
+    test_comparisons_and_control_flow();
     return 0;
 }

@@ -5,6 +5,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+typedef struct LoopLabels {
+    const char *break_label;
+    const char *continue_label;
+} LoopLabels;
+
 struct CodegenContext {
     char *output;
     size_t output_length;
@@ -15,6 +20,10 @@ struct CodegenContext {
     unsigned char library_used[101];
     ScalarSymbols *symbols;
     AstTranslationUnit *resolved_unit;
+    char *return_label;
+    LoopLabels *loops;
+    size_t loop_count;
+    size_t loop_capacity;
     char error[256];
 };
 
@@ -113,6 +122,8 @@ void codegen_context_destroy(CodegenContext *ctx)
 {
     if (ctx != NULL) {
         symtab_destroy(ctx->symbols);
+        free(ctx->return_label);
+        free(ctx->loops);
         free(ctx->output);
         free(ctx);
     }
@@ -500,6 +511,82 @@ static void promote_byte(CodegenContext *ctx, int is_unsigned)
     free(done);
 }
 
+static int emit_expression(CodegenContext *ctx, const AstExpr *expression);
+
+static int emit_comparison(CodegenContext *ctx, AstBinaryOp op)
+{
+    const char *routine;
+    if (ctx->stack_depth < 2) {
+        return set_error(ctx, "evaluation stack underflow");
+    }
+    switch (op) {
+    case AST_BINARY_EQUAL: routine = "LIB_CPE16"; break;
+    case AST_BINARY_NOT_EQUAL: routine = "LIB_CPNE16"; break;
+    case AST_BINARY_LESS: routine = "LIB_CPS16"; break;
+    case AST_BINARY_LESS_EQUAL: routine = "LIB_CPSE16"; break;
+    case AST_BINARY_GREATER: routine = "LIB_CPG16"; break;
+    case AST_BINARY_GREATER_EQUAL: routine = "LIB_CPGE16"; break;
+    default: return set_error(ctx, "invalid comparison operator");
+    }
+    emit_inst_op(ctx, "LP", "0");
+    emit_inst(ctx, "EXAM");
+    emit_inst(ctx, "EXAB");
+    emit_inst_op(ctx, "LP", "1");
+    emit_inst(ctx, "EXAM");
+    emit_inst(ctx, "POP");
+    --ctx->stack_depth;
+    emit_inst(ctx, "EXAB");
+    emit_inst(ctx, "POP");
+    --ctx->stack_depth;
+    emit_inst_op_comment(ctx, "CALL", routine, "Compare unsigned words");
+    emit_inst_op(ctx, "LIB", "0");
+    return ctx->error[0] == '\0' ? 0 : -1;
+}
+
+static int emit_branch_false(CodegenContext *ctx, const AstExpr *expression,
+                             const char *label)
+{
+    char *low_nonzero;
+    if (emit_expression(ctx, expression) != 0) {
+        return -1;
+    }
+    low_nonzero = new_label(ctx);
+    if (low_nonzero == NULL) {
+        return -1;
+    }
+    emit_inst_op(ctx, "TSIA", "255");
+    emit_inst_op(ctx, "JPNZ", low_nonzero);
+    emit_inst(ctx, "EXAB");
+    emit_inst_op(ctx, "TSIA", "255");
+    emit_inst_op(ctx, "JPZ", label);
+    emit_label(ctx, low_nonzero);
+    free(low_nonzero);
+    return ctx->error[0] == '\0' ? 0 : -1;
+}
+
+static int push_loop(CodegenContext *ctx, const char *break_label,
+                     const char *continue_label)
+{
+    if (ctx->loop_count == ctx->loop_capacity) {
+        size_t capacity = ctx->loop_capacity == 0 ? 4 : ctx->loop_capacity * 2;
+        LoopLabels *loops;
+        if (capacity < ctx->loop_capacity ||
+            capacity > (size_t)-1 / sizeof(*loops)) {
+            return set_error(ctx, "loop nesting exceeds supported range");
+        }
+        loops = (LoopLabels *)realloc(ctx->loops, capacity * sizeof(*loops));
+        if (loops == NULL) {
+            return set_error(ctx, "out of memory tracking loop labels");
+        }
+        ctx->loops = loops;
+        ctx->loop_capacity = capacity;
+    }
+    ctx->loops[ctx->loop_count].break_label = break_label;
+    ctx->loops[ctx->loop_count].continue_label = continue_label;
+    ++ctx->loop_count;
+    return 0;
+}
+
 static int emit_expression(CodegenContext *ctx, const AstExpr *expression)
 {
     if (expression->node.kind == AST_NODE_CONSTANT_EXPR) {
@@ -542,14 +629,31 @@ static int emit_expression(CodegenContext *ctx, const AstExpr *expression)
             }
             return ctx->error[0] == '\0' ? 0 : -1;
         }
+        if (binary->op == AST_BINARY_EQUAL ||
+            binary->op == AST_BINARY_NOT_EQUAL ||
+            binary->op == AST_BINARY_LESS ||
+            binary->op == AST_BINARY_LESS_EQUAL ||
+            binary->op == AST_BINARY_GREATER ||
+            binary->op == AST_BINARY_GREATER_EQUAL) {
+            if (emit_expression(ctx, binary->left) != 0 ||
+                codegen_emit_push(ctx, width) != 0 ||
+                emit_expression(ctx, binary->right) != 0) {
+                return -1;
+            }
+            return emit_comparison(ctx, binary->op);
+        }
         if (emit_expression(ctx, binary->left) != 0 ||
             codegen_emit_push(ctx, width) != 0 ||
             emit_expression(ctx, binary->right) != 0) {
             return -1;
         }
-        return binary->op == AST_BINARY_ADD
-                   ? codegen_pop_add(ctx, width)
-                   : codegen_pop_sub(ctx, width);
+        if (binary->op == AST_BINARY_ADD) {
+            return codegen_pop_add(ctx, width);
+        }
+        if (binary->op == AST_BINARY_SUB) {
+            return codegen_pop_sub(ctx, width);
+        }
+        return set_error(ctx, "unsupported binary operator reached code generation");
     }
     return set_error(ctx, "unsupported expression reached during code generation");
 }
@@ -597,7 +701,184 @@ static int emit_statement(CodegenContext *ctx, const AstStmt *statement)
         return emit_expression(ctx, ((const AstExprStmt *)statement)->expression);
     } else if (statement->node.kind == AST_NODE_RETURN_STMT) {
         const AstExpr *value = ((const AstReturnStmt *)statement)->expression;
-        return value == NULL ? 0 : emit_expression(ctx, value);
+        if ((value != NULL && emit_expression(ctx, value) != 0) ||
+            ctx->return_label == NULL) {
+            return set_error(ctx, "return statement has no function epilogue");
+        }
+        emit_inst_op(ctx, "JP", ctx->return_label);
+    } else if (statement->node.kind == AST_NODE_IF_STMT) {
+        const AstIfStmt *conditional = (const AstIfStmt *)statement;
+        char *otherwise = new_label(ctx);
+        char *done = conditional->else_branch == NULL ? NULL : new_label(ctx);
+        if (otherwise == NULL ||
+            (conditional->else_branch != NULL && done == NULL)) {
+            free(otherwise);
+            free(done);
+            return -1;
+        }
+        if (emit_branch_false(ctx, conditional->condition, otherwise) != 0 ||
+            emit_statement(ctx, conditional->then_branch) != 0) {
+            free(otherwise);
+            free(done);
+            return -1;
+        }
+        if (conditional->else_branch != NULL) {
+            emit_inst_op(ctx, "JP", done);
+        }
+        emit_label(ctx, otherwise);
+        if (conditional->else_branch != NULL &&
+            emit_statement(ctx, conditional->else_branch) != 0) {
+            free(otherwise);
+            free(done);
+            return -1;
+        }
+        if (done != NULL) {
+            emit_label(ctx, done);
+        }
+        free(otherwise);
+        free(done);
+    } else if (statement->node.kind == AST_NODE_WHILE_STMT) {
+        const AstWhileStmt *loop = (const AstWhileStmt *)statement;
+        char *condition = new_label(ctx);
+        char *done = new_label(ctx);
+        if (condition == NULL || done == NULL) {
+            free(condition);
+            free(done);
+            return -1;
+        }
+        emit_label(ctx, condition);
+        if (emit_branch_false(ctx, loop->condition, done) != 0 ||
+            push_loop(ctx, done, condition) != 0) {
+            free(condition);
+            free(done);
+            return -1;
+        }
+        if (emit_statement(ctx, loop->body) != 0) {
+            --ctx->loop_count;
+            free(condition);
+            free(done);
+            return -1;
+        }
+        --ctx->loop_count;
+        emit_inst_op(ctx, "JP", condition);
+        emit_label(ctx, done);
+        free(condition);
+        free(done);
+    } else if (statement->node.kind == AST_NODE_DO_WHILE_STMT) {
+        const AstDoWhileStmt *loop = (const AstDoWhileStmt *)statement;
+        char *body = new_label(ctx);
+        char *condition = new_label(ctx);
+        char *done = new_label(ctx);
+        if (body == NULL || condition == NULL || done == NULL) {
+            free(body);
+            free(condition);
+            free(done);
+            return -1;
+        }
+        emit_label(ctx, body);
+        if (push_loop(ctx, done, condition) != 0) {
+            free(body);
+            free(condition);
+            free(done);
+            return -1;
+        }
+        if (emit_statement(ctx, loop->body) != 0) {
+            --ctx->loop_count;
+            free(body);
+            free(condition);
+            free(done);
+            return -1;
+        }
+        --ctx->loop_count;
+        emit_label(ctx, condition);
+        if (emit_branch_false(ctx, loop->condition, done) != 0) {
+            free(body);
+            free(condition);
+            free(done);
+            return -1;
+        }
+        emit_inst_op(ctx, "JP", body);
+        emit_label(ctx, done);
+        free(body);
+        free(condition);
+        free(done);
+    } else if (statement->node.kind == AST_NODE_FOR_STMT) {
+        const AstForStmt *loop = (const AstForStmt *)statement;
+        char *condition = new_label(ctx);
+        char *step = new_label(ctx);
+        char *done = new_label(ctx);
+        const ScalarSymbol *symbol = NULL;
+        if (condition == NULL || step == NULL || done == NULL) {
+            free(condition);
+            free(step);
+            free(done);
+            return -1;
+        }
+        if (loop->init_declaration != NULL) {
+            const AstVarDecl *variable = (const AstVarDecl *)loop->init_declaration;
+            symbol = symtab_declaration(ctx->symbols, variable);
+            if (symbol == NULL) {
+                free(condition);
+                free(step);
+                free(done);
+                return set_error(ctx, "unresolved for-loop declaration");
+            }
+            if (variable->initializer != NULL &&
+                (emit_expression(ctx, variable->initializer->as.expression) != 0 ||
+                 codegen_store_scalar(ctx, symbol->location) != 0)) {
+                free(condition);
+                free(step);
+                free(done);
+                return -1;
+            }
+        }
+        if (loop->init_expression != NULL &&
+            emit_expression(ctx, loop->init_expression) != 0) {
+            free(condition);
+            free(step);
+            free(done);
+            return -1;
+        }
+        emit_label(ctx, condition);
+        if ((loop->condition != NULL &&
+             emit_branch_false(ctx, loop->condition, done) != 0) ||
+            push_loop(ctx, done, step) != 0) {
+            free(condition);
+            free(step);
+            free(done);
+            return -1;
+        }
+        if (emit_statement(ctx, loop->body) != 0) {
+            --ctx->loop_count;
+            free(condition);
+            free(step);
+            free(done);
+            return -1;
+        }
+        --ctx->loop_count;
+        emit_label(ctx, step);
+        if ((loop->step != NULL && emit_expression(ctx, loop->step) != 0) ||
+            ctx->error[0] != '\0') {
+            free(condition);
+            free(step);
+            free(done);
+            return -1;
+        }
+        emit_inst_op(ctx, "JP", condition);
+        emit_label(ctx, done);
+        free(condition);
+        free(step);
+        free(done);
+    } else if (statement->node.kind == AST_NODE_BREAK_STMT ||
+               statement->node.kind == AST_NODE_CONTINUE_STMT) {
+        const char *label;
+        if (ctx->loop_count == 0) {
+            return set_error(ctx, "loop transfer has no enclosing loop");
+        }
+        label = statement->node.kind == AST_NODE_BREAK_STMT
+            ? ctx->loops[ctx->loop_count - 1].break_label
+            : ctx->loops[ctx->loop_count - 1].continue_label;
+        emit_inst_op(ctx, "JP", label);
     }
     return ctx->error[0] == '\0' ? 0 : -1;
 }
@@ -621,6 +902,10 @@ int codegen_translation_unit(CodegenContext *ctx, AstTranslationUnit *tu)
         }
         (void)append_format(ctx, "%s:\t; Procedure\n", function->name, NULL,
                             NULL);
+        ctx->return_label = new_label(ctx);
+        if (ctx->return_label == NULL) {
+            return -1;
+        }
         frame_size = symtab_frame_size(ctx->symbols, function);
         for (byte = 0; byte < frame_size; ++byte) {
             emit_inst(ctx, "PUSH");
@@ -629,6 +914,7 @@ int codegen_translation_unit(CodegenContext *ctx, AstTranslationUnit *tu)
         if (emit_statement(ctx, (const AstStmt *)function->body) != 0) {
             return -1;
         }
+        emit_label(ctx, ctx->return_label);
         if (frame_size != 0) {
             emit_inst_op(ctx, "LP", "0");
             emit_inst(ctx, "EXAM");
@@ -647,6 +933,8 @@ int codegen_translation_unit(CodegenContext *ctx, AstTranslationUnit *tu)
         }
         emit_inst(ctx, "RTN");
         (void)append_text(ctx, "\n", 1);
+        free(ctx->return_label);
+        ctx->return_label = NULL;
         if (ctx->error[0] != '\0') {
             return -1;
         }

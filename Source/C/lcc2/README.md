@@ -19,8 +19,9 @@ The build requires GCC, Flex, Bison, and GNU Make, and produces `lcc2.exe`.
 The project target builds the command-line compiler, AST arena, Flex scanner,
 Bison parser, scalar resolver, and code-generation module. The parser can be
 exercised through `lcc2_parse_string`; the backend emits byte/word constants,
-scalar access, stack operations, add/sub operations, labels, and parameterless
-leaf functions. The resolver validates the supported subset before emission.
+scalar access, stack operations, add/sub/comparison operations, labels,
+structured control flow, and parameterless leaf functions. The resolver
+validates the supported subset before emission.
 
 ## Compile and run the PC-1403 smoke program
 
@@ -42,7 +43,9 @@ integer constant or `+`/`-` expression. The default startup saves/restores
 registers using the Pascal wrapper and explicitly returns to the caller.
 `#pragma nosave` disables preservation, but still emits the final `RTN`.
 `#pragma pc` is explicitly rejected until its output semantics are implemented.
-General calls and other unsupported backend constructs are still rejected.
+Comparison expressions call the legacy `LIB_CP*16` helpers; appending/linking
+runtime libraries remains a later output-integration task. General calls and
+other unsupported backend constructs are still rejected.
 Function labels must not collide in PASM's case-insensitive namespace;
 `SREG` is reserved when preservation is enabled, and `LB` followed by digits
 is reserved for compiler labels.
@@ -52,10 +55,13 @@ is reserved for compiler labels.
 `symtab.c` resolves declarations and identifier bindings independently of
 instruction emission. Names are case-sensitive, with block scopes and local
 shadowing. Byte/word scalar declarations, local expression initializers,
-plain assignments, `+`/`-`, expression statements, nested blocks, and a terminal
-return are supported. Non-void functions require a return. Control flow,
-parameters, static/extern storage, arrays, pointers, aggregates, and statements
-after a return are not yet supported by the resolver.
+plain assignments, `+`/`-`, equality, unsigned relational comparisons,
+conditionals, `while`, `do`/`while`, and expression-initialized `for` loops are
+supported, including `break` and `continue`. A `for` step executes after its
+body, and `continue` targets the step. Signed relational comparisons are
+rejected. Non-void functions require a return. Parameters, static/extern
+storage, arrays, pointers, aggregates, and statements after a return are not
+yet supported by the resolver.
 
 Globals require an explicit constant `__at` placement. Internal-RAM globals
 must fit in `[8,96)`; cells 0-7 are reserved for arithmetic/addressing registers.
