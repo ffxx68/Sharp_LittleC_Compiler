@@ -982,7 +982,7 @@ and zero stack depth at function boundaries. Local frames remain capped at
 runtime linkage and combined code/data/library output remain in
 Task 5.3.4.7.
 
-#### Task 5.3.4.7: Program startup, data, and output integration (umbrella)
+#### Task 5.3.4.7 ✅: Program startup, data, and output integration (umbrella)
 
 This is the parent milestone, not a separate implementation slice. It is
 complete only when all supported program parts are integrated into valid
@@ -1036,7 +1036,7 @@ classes, and ordering. CLI rejection checks preserve existing output, and
 `tests/pc1403_global_init.c` assembles with PASM. PC-1403 runtime execution was
 not part of this validation.
 
-##### Task 5.3.4.7.2: Runtime-library dependency tracking and inclusion
+##### Task 5.3.4.7.2 ✅: Runtime-library dependency tracking and inclusion
 
 Make complete assembly self-contained for runtime routines called by the
 currently supported compiler subset, especially comparison helpers.
@@ -1056,19 +1056,29 @@ currently supported compiler subset, especially comparison helpers.
 This subtask supplies helper definitions; it does not restructure all output
 channels or declare Task 5.3.4.7 complete.
 
-Implemented runtime dependency tracking with per-compilation deduplication.
-The compiler resolves each requested `.lib` from the working/executable
-directory ancestry, verifies its expected routine label, and embeds its source
-after optimized generated code; missing or malformed helpers fail before the
-output file is rewritten. Backend tests cover no-library output, individual
-and repeated dependencies, unresolved helpers, and all six word-comparison
-routines. The comparison helper fixture assembles with PASM, and an end-to-end
-word-comparison program also assembled successfully. PC-1403 runtime
-comparison validation was not performed. `mod16.lib` is not present, so a
-word-modulo request now fails explicitly rather than emitting an unresolved
-call.
+Implemented `lcc2` runtime tracking in `CodegenContext`, deduplicating the six
+comparison dependencies. A built-in catalog preserves the legacy `.lib`
+labels and unsigned B:A/J:I convention without requiring external library
+files at compilation or assembly time. Runtime text stays separately
+inspectable through `codegen_runtime_output`; complete-program generation
+appends it once after generated functions. Unknown routine requests and
+function collisions with included runtime labels fail explicitly.
 
-##### Task 5.3.4.7.3: Ordered output sections and end-to-end program integration
+Host and CLI tests cover individual/repeated dependencies, no-library
+programs, unresolved routine errors, runtime-label collisions, and preservation
+of existing CLI output on failure. `make test` passes, and PASM assembles the
+self-contained `tests/pc1403_comparisons.c` fixture. On 2026-10-23,
+`tests/pc1403_comparisons.lua` passed 130 PC-1403 MAME calls: all six operators
+over 13 operand pairs repeated ten times, covering equality, zero/65535,
+low-byte ordering, high-byte ordering, and the 32767/32768 unsigned boundary.
+Every return checked stack balance and wrapper register restoration.
+
+Earlier changes to the Pascal reference also embed its requested `.lib`
+sources. Those changes alone did not implement this C-backend task. General
+output-section ordering and a responsive BASIC-caller smoke test are covered
+separately by Task 5.3.4.7.3.
+
+##### Task 5.3.4.7.3 ✅: Ordered output sections and end-to-end program integration
 
 Integrate startup, global initialization, generated functions, data
 declarations, and the runtime routines from Task 5.3.4.7.2 into one
@@ -1088,6 +1098,26 @@ deterministically ordered PASM source file.
 
 The parent milestone is complete only after 5.3.4.7.1, 5.3.4.7.2, and
 5.3.4.7.3 pass their stated acceptance checks.
+
+Implemented separate startup, function, data, and runtime buffers, exposed
+through `codegen_section_output` and concatenated in that order. Global
+initialization precedes `CALL main`; functions retain source order; the
+optional `SREG` area follows functions; required helpers follow data.
+Host tests verify exact section composition, deterministic output, `nosave`,
+and context-reuse rejection. CLI tests assemble the combined fixture and
+confirm that failed compilation preserves existing output. `make test`
+passes, and PASM assembles `tests/pc1403_program.c` to 486 bytes.
+
+In a fresh disposable PC-1403 MAME session, `tests/pc1403_program.lua` passed
+ten BASIC `RUN`s and ten machine-code returns. Each run verified initialized
+and zeroed globals, nested function frames, a loop, comparison helper calls,
+balanced entry/return stack pointer (R=86), and wrapper register restoration.
+Outputs at `&E600` were `37 12 23 00 FF FF FF 2A`: the final byte came from a
+keyboard-entered BASIC `POKE` after return. BASIC program bytes and its start
+pointer remained unchanged. The harness stages its final return trap only
+after generated functions finish, avoiding corruption of their entry bytes.
+All three subtasks have now passed their acceptance checks, completing the
+parent milestone.
 
 #### Task 5.3.4.8: Arrays, pointers, and aggregate access
 

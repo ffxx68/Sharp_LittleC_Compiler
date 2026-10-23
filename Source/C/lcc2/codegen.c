@@ -57,6 +57,9 @@ struct CodegenContext {
     unsigned long label_count;
     unsigned char library_used[RUNTIME_COUNT];
     char *runtime_output;
+    char *startup_output;
+    char *function_output;
+    char *data_output;
     ScalarSymbols *symbols;
     AstTranslationUnit *resolved_unit;
     char *return_label;
@@ -166,6 +169,9 @@ void codegen_context_destroy(CodegenContext *ctx)
         free(ctx->loops);
         free(ctx->output);
         free(ctx->runtime_output);
+        free(ctx->startup_output);
+        free(ctx->function_output);
+        free(ctx->data_output);
         free(ctx);
     }
 }
@@ -178,6 +184,30 @@ const char *codegen_output(const CodegenContext *ctx)
 const char *codegen_runtime_output(const CodegenContext *ctx)
 {
     return ctx == NULL || ctx->runtime_output == NULL ? "" : ctx->runtime_output;
+}
+
+const char *codegen_section_output(const CodegenContext *ctx,
+                                   CodegenSection section)
+{
+    const char *text = NULL;
+    if (ctx != NULL) {
+        switch (section) {
+        case CODEGEN_STARTUP: text = ctx->startup_output; break;
+        case CODEGEN_FUNCTIONS: text = ctx->function_output; break;
+        case CODEGEN_DATA: text = ctx->data_output; break;
+        case CODEGEN_RUNTIME: text = ctx->runtime_output; break;
+        }
+    }
+    return text == NULL ? "" : text;
+}
+
+static char *take_output(CodegenContext *ctx)
+{
+    char *text = ctx->output;
+    ctx->output = NULL;
+    ctx->output_length = 0;
+    ctx->output_capacity = 0;
+    return text;
 }
 
 int codegen_require_runtime(CodegenContext *ctx, const char *routine)
@@ -1169,7 +1199,8 @@ int codegen_program(CodegenContext *ctx, AstTranslationUnit *tu)
     if (validate_translation_unit(ctx, tu) != 0) {
         return -1;
     }
-    if (ctx->output_length != 0 || codegen_stack_depth(ctx) != 0) {
+    if (ctx->output_length != 0 || codegen_stack_depth(ctx) != 0 ||
+        ctx->startup_output != NULL || ctx->function_output != NULL) {
         return set_error(ctx, "program generation requires an empty context");
     }
     if (tu->has_pc_pragma) {
@@ -1239,13 +1270,22 @@ int codegen_program(CodegenContext *ctx, AstTranslationUnit *tu)
         emit_inst(ctx, "MVWD");
     }
     emit_inst(ctx, "RTN");
+    if (ctx->error[0] != '\0') {
+        return -1;
+    }
+    ctx->startup_output = take_output(ctx);
     if (!tu->no_save) {
         (void)append_text(ctx, "SREG:\t.DW 0, 0, 0, 0, 0, 0\n\n",
                           strlen("SREG:\t.DW 0, 0, 0, 0, 0, 0\n\n"));
     }
+    if (ctx->error[0] != '\0') {
+        return -1;
+    }
+    ctx->data_output = take_output(ctx);
     if (codegen_translation_unit(ctx, tu) != 0) {
         return -1;
     }
+    ctx->function_output = take_output(ctx);
     for (index = 0; index < tu->declarations.count; ++index) {
         const AstFunctionDecl *function =
             (const AstFunctionDecl *)tu->declarations.items[index];
@@ -1267,6 +1307,11 @@ int codegen_program(CodegenContext *ctx, AstTranslationUnit *tu)
             }
         }
     }
-    return append_text(ctx, codegen_runtime_output(ctx),
-                       strlen(codegen_runtime_output(ctx)));
+    for (index = CODEGEN_STARTUP; index <= CODEGEN_RUNTIME; ++index) {
+        const char *section = codegen_section_output(ctx, (CodegenSection)index);
+        if (append_text(ctx, section, strlen(section)) != 0) {
+            return -1;
+        }
+    }
+    return 0;
 }

@@ -10,10 +10,19 @@ extern "C" {
 
 typedef struct CodegenContext CodegenContext;
 
+typedef enum CodegenSection {
+    CODEGEN_STARTUP,
+    CODEGEN_FUNCTIONS,
+    CODEGEN_DATA,
+    CODEGEN_RUNTIME
+} CodegenSection;
+
 CodegenContext *codegen_context_create(void);
 void codegen_context_destroy(CodegenContext *ctx);
 const char *codegen_output(const CodegenContext *ctx);
 const char *codegen_runtime_output(const CodegenContext *ctx);
+const char *codegen_section_output(const CodegenContext *ctx,
+                                   CodegenSection section);
 int codegen_require_runtime(CodegenContext *ctx, const char *routine);
 const char *codegen_error(const CodegenContext *ctx);
 size_t codegen_stack_depth(const CodegenContext *ctx);

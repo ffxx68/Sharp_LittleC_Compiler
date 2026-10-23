@@ -182,12 +182,13 @@ static void test_complete_program(void)
         ".ORG\t57392\n\n"
         "\tLP\t0\n\tLIDP\tSREG\n\tLII\t11\n\tEXWD\n"
         "\tCALL\tmain\n"
-        "\tLP\t0\n\tLIDP\tSREG\n\tLII\t11\n\tMVWD\n\tRTN\n"
-        "SREG:\t.DW 0, 0, 0, 0, 0, 0\n\n";
+        "\tLP\t0\n\tLIDP\tSREG\n\tLII\t11\n\tMVWD\n\tRTN\n";
 
     assert(codegen_program(ctx, unit) == 0);
     assert(strncmp(codegen_output(ctx), startup, strlen(startup)) == 0);
     assert(strstr(codegen_output(ctx), "main:\t; Procedure\n") != NULL);
+    assert(strstr(codegen_output(ctx), "SREG:\t.DW") >
+           strstr(codegen_output(ctx), "main:\t; Procedure\n"));
     assert(codegen_stack_depth(ctx) == 0);
     codegen_context_destroy(ctx);
     ast_arena_destroy(arena);
@@ -472,6 +473,59 @@ static size_t occurrences(const char *source, const char *text)
     return count;
 }
 
+static void test_program_sections(void)
+{
+    static const char source[] =
+        "unsigned int __at(32) seed = 40;"
+        "__xram __at(0xE600) unsigned int result;"
+        "unsigned int add(unsigned int x) { return x + 1; }"
+        "void main(void) { if (seed < 42) result = add(add(seed)); }";
+    AstArena *arena = ast_arena_create();
+    CodegenContext *ctx = codegen_context_create();
+    CodegenContext *again = codegen_context_create();
+    AstTranslationUnit *unit = parse(arena, source);
+    const char *startup, *functions, *data, *runtime, *composed;
+    size_t offset = 0;
+    int section;
+    assert(codegen_program(ctx, unit) == 0);
+    startup = codegen_section_output(ctx, CODEGEN_STARTUP);
+    functions = codegen_section_output(ctx, CODEGEN_FUNCTIONS);
+    data = codegen_section_output(ctx, CODEGEN_DATA);
+    runtime = codegen_section_output(ctx, CODEGEN_RUNTIME);
+    assert(strstr(startup, "LB(40)") < strstr(startup, "CALL\tmain"));
+    assert(strstr(startup, "main:\t; Procedure") == NULL);
+    assert(strstr(startup, "SREG:") == NULL);
+    assert(strstr(functions, "add:\t; Procedure") != NULL);
+    assert(strstr(functions, "main:\t; Procedure") != NULL);
+    assert(strstr(functions, "LIB_CPS16:") == NULL);
+    assert(strcmp(data, "SREG:\t.DW 0, 0, 0, 0, 0, 0\n\n") == 0);
+    assert(occurrences(runtime, "LIB_CPS16:") == 1);
+    composed = codegen_output(ctx);
+    for (section = CODEGEN_STARTUP; section <= CODEGEN_RUNTIME; ++section) {
+        const char *text = codegen_section_output(ctx, (CodegenSection)section);
+        assert(strncmp(composed + offset, text, strlen(text)) == 0);
+        offset += strlen(text);
+    }
+    assert(offset == strlen(composed));
+    assert(codegen_program(again, unit) == 0);
+    assert(strcmp(composed, codegen_output(again)) == 0);
+    assert(codegen_program(ctx, unit) != 0);
+    codegen_context_destroy(ctx);
+    codegen_context_destroy(again);
+    ast_arena_destroy(arena);
+
+    arena = ast_arena_create();
+    ctx = codegen_context_create();
+    unit = parse(arena, "#pragma nosave\nvoid main(void) {}");
+    assert(codegen_program(ctx, unit) == 0);
+    assert(codegen_section_output(ctx, CODEGEN_DATA)[0] == '\0');
+    assert(codegen_section_output(ctx, CODEGEN_RUNTIME)[0] == '\0');
+    assert(strstr(codegen_section_output(ctx, CODEGEN_STARTUP),
+                  "CALL\tmain\n\tRTN\n") != NULL);
+    codegen_context_destroy(ctx);
+    ast_arena_destroy(arena);
+}
+
 static void test_runtime_libraries(void)
 {
     static const char *operators[] = {"==", "!=", "<", "<=", ">", ">="};
@@ -543,5 +597,6 @@ int main(void)
     test_comparisons_and_control_flow();
     test_function_calls_parameters_and_frames();
     test_runtime_libraries();
+    test_program_sections();
     return 0;
 }

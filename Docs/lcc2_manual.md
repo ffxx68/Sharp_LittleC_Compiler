@@ -66,6 +66,14 @@ This generates a complete program that computes 42 and returns to its caller.
 It does not display the result: the startup wrapper restores the accumulator
 before returning to BASIC.
 
+Complete ASM is ordered as startup, function definitions, data, then runtime
+helpers. Startup saves registers (unless `nosave`), initializes globals before
+`CALL main`, restores registers, and returns without falling through into the
+following sections. The `SREG` save area is placed after functions; PASM resolves
+its forward references. Comparison helpers follow data and are emitted only
+when needed. Function and helper labels are checked for case-insensitive
+collisions. See the project README for the integrated BASIC-caller test.
+
 ## Currently supported language
 
 | Feature | Current support |

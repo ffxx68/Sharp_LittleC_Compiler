@@ -166,6 +166,41 @@ function output. `codegen_translation_unit` leaves it separate; complete
 `codegen_program` appends it once in catalog order after generated functions.
 `codegen_require_runtime` reports an error for unknown routine names.
 
+## Complete-program output and integration test
+
+`codegen_program` retains explicit startup, function, data, and runtime
+sections until final composition. `codegen_section_output` exposes each
+section independently. PASM source is concatenated in this order:
+
+1. Header/origin, optional register save, fixed-address global initialization
+   in declaration order, `CALL main`, optional register restore, and `RTN`.
+2. Function definitions in translation-unit order, with generated `LB` labels.
+3. Data declarations: currently the twelve-byte `SREG` save area, omitted
+   with `#pragma nosave`. Fixed-address globals need startup stores, not
+   symbolic data declarations; arrays and automatic global allocation remain
+   unsupported.
+4. Required comparison routines in catalog order, each emitted once.
+
+The startup `RTN` prevents falling through into functions or data. SREG and
+runtime references may point forward, as supported by PASM. Function names
+are checked against compiler labels, SREG (when present), and all labels of
+included runtime routines in PASM's case-insensitive namespace. Runtime text
+remains independent of generated function text. CLI output is opened only
+after successful generation/composition, so compilation failures preserve
+existing output.
+
+Compile and assemble `tests\pc1403_program.c` to exercise initialized/zeroed
+register and XRAM globals, nested stack frames, calls, comparisons, and a
+loop. In a fresh **disposable** PC-1403 session, load `pc1403_key.lua`, then
+`tests\pc1403_program.lua`, and invoke `lcc2_program_test` with the binary's
+absolute path. This erases BASIC, reserves two KiB for ASM, enters a BASIC
+caller, and performs ten `RUN`s. Each run checks outputs `37 12 23 00 FF FF FF`
+at `&E600`, startup/return stack equality, register restoration, and BASIC
+memory preservation. A subsequent keyboard-entered `POKE&E607,42` verifies
+that BASIC has resumed interpreting commands. Success is
+`lcc2_program_result.status="PASS"`, `calls=10`, `returns=10`, with final
+outputs `37 12 23 00 FF FF FF 2A`; the emulator pauses at completion.
+
 Run the foundational checks with `make test`. Remove generated build files with
 `make clean`.
 
