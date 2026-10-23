@@ -1,0 +1,220 @@
+# lcc2 User Manual
+
+## Status and scope
+
+`lcc2` is an experimental C compiler for the Sharp SC61860, under development
+alongside the original Pascal `lcc`. It is not yet a replacement for `lcc`,
+and does not compile the full language described in
+[the target C subset](sc61860_c_subset.md). Parser acceptance alone does not
+mean a construct can be compiled.
+
+The current implementation supports parameterless leaf functions, byte/word
+scalar variables, assignments, and addition/subtraction. Execution has been
+checked in PC-1403 MAME sessions; physical-device execution and compatibility
+with other Sharp models have not been verified.
+
+See the [project README](../Source/C/lcc2/README.md) for implementation details
+and test harnesses, and the [roadmap](../Source/lcc/refactor_roadmap.md) for
+planned features.
+
+## Build and command line
+
+The build requires GCC, GNU Make, Flex, and Bison. From the repository root
+in PowerShell:
+
+```powershell
+make -C Source\C\lcc2
+```
+
+Compile a source file into PASM assembly:
+
+```powershell
+.\Source\C\lcc2\lcc2.exe .\program.c -o .\program.asm
+```
+
+Assemble it separately using the existing Pascal PASM:
+
+```powershell
+.\pasm.exe .\program.asm .\program.bin
+```
+
+`lcc2` does not produce a binary directly or deploy it to the target.
+`--help` and `--version` are also available. Success returns exit code 0;
+compilation/I/O failures return 1, and invalid command-line usage returns 2.
+Check each command's result before using its output: compilation errors leave
+an existing ASM file unchanged, so that file may be stale.
+
+Use distinct input and output files. The compiler reads source directly;
+run `lcpp` separately if preprocessing is required. Automatic preprocessing,
+assembler invocation, and integration with the legacy `make.bat` are not
+provided.
+
+## First program
+
+Save this as `program.c`:
+
+```c
+#pragma org(0xE030)
+
+unsigned int main(void)
+{
+    return 40 + 3 - 1;
+}
+```
+
+This generates a complete program that computes 42 and returns to its caller.
+It does not display the result: the startup wrapper restores the accumulator
+before returning to BASIC.
+
+## Currently supported language
+
+| Feature | Current support |
+|---------|-----------------|
+| Types | `char`, `unsigned char`, `signed char`, `int`, `unsigned int`; `void` function returns |
+| Functions | Parameterless definitions and compatible prototypes; a `main` definition is required for CLI output |
+| Variables | Fixed-address globals and automatic block-scope locals; local expression initializers |
+| Statements | Compound blocks, expression statements, empty statements, terminal `return` |
+| Expressions | Nonnegative 16-bit integer constants, character constants, scalar identifiers, `=`, `+`, `-`, parentheses |
+| Names | Case-sensitive lookup, nested block scopes, and local-over-global shadowing |
+| `const` | Const-qualified scalar objects cannot be assigned after initialization |
+
+Declarations precede statements within a block. Non-void functions require a
+return expression; void functions may use `return;` or an empty body.
+Statements after a return are currently rejected.
+
+Control flow, function calls, parameters, arrays, pointers, aggregates,
+static/extern objects, global initialization, and operators other than those
+listed above are not implemented in the scalar backend. In particular, use
+`0 - 1` rather than unary `-1` in this initial slice.
+
+### Types and conversions
+
+Bytes are 8 bits; words are 16 bits. Plain `char` is unsigned. Expressions
+use the word accumulator B:A; byte loads zero-extend for unsigned types and
+sign-extend for `signed char`. Byte assignments retain the low byte, and
+assignment expressions yield the converted stored value. Unsigned word
+addition/subtraction wraps modulo 65536.
+
+Signed overflow and reads of uninitialized locals are not diagnosed.
+Negative constants via unary minus, casts, and general signed operations
+remain outside the implemented subset.
+
+### Variable placement
+
+Globals require an explicit address:
+
+```c
+unsigned char __at(8) scratch;
+__xram __at(0xE600) unsigned int result;
+```
+
+Register-space objects must fit entirely within internal RAM addresses
+8 through 95. XRAM objects must fit within the 16-bit external address space.
+Overlapping declarations in the same address space are rejected. Fixed-address
+globals are not implicitly zeroed or initialized.
+
+**Placement is the programmer's responsibility:** the compiler does not prove
+that objects avoid generated code, the runtime stack, or BASIC/firmware state.
+The startup wrapper restores registers 8-11, so stores there do not persist
+after the program returns to BASIC. Use reserved external RAM for observable
+results.
+
+Local variables occupy a function-wide stack frame, including declarations
+in nested blocks; slots are not reused. The current frame limit is 32 bytes.
+This is an implementation limit, not a guarantee that every caller has enough
+stack space for the frame plus expression temporaries. Register/XRAM words are
+little-endian; stack-local words use the existing reversed-word convention.
+
+### Target pragmas and labels
+
+| Pragma | Current behavior |
+|--------|------------------|
+| `#pragma org(address)` | Sets the assembly origin; default is `0xE030`. Accepts a nonnegative 16-bit integer constant or supported `+`/`-` constant expression. |
+| `#pragma nosave` | Disables the register save/restore wrapper; still returns to the caller. Use only when the calling environment permits the clobbers. |
+| `#pragma pc(address)` | Recognized by the parser but rejected by program generation. |
+
+The default wrapper follows the Pascal compiler's register preservation
+sequence, not a complete CPU-state save: it sets I to 11 before saving and
+also changes P and DP.
+
+PASM labels are case-insensitive even though C identifiers are case-sensitive.
+Function definitions must not collide under that rule. `SREG` is reserved
+when the wrapper is enabled; names starting with `LB` followed by a digit are
+reserved for generated labels.
+
+## Run on a PC-1403 in MAME
+
+Use a disposable session or save any BASIC program first. In BASIC **PRO**
+mode enter, confirming each line:
+
+```text
+NEW
+POKE &FF01,&30,&E8
+NEW
+MEM
+```
+
+This erases BASIC and moves its start to `&E830`, reserving 2 KiB beginning
+at `&E030`. On a standard PC-1403, `MEM` should report 4830. Keep the binary
+and any XRAM test outputs entirely inside the reserved area.
+
+In the **MAME debugger console**, load the assembled binary:
+
+```text
+load "C:\path\to\program.bin",e030:maincpu
+```
+
+Then enter this caller in BASIC PRO mode:
+
+```basic
+10 CALL &E030
+20 END
+```
+
+Switch to BASIC **RUN** mode and execute `RUN`. Repeat it, verify the program
+is retained with `LIST` in PRO mode, and check that BASIC still evaluates a
+simple calculation. Do not repeat the reservation sequence afterward: `NEW`
+would intentionally erase the BASIC program.
+
+For an observable result, compile this instead:
+
+```c
+#pragma org(0xE030)
+__xram __at(0xE600) unsigned int result;
+
+unsigned int main(void)
+{
+    unsigned int value = 40;
+    result = value + 2;
+    return result;
+}
+```
+
+After execution, a memory dump at `&E600` should contain `2A 00`. Confirm
+that the binary ends before `&E600` so the result does not overwrite code.
+
+### Keyboard automation
+
+Load `pc1403_key.lua` in MAME's Lua console to use `keyline()` (a command plus
+ENTER) or `keyfile()` (commands from a file). The shortcuts `_` and `|` select
+CALC and cycle BASIC modes respectively; establish the starting mode before
+replaying commands. Run functions that use `emu.wait` in a coroutine, as in
+the project's Lua test harnesses.
+
+Remote tool control additionally requires `mame_mcp_bridge.lua` in the
+intended session. Use only one bridge-enabled MAME instance for a shared
+command directory; otherwise commands can reach the wrong emulator.
+See [the bridge documentation](../mame_mcp_readme.md) for setup.
+
+## Checks and examples
+
+```powershell
+make -C Source\C\lcc2 test
+```
+
+The suite covers the lexer/parser, AST, scalar resolver, emitted instruction
+sequences, and CLI diagnostics. Existing target fixtures are
+`Source\C\lcc2\tests\pc1403_smoke.c` and
+`Source\C\lcc2\tests\pc1403_scalars.c`, with Lua harnesses documented in the
+project README. Target checks use memory/register dumps rather than
+screenshots; BASIC-level execution is separate from synthetic ASM call tests.

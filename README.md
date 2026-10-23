@@ -262,5 +262,6 @@ For detailed test cases, a verification harness and current status, see the dedi
 
 - `Source/C/pasm/README.md` — contains test instructions, `test_pasm.ps1` usage, current pass/fail status and debugging notes.
 
-#### 🔄 LCC (Compiler) - TODO
-Future plans include migrating the main compiler component (`lcc`) to complete the fully modernized, cross-platform toolchain.
+#### 🔄 LCC2 (Compiler) - UNDER DEVELOPMENT
+The new C compiler, `lcc2`, is under development alongside the Pascal `lcc`.
+See the [lcc2 project](Source/C/lcc2/README.md) and its [user manual](Docs/lcc2_manual.md) for the currently supported subset and usage.

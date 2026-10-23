@@ -4,6 +4,9 @@
 incrementally alongside the existing Pascal compiler, which remains the
 behavioral reference.
 
+See the [user manual](../../../Docs/lcc2_manual.md) for language support,
+command-line usage, and deployment instructions.
+
 ## Build
 
 From this directory, run:
