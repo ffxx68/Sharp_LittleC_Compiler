@@ -43,5 +43,7 @@ size_t symtab_frame_size(const ScalarSymbols *table,
                          const AstFunctionDecl *function);
 size_t symtab_type_width(const AstType *type);
 int symtab_constant(const AstExpr *expression, unsigned long *value);
+int symtab_initializer_constant(const AstExpr *expression,
+                                unsigned long *value);
 
 #endif

@@ -71,8 +71,10 @@ Globals require an explicit constant `__at` placement. Internal-RAM globals
 must fit in `[8,96)`; cells 0-7 are reserved for arithmetic/addressing registers.
 External-RAM globals use `__xram __at(address) type name`. Register and XRAM
 address spaces are checked separately for overlapping objects. Global
-initializers and automatic global allocation remain deferred; fixed-address
-objects are not implicitly cleared. The caller must avoid placing objects
+initializers are emitted before `main`: integer/character constant expressions
+are converted to the declared byte/word width, and objects without explicit
+initializers are zeroed. Automatic global allocation remains deferred. The
+caller must avoid placing objects
 over live stack slots, generated code, or BASIC/firmware memory. Registers
 8-11 are included in the existing startup save/restore wrapper, so changes
 there do not persist after returning to BASIC.

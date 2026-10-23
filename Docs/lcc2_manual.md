@@ -72,7 +72,7 @@ before returning to BASIC.
 |---------|-----------------|
 | Types | `char`, `unsigned char`, `signed char`, `int`, `unsigned int`; `void` function returns |
 | Functions | Byte/word parameters by value, compatible prototypes, direct calls to definitions in the same translation unit; CLI `main` must be parameterless |
-| Variables | Fixed-address globals and automatic block-scope locals; local expression initializers |
+| Variables | Fixed-address globals with scalar constant initialization; automatic block-scope locals with expression initializers |
 | Statements | Compound blocks, expression statements, empty statements, `if`/`else`, `while`, `do`/`while`, expression-initialized `for`, `break`, `continue`, `return` |
 | Expressions | Nonnegative 16-bit integer constants, character constants, scalar identifiers, direct function calls, `=`, `+`, `-`, `==`, `!=`, unsigned `<`, `<=`, `>`, `>=`, parentheses |
 | Names | Case-sensitive lookup, nested block scopes, and local-over-global shadowing |
@@ -87,9 +87,11 @@ named scalar parameters; prototypes may omit parameter names. Calls are
 left-to-right and may be nested or recursive. Argument and return values use
 the byte/word stack convention described below.
 
-Arrays, pointers, aggregates, `switch`, `goto`, static/extern objects, global
-initialization, external function calls, and operators other than those listed
-above are not implemented in the scalar backend. Comparison expressions call
+Arrays, pointers, aggregates, `switch`, `goto`, static/extern objects,
+external function calls, and operators other than those listed above are not
+implemented in the scalar backend. Global initializers are limited to integer
+and character constants combined with `+` and `-`; list and floating-point
+initializers are rejected. Comparison expressions call
 legacy `LIB_CP*16` routines; runtime-library output integration is still
 pending. In particular, use `0 - 1` rather than unary `-1` in this initial
 slice.
@@ -118,7 +120,10 @@ __xram __at(0xE600) unsigned int result;
 Register-space objects must fit entirely within internal RAM addresses
 8 through 95. XRAM objects must fit within the 16-bit external address space.
 Overlapping declarations in the same address space are rejected. Fixed-address
-globals are not implicitly zeroed or initialized.
+globals with no initializer are zeroed before `main`. Explicit scalar
+initializers are constant expressions using integer/character constants and
+`+`/`-`; results are truncated to the declared width (8 or 16 bits) and stored
+before `main` as part of startup.
 
 **Placement is the programmer's responsibility:** the compiler does not prove
 that objects avoid generated code, the runtime stack, or BASIC/firmware state.

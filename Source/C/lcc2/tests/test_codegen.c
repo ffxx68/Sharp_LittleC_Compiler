@@ -202,6 +202,47 @@ static void test_complete_program(void)
     ast_arena_destroy(arena);
 }
 
+static void test_global_initialization(void)
+{
+    AstArena *arena = ast_arena_create();
+    CodegenContext *ctx = codegen_context_create();
+    AstTranslationUnit *unit = parse(arena,
+        "unsigned char __at(8) byte_value = 0x123;"
+        "unsigned char __at(9) character_value = 'A';"
+        "unsigned char __at(10) zero_register;"
+        "__xram __at(0xE600) signed int word_value = 0 - 1;"
+        "__xram __at(0xE602) unsigned char zero_value;"
+        "void main(void) {}");
+    const char *assembly;
+    const char *byte_init, *character_init, *zero_register_init;
+    const char *word_init, *zero_xram_init, *main_call;
+
+    assert(codegen_program(ctx, unit) == 0);
+    assembly = codegen_output(ctx);
+    byte_init = strstr(assembly, "LIA\t35\t; Load byte constant 35");
+    character_init = strstr(assembly, "LIA\t65\t; Load byte constant 65");
+    zero_register_init = strstr(assembly, "LIA\t0\t; Load byte constant 0");
+    word_init = strstr(assembly, "LIA\tLB(65535)\t; Load word constant LB");
+    assert(byte_init != NULL && character_init != NULL && word_init != NULL &&
+           zero_register_init != NULL);
+    zero_xram_init = strstr(zero_register_init + 1,
+                            "LIA\t0\t; Load byte constant 0");
+    main_call = strstr(assembly, "CALL\tmain");
+    assert(zero_xram_init != NULL);
+    assert(main_call != NULL);
+    assert(byte_init < character_init && character_init < zero_register_init &&
+           zero_register_init < word_init && word_init < zero_xram_init &&
+           zero_xram_init < main_call);
+    assert(strstr(byte_init, "LP\t8\n\tEXAM\n") < character_init);
+    assert(strstr(character_init, "LP\t9\n\tEXAM\n") < zero_register_init);
+    assert(strstr(zero_register_init, "LP\t10\n\tEXAM\n") < word_init);
+    assert(strstr(word_init, "LIDP\t58880\n\tSTD\n") < zero_xram_init);
+    assert(strstr(zero_xram_init, "LIDP\t58882\n\tSTD\n") < main_call);
+    assert(codegen_stack_depth(ctx) == 0);
+    codegen_context_destroy(ctx);
+    ast_arena_destroy(arena);
+}
+
 static void test_invalid_programs(void)
 {
     static const char *sources[] = {
@@ -428,6 +469,7 @@ int main(void)
     test_word_subtraction_sequence();
     test_unsupported_unit_is_not_partially_emitted();
     test_complete_program();
+    test_global_initialization();
     test_invalid_programs();
     test_scalar_access_sequences();
     test_scalar_validation();

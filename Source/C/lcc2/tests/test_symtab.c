@@ -72,7 +72,7 @@ static void test_rejections(void)
         "__xram __at(65535) int x;",
         "__xram int x;",
         "int x;",
-        "int __at(8) x = 1;",
+        "int __at(8) x = y;",
         "int __at(8) x; void x(void) {}",
         "int main(void) { static int x; return x; }",
         "int main(void) { int __at(8) x; return x; }",
@@ -126,6 +126,28 @@ static void test_parameter_layout_and_calls(void)
     assert(right != NULL && right->location.width == 1);
     assert(right->location.address == 2);
     assert(local != NULL && local->location.width == 2);
+    symtab_destroy(table);
+    ast_arena_destroy(arena);
+}
+
+static void test_global_initializers(void)
+{
+    AstArena *arena = ast_arena_create();
+    ScalarSymbols *table = symtab_create();
+    AstTranslationUnit *unit = parse(arena,
+        "unsigned char __at(8) byte_value = 0x123;"
+        "unsigned char __at(9) character_value = 'A';"
+        "unsigned char __at(10) zero_register;"
+        "__xram __at(0xE600) signed int word_value = 0 - 1;"
+        "__xram __at(0xE602) unsigned char zero_value;"
+        "void main(void) {}");
+    assert(symtab_resolve(table, unit) == 0);
+    assert(symtab_declaration(table,
+        (AstVarDecl *)unit->declarations.items[0])->location.address == 8);
+    assert(symtab_declaration(table,
+        (AstVarDecl *)unit->declarations.items[3])->location.storage == SCALAR_XRAM);
+    assert(symtab_declaration(table,
+        (AstVarDecl *)unit->declarations.items[4])->location.width == 1);
     symtab_destroy(table);
     ast_arena_destroy(arena);
 }
@@ -215,6 +237,7 @@ int main(void)
 {
     test_scopes_and_layout();
     test_rejections();
+    test_global_initializers();
     test_storage_namespaces();
     test_frame_limit();
     test_control_flow_resolution();

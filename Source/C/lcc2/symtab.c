@@ -102,12 +102,50 @@ int symtab_constant(const AstExpr *expression, unsigned long *value)
     return -1;
 }
 
+int symtab_initializer_constant(const AstExpr *expression,
+                                unsigned long *value)
+{
+    if (expression == NULL || value == NULL) {
+        return -1;
+    }
+    if (expression->node.kind == AST_NODE_CONSTANT_EXPR) {
+        const AstConstantExpr *constant = (const AstConstantExpr *)expression;
+        if (constant->constant_kind == AST_CONSTANT_INTEGER &&
+            constant->value.integer >= 0 && constant->value.integer <= 65535) {
+            *value = (unsigned long)constant->value.integer;
+            return 0;
+        }
+        if (constant->constant_kind == AST_CONSTANT_CHARACTER &&
+            constant->value.character <= 255) {
+            *value = constant->value.character;
+            return 0;
+        }
+        return -1;
+    }
+    if (expression->node.kind == AST_NODE_BINARY_EXPR) {
+        const AstBinaryExpr *binary = (const AstBinaryExpr *)expression;
+        unsigned long left, right;
+        if (binary->op != AST_BINARY_ADD && binary->op != AST_BINARY_SUB) {
+            return -1;
+        }
+        if (symtab_initializer_constant(binary->left, &left) != 0 ||
+            symtab_initializer_constant(binary->right, &right) != 0) {
+            return -1;
+        }
+        *value = binary->op == AST_BINARY_ADD
+            ? (left + right) & 65535UL
+            : (left - right) & 65535UL;
+        return 0;
+    }
+    return -1;
+}
+
 static int add_variable(ScalarSymbols *table, const AstVarDecl *variable)
 {
     ScalarSymbol symbol;
     ScalarSymbol *grown;
     size_t index;
-    unsigned long address;
+    unsigned long address, initial_value;
 
     memset(&symbol, 0, sizeof(symbol));
     symbol.location.width = symtab_type_width(variable->type);
@@ -139,8 +177,12 @@ static int add_variable(ScalarSymbols *table, const AstVarDecl *variable)
         symbol.location.address = -(int)table->local_bytes -
                                   (symbol.location.width == 1 ? 2 : 1);
     } else {
-        if (variable->initializer != NULL) {
-            return fail(table, "global initialization is not supported yet", variable->name);
+        if (variable->initializer != NULL &&
+            (variable->initializer->kind != AST_INITIALIZER_EXPR ||
+             symtab_initializer_constant(variable->initializer->as.expression,
+                                         &initial_value) != 0)) {
+            return fail(table, "global initializer must be a scalar constant expression",
+                        variable->name);
         }
         if (!variable->attributes.has_address ||
             symtab_constant(variable->attributes.address, &address) != 0) {

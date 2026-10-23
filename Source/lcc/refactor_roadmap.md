@@ -982,12 +982,100 @@ and zero stack depth at function boundaries. Local frames remain capped at
 runtime linkage and combined code/data/library output remain in
 Task 5.3.4.7.
 
-#### Task 5.3.4.7: Program startup, data, and output integration
+#### Task 5.3.4.7: Program startup, data, and output integration (umbrella)
 
-Extend the minimal startup and CLI integration from Task 5.3.4.2 with global
-initialization and separate code/data/library output ordering. Produce
-complete assembly for the expanded supported subset, suitable for the
-existing assembler; binary generation remains the assembler's responsibility.
+This is the parent milestone, not a separate implementation slice. It is
+complete only when all supported program parts are integrated into valid
+PASM assembly: startup, initialized data, generated functions, and any
+required runtime libraries in a deliberate output order. Binary generation
+remains the assembler's responsibility.
+
+Subtask 5.3.4.7.1 delivers only fixed-address scalar global initialization.
+It emits the initialization stores in startup before `CALL main`; it does not
+separate code/data/library output channels, include runtime libraries, or
+complete this parent milestone. The remaining work is divided into subtasks
+5.3.4.7.2 and 5.3.4.7.3 below.
+
+##### Task 5.3.4.7.1 ✅: Fixed-address scalar global initialization
+
+Implement C initialization semantics for the fixed-address byte/word scalar
+globals currently accepted by the resolver. Keep automatic allocation,
+arrays/aggregates, floating-point objects, and symbolic data allocation out
+of this subtask.
+
+- Resolve explicit global initializers only when they are scalar constant
+  expressions supported by the current integer/character and `+`/`-` subset.
+  Reject list, floating-point, variable-dependent, and otherwise unsupported
+  initializers with a diagnostic before emitting output.
+- Apply target-width conversion consistently: byte objects store the low
+  eight bits and word objects store the low sixteen bits, including signed
+  declarations. Preserve the existing fixed register/XRAM address and
+  overlap validation.
+- Give globals without an explicit initializer C's zero-initialization
+  behavior. Emit the startup stores for both register and XRAM objects before
+  `CALL main`, without changing the existing startup save/restore contract.
+- Add resolver and code-generation tests for constant values, byte/word
+  truncation, zero initialization, both storage classes, startup ordering,
+  and rejected initializer forms. Compile representative initialized-global
+  fixtures and require PASM to assemble the resulting output.
+
+Do not mark this subtask complete until the tests establish that all global
+initialization occurs before `main` and that rejected inputs leave existing
+CLI output untouched. PC-1403 runtime verification should confirm initialized
+values if the fixture can be exercised without disturbing the active MAME
+session.
+
+Implemented the resolver's scalar constant-initializer checks and startup
+stores for all fixed-address scalar globals. Integer/character constants and
+`+`/`-` expressions are reduced modulo 16 bits, then truncated to the declared
+byte/word width; uninitialized globals are stored as zero. Initialization
+runs after the optional register save and before `CALL main` for both register
+and XRAM locations. Resolver/codegen tests cover character and integer
+constants, byte truncation, signed word `0 - 1`, zero initialization, storage
+classes, and ordering. CLI rejection checks preserve existing output, and
+`tests/pc1403_global_init.c` assembles with PASM. PC-1403 runtime execution was
+not part of this validation.
+
+##### Task 5.3.4.7.2: Runtime-library dependency tracking and inclusion
+
+Make complete assembly self-contained for runtime routines called by the
+currently supported compiler subset, especially comparison helpers.
+
+- Record each runtime routine required during code generation in the
+  compilation context, deduplicating repeated uses.
+- Emit or append the corresponding PASM-compatible routine definitions once,
+  after generated code, with labels and calling conventions matching the
+  legacy runtime library. Fail explicitly if a required routine cannot be
+  resolved or included; do not silently leave external calls in output.
+- Keep runtime-library code distinct from generated function output so the
+  final program assembly can place and inspect it deliberately.
+- Test individual and repeated helper use, deduplication, no-library programs,
+  and unresolved helper failures. Assemble comparison-containing programs
+  with PASM and validate comparison behavior in the PC-1403 test harness.
+
+This subtask supplies helper definitions; it does not restructure all output
+channels or declare Task 5.3.4.7 complete.
+
+##### Task 5.3.4.7.3: Ordered output sections and end-to-end program integration
+
+Integrate startup, global initialization, generated functions, data
+declarations, and the runtime routines from Task 5.3.4.7.2 into one
+deterministically ordered PASM source file.
+
+- Keep startup, function code, data, and library text in distinct buffers or
+  equivalent explicit sections until final assembly-text composition.
+- Define and document the order and placement rules, including startup data
+  such as `SREG`, global initialization before `CALL main`, and library code
+  after generated functions. Ensure labels and references remain unique.
+- Wire the complete output through the CLI and add fixtures that combine
+  initialized globals, calls, comparisons, and control flow. Require PASM to
+  assemble these fixtures and retain the existing CLI guarantee that failed
+  compilation does not replace output.
+- Complete the PC-1403 runtime smoke check for startup, initialized globals,
+  helper calls, stack balance, and return to a responsive BASIC caller.
+
+The parent milestone is complete only after 5.3.4.7.1, 5.3.4.7.2, and
+5.3.4.7.3 pass their stated acceptance checks.
 
 #### Task 5.3.4.8: Arrays, pointers, and aggregate access
 

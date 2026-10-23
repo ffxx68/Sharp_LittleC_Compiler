@@ -1027,6 +1027,41 @@ static int same_assembler_name(const char *left, const char *right)
     return *left == *right;
 }
 
+static int emit_global_initializers(CodegenContext *ctx,
+                                    const AstTranslationUnit *tu)
+{
+    size_t index;
+    for (index = 0; index < tu->declarations.count; ++index) {
+        const AstDecl *declaration = tu->declarations.items[index];
+        const AstVarDecl *variable;
+        const ScalarSymbol *symbol;
+        unsigned long value = 0;
+
+        if (declaration->node.kind != AST_NODE_VARIABLE_DECL) {
+            continue;
+        }
+        variable = (const AstVarDecl *)declaration;
+        symbol = symtab_declaration(ctx->symbols, variable);
+        if (symbol == NULL) {
+            return set_error(ctx, "unresolved global reached code generation");
+        }
+        if (variable->initializer != NULL) {
+            if (variable->initializer->kind != AST_INITIALIZER_EXPR ||
+                symtab_initializer_constant(variable->initializer->as.expression,
+                                            &value) != 0) {
+                return set_error(ctx,
+                    "unsupported global initializer reached code generation");
+            }
+        }
+        value &= symbol->location.width == 1 ? 255UL : 65535UL;
+        if (codegen_load_constant(ctx, symbol->location.width, value) != 0 ||
+            codegen_store_scalar(ctx, symbol->location) != 0) {
+            return -1;
+        }
+    }
+    return ctx->error[0] == '\0' ? 0 : -1;
+}
+
 int codegen_program(CodegenContext *ctx, AstTranslationUnit *tu)
 {
     unsigned long origin = 0xE030;
@@ -1095,6 +1130,9 @@ int codegen_program(CodegenContext *ctx, AstTranslationUnit *tu)
         emit_inst_op(ctx, "LIDP", "SREG");
         emit_inst_op(ctx, "LII", "11");
         emit_inst(ctx, "EXWD");
+    }
+    if (emit_global_initializers(ctx, tu) != 0) {
+        return -1;
     }
     emit_inst_op(ctx, "CALL", "main");
     if (!tu->no_save) {
