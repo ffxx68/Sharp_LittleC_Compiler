@@ -22,7 +22,7 @@ check-tools:
 $(TARGET): $(OBJECTS)
 	$(CC) $(CFLAGS) -o $@ $(OBJECTS)
 
-$(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
+$(BUILD_DIR)/%.o: %.c ast.h codegen.h parser.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 $(BUILD_DIR)/lexer.c: lexer.l lexer_tokens.h | $(BUILD_DIR)
@@ -62,6 +62,7 @@ test: all $(TEST_TARGET) $(LEXER_TEST_TARGET) $(PARSER_TEST_TARGET) $(CODEGEN_TE
 	./$(CODEGEN_TEST_TARGET)
 	./$(TARGET) --help
 	./$(TARGET) --version
+	sh tests/test_cli.sh
 
 clean:
 	rm -rf $(BUILD_DIR) $(TARGET)

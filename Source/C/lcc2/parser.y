@@ -818,9 +818,12 @@ external_declaration
           $$ = list_new();
           if (function == NULL || list_append($$, function) == NULL) YYABORT;
       }
-    | LCC2_TOK_PRAGMA_ORG '(' expression ')' { $$ = list_new(); }
-    | LCC2_TOK_PRAGMA_PC '(' expression ')' { $$ = list_new(); }
-    | LCC2_TOK_PRAGMA_NOSAVE { $$ = list_new(); }
+    | LCC2_TOK_PRAGMA_ORG '(' expression ')'
+      { parsed_unit->origin = $3; $$ = list_new(); }
+    | LCC2_TOK_PRAGMA_PC '(' expression ')'
+      { parsed_unit->has_pc_pragma = 1; $$ = list_new(); }
+    | LCC2_TOK_PRAGMA_NOSAVE
+      { parsed_unit->no_save = 1; $$ = list_new(); }
     ;
 
 declaration
@@ -1599,7 +1602,11 @@ int lcc2_parse_string(AstArena *arena, const char *source,
     }
     *translation_unit = NULL;
     parse_arena = arena;
-    parsed_unit = NULL;
+    parsed_unit = (AstTranslationUnit *)ast_arena_alloc(arena, sizeof(*parsed_unit));
+    if (parsed_unit == NULL) {
+        parse_arena = NULL;
+        return 2;
+    }
     parsed_declarations = NULL;
     parse_error_reported = 0;
     free_parse_lists();
@@ -1626,14 +1633,9 @@ int lcc2_parse_string(AstArena *arena, const char *source,
     }
     result = yyparse();
     if (result == 0) {
-        parsed_unit = (AstTranslationUnit *)ast_arena_alloc(arena, sizeof(*parsed_unit));
-        if (parsed_unit == NULL) {
-            result = 2;
-        } else {
-            parsed_unit->node.kind = AST_NODE_TRANSLATION_UNIT;
-            parsed_unit->declarations = declaration_list(parsed_declarations);
-            *translation_unit = parsed_unit;
-        }
+        parsed_unit->node.kind = AST_NODE_TRANSLATION_UNIT;
+        parsed_unit->declarations = declaration_list(parsed_declarations);
+        *translation_unit = parsed_unit;
     }
     yy_delete_buffer(buffer);
     free_parse_lists();

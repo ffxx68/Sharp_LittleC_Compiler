@@ -850,53 +850,95 @@ translation-unit constructs are rejected before assembly emission.
 labels, and rejection of unsupported constructs. This slice does not provide
 complete-program output or command-line source compilation.
 
-#### Task 5.3.4.2: Scalar storage access
+#### Task 5.3.4.2 ✅: Executable ASM and PC-1403 smoke test
+
+Bring forward the minimal startup/output integration needed to run the
+Task 5.3.4.1 subset on the target, without waiting for scalar storage,
+control flow, or general stack frames.
+
+- Wire source-to-ASM compilation into the CLI using the existing parser and
+  backend, with explicit diagnostics for unsupported constructs.
+- Emit complete PASM-compatible assembly with a configurable origin,
+  register save/restore following the Pascal reference, `CALL main`, and
+  an explicit `RTN` back to BASIC.
+- Add a minimal fixture such as
+  `unsigned int main(void) { return 40 + 3 - 1; }`, without variables,
+  runtime libraries, or ROM calls, to exercise arithmetic and the evaluation
+  stack as well as program entry/return.
+- Acceptance: PASM assembles the output; loading it into reserved PC-1403
+  memory and executing `CALL &E030` returns to a responsive BASIC prompt,
+  including after repeated calls. In MAME, also verify the result is `42`
+  before register restoration and that the stack is balanced; absence of a
+  crash alone does not establish arithmetic correctness.
+
+Binary generation remains the assembler's responsibility. Global
+initialization and full code/data/library integration remain in Task
+5.3.4.6; this early slice does not complete that milestone.
+
+Implemented the CLI and minimal startup wrapper, with backend/CLI regression
+coverage and `tests/pc1403_smoke.c` / `tests/pc1403_smoke.lua`. The generated
+78-byte binary assembles with PASM. Memory/register-only MAME verification
+passes ten consecutive machine-code calls: BA is `42` before restoration,
+R is `94` on return from main and `96` on return to the caller, and all
+twelve register bytes in the fixture are restored (the fixture initializes I
+to 11, so this does not verify preservation of an arbitrary incoming I).
+This also exposed and fixed a
+missing `LP 0` before word `ADB` in the Task 5.3.4.1 C emitter.
+
+The user confirmed the BASIC-level smoke procedure passed in their PC-1403
+MAME session after building and deploying the binary: repeated execution,
+BASIC program retention, and interpreter responsiveness. The initial
+apparent memory corruption was reported before the binary had been loaded,
+so it is not evidence of a generated-code defect. No physical-device
+execution has been verified.
+
+#### Task 5.3.4.3: Scalar storage access
 
 Port byte/word loads and stores for register, local-stack, and XRAM storage.
 Consume explicit symbol/type/layout results from Task 5.3.5 rather than
 performing allocation or symbol lookup in the instruction emitter.
 Cover assignments and scalar expressions in the tree-walker.
 
-#### Task 5.3.4.3: Comparisons, branches, and structured control flow
+#### Task 5.3.4.4: Comparisons, branches, and structured control flow
 
 Port equality and unsigned relational operations and branch helpers.
 Extend the tree-walker with conditionals and loops, including correct
 `break`, `continue`, and standard-C `for` step ordering.
 
-#### Task 5.3.4.4: Functions, calls, and stack frames
+#### Task 5.3.4.5: Functions, calls, and stack frames
 
 Add parameters, local storage, calls, return-value handling, and stack
 allocation/restoration. Verify cleanup thresholds, nested calls, and
 byte-accurate stack balance at function boundaries.
 
-#### Task 5.3.4.5: Program startup, data, and output integration
+#### Task 5.3.4.6: Program startup, data, and output integration
 
-Port startup and global initialization, preserve separate code/data/library
-output ordering, and wire source-to-ASM compilation into the command line.
-Produce complete assembly suitable for the existing assembler; binary
-generation remains the assembler's responsibility.
+Extend the minimal startup and CLI integration from Task 5.3.4.2 with global
+initialization and separate code/data/library output ordering. Produce
+complete assembly for the expanded supported subset, suitable for the
+existing assembler; binary generation remains the assembler's responsibility.
 
-#### Task 5.3.4.6: Arrays, pointers, and aggregate access
+#### Task 5.3.4.7: Arrays, pointers, and aggregate access
 
 Port array and pointer operations by storage class and element width.
 Use compiler-computed aggregate offsets for member access; keep type checking
 and layout outside the instruction emitter.
 
-#### Task 5.3.4.7: Remaining arithmetic and standard-C extensions
+#### Task 5.3.4.8: Remaining arithmetic and standard-C extensions
 
 Port remaining arithmetic/library operations and floating-point support as
 their AST constructs become supported. Implement signed operations and
 standard-C switch semantics separately from legacy unsigned/switch behavior.
 Track and deduplicate required runtime libraries in the context.
 
-#### Task 5.3.4.8: Operation-parity checklist and completion gates
+#### Task 5.3.4.9: Operation-parity checklist and completion gates
 
 Maintain a checklist against the Task 5.1.4 fixture inventory, recording
 ported and deferred operations explicitly. Compare equivalent output with
 the Pascal reference and functionally validate intentional semantic changes.
 Cover library requirements as well as output text and stack effects.
 Task 5.3.4 remains incomplete until the required slices and their validation
-gates are satisfied; only Task 5.3.4.1 is currently marked complete.
+gates are satisfied; only Tasks 5.3.4.1 and 5.3.4.2 are currently marked complete.
 
 The C compiler will additionally need behaviors not supplied by the current littleC backend:
 - `signed` arithmetic: need `SBB` (subtract with borrow) and signed comparisons

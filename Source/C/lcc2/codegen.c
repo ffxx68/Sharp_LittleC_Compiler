@@ -1,5 +1,6 @@
 #include "codegen.h"
 
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -280,6 +281,7 @@ int codegen_pop_add(CodegenContext *ctx, size_t width)
         emit_inst(ctx, "EXAB");
         emit_inst(ctx, "POP");
         --ctx->stack_depth;
+        emit_inst_op(ctx, "LP", "0");
         emit_inst_comment(ctx, "ADB", "Addition");
         emit_inst_op(ctx, "LP", "1");
         emit_inst(ctx, "LDM");
@@ -490,7 +492,7 @@ static int validate_function(const AstFunctionDecl *function)
     }
 }
 
-int codegen_translation_unit(CodegenContext *ctx, AstTranslationUnit *tu)
+static int validate_translation_unit(CodegenContext *ctx, AstTranslationUnit *tu)
 {
     size_t index;
 
@@ -508,6 +510,16 @@ int codegen_translation_unit(CodegenContext *ctx, AstTranslationUnit *tu)
                 "unsupported translation unit construct (only parameterless "
                 "functions returning constants or + / - expressions are supported)");
         }
+    }
+    return 0;
+}
+
+int codegen_translation_unit(CodegenContext *ctx, AstTranslationUnit *tu)
+{
+    size_t index;
+
+    if (validate_translation_unit(ctx, tu) != 0) {
+        return -1;
     }
     for (index = 0; index < tu->declarations.count; ++index) {
         AstFunctionDecl *function =
@@ -539,4 +551,111 @@ int codegen_translation_unit(CodegenContext *ctx, AstTranslationUnit *tu)
         }
     }
     return ctx->error[0] == '\0' ? 0 : -1;
+}
+
+static int origin_value(const AstExpr *expression, unsigned long *value)
+{
+    if (expression->node.kind == AST_NODE_CONSTANT_EXPR) {
+        const AstConstantExpr *constant = (const AstConstantExpr *)expression;
+        if (constant->constant_kind != AST_CONSTANT_INTEGER ||
+            constant->value.integer < 0 || constant->value.integer > 65535) {
+            return -1;
+        }
+        *value = (unsigned long)constant->value.integer;
+        return 0;
+    }
+    if (expression->node.kind == AST_NODE_BINARY_EXPR) {
+        const AstBinaryExpr *binary = (const AstBinaryExpr *)expression;
+        unsigned long left, right;
+        if (origin_value(binary->left, &left) != 0 ||
+            origin_value(binary->right, &right) != 0) {
+            return -1;
+        }
+        if (binary->op == AST_BINARY_ADD && left + right <= 65535) {
+            *value = left + right;
+            return 0;
+        }
+        if (binary->op == AST_BINARY_SUB && left >= right) {
+            *value = left - right;
+            return 0;
+        }
+    }
+    return -1;
+}
+
+static int same_assembler_name(const char *left, const char *right)
+{
+    while (*left != '\0' && *right != '\0') {
+        if (toupper((unsigned char)*left++) != toupper((unsigned char)*right++)) {
+            return 0;
+        }
+    }
+    return *left == *right;
+}
+
+int codegen_program(CodegenContext *ctx, AstTranslationUnit *tu)
+{
+    unsigned long origin = 0xE030;
+    size_t index, other;
+    int has_main = 0;
+    char operand[32];
+
+    if (validate_translation_unit(ctx, tu) != 0) {
+        return -1;
+    }
+    if (ctx->output_length != 0 || ctx->stack_depth != 0) {
+        return set_error(ctx, "program generation requires an empty context");
+    }
+    if (tu->has_pc_pragma) {
+        return set_error(ctx, "#pragma pc is not supported by program generation yet");
+    }
+    if (tu->origin != NULL && origin_value(tu->origin, &origin) != 0) {
+        return set_error(ctx,
+            "#pragma org requires a 16-bit nonnegative integer constant or + / - expression");
+    }
+    for (index = 0; index < tu->declarations.count; ++index) {
+        AstFunctionDecl *function = (AstFunctionDecl *)tu->declarations.items[index];
+        if (!tu->no_save && same_assembler_name(function->name, "SREG")) {
+            return set_error(ctx, "SREG is reserved for the register-save wrapper");
+        }
+        if (function->is_prototype) {
+            continue;
+        }
+        if (strcmp(function->name, "main") == 0) {
+            has_main = 1;
+        }
+        for (other = 0; other < index; ++other) {
+            AstFunctionDecl *previous = (AstFunctionDecl *)tu->declarations.items[other];
+            if (!previous->is_prototype &&
+                same_assembler_name(function->name, previous->name)) {
+                return set_error(ctx, "function definitions collide in PASM's case-insensitive namespace");
+            }
+        }
+    }
+    if (!has_main) {
+        return set_error(ctx, "program requires a parameterless main definition");
+    }
+    emit_comment(ctx, "pasm file - assemble with pasm!");
+    emit_comment(ctx, "Compiled with lcc2");
+    (void)snprintf(operand, sizeof(operand), "%lu", origin);
+    (void)append_format(ctx, ".ORG\t%s\n\n", operand, NULL, NULL);
+    if (!tu->no_save) {
+        emit_inst_op(ctx, "LP", "0");
+        emit_inst_op(ctx, "LIDP", "SREG");
+        emit_inst_op(ctx, "LII", "11");
+        emit_inst(ctx, "EXWD");
+    }
+    emit_inst_op(ctx, "CALL", "main");
+    if (!tu->no_save) {
+        emit_inst_op(ctx, "LP", "0");
+        emit_inst_op(ctx, "LIDP", "SREG");
+        emit_inst_op(ctx, "LII", "11");
+        emit_inst(ctx, "MVWD");
+    }
+    emit_inst(ctx, "RTN");
+    if (!tu->no_save) {
+        (void)append_text(ctx, "SREG:\t.DW 0, 0, 0, 0, 0, 0\n\n",
+                          strlen("SREG:\t.DW 0, 0, 0, 0, 0, 0\n\n"));
+    }
+    return codegen_translation_unit(ctx, tu);
 }

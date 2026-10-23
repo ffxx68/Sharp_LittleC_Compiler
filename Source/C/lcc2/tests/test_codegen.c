@@ -32,6 +32,7 @@ static void test_word_return_addition(void)
         "\tPOP\n"
         "\tEXAB\n"
         "\tPOP\n"
+        "\tLP\t0\n"
         "\tADB\t; Addition\n"
         "\tLP\t1\n"
         "\tLDM\n"
@@ -165,6 +166,70 @@ static void test_unsupported_unit_is_not_partially_emitted(void)
     ast_arena_destroy(arena);
 }
 
+static void test_complete_program(void)
+{
+    AstArena *arena = ast_arena_create();
+    CodegenContext *ctx = codegen_context_create();
+    AstTranslationUnit *unit = parse(arena,
+        "#pragma org(0xE000 + 48)\n"
+        "unsigned int main(void) { return 40 + 3 - 1; }");
+    static const char startup[] =
+        "\t; pasm file - assemble with pasm!\n"
+        "\t; Compiled with lcc2\n"
+        ".ORG\t57392\n\n"
+        "\tLP\t0\n\tLIDP\tSREG\n\tLII\t11\n\tEXWD\n"
+        "\tCALL\tmain\n"
+        "\tLP\t0\n\tLIDP\tSREG\n\tLII\t11\n\tMVWD\n\tRTN\n"
+        "SREG:\t.DW 0, 0, 0, 0, 0, 0\n\n";
+
+    assert(codegen_program(ctx, unit) == 0);
+    assert(strncmp(codegen_output(ctx), startup, strlen(startup)) == 0);
+    assert(strstr(codegen_output(ctx), "main:\t; Procedure\n") != NULL);
+    assert(codegen_stack_depth(ctx) == 0);
+    codegen_context_destroy(ctx);
+    ast_arena_destroy(arena);
+
+    arena = ast_arena_create();
+    ctx = codegen_context_create();
+    unit = parse(arena, "#pragma nosave\nvoid main(void) {}");
+    assert(codegen_program(ctx, unit) == 0);
+    assert(strstr(codegen_output(ctx), ".ORG\t57392\n") != NULL);
+    assert(strstr(codegen_output(ctx), "\tCALL\tmain\n\tRTN\n") != NULL);
+    assert(strstr(codegen_output(ctx), "SREG") == NULL);
+    codegen_context_destroy(ctx);
+    ast_arena_destroy(arena);
+}
+
+static void test_invalid_programs(void)
+{
+    static const char *sources[] = {
+        "",
+        "int main(void);",
+        "int helper(void) { return 1; }",
+        "int main(int arg) { return 1; }",
+        "int main(void) { return 1; } int main(void) { return 2; }",
+        "void SREG(void) {} void main(void) {}",
+        "void sreg(void) {} void main(void) {}",
+        "void Main(void) {} void main(void) {}",
+        "#pragma org(65536)\nvoid main(void) {}",
+        "#pragma org(1 - 2)\nvoid main(void) {}",
+        "#pragma org(1 * 2)\nvoid main(void) {}",
+        "#pragma pc(57392)\nvoid main(void) {}",
+        "int value; void main(void) {}"
+    };
+    size_t index;
+    for (index = 0; index < sizeof(sources) / sizeof(sources[0]); ++index) {
+        AstArena *arena = ast_arena_create();
+        CodegenContext *ctx = codegen_context_create();
+        AstTranslationUnit *unit = parse(arena, sources[index]);
+        assert(codegen_program(ctx, unit) != 0);
+        assert(codegen_output(ctx)[0] == '\0');
+        assert(codegen_error(ctx)[0] != '\0');
+        codegen_context_destroy(ctx);
+        ast_arena_destroy(arena);
+    }
+}
+
 int main(void)
 {
     test_word_return_addition();
@@ -172,5 +237,7 @@ int main(void)
     test_byte_arithmetic_sequences();
     test_word_subtraction_sequence();
     test_unsupported_unit_is_not_partially_emitted();
+    test_complete_program();
+    test_invalid_programs();
     return 0;
 }

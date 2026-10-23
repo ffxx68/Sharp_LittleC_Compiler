@@ -31,6 +31,7 @@ int codegen_load_constant(CodegenContext *ctx, size_t width,
                           unsigned long value);
 
 int codegen_translation_unit(CodegenContext *ctx, AstTranslationUnit *tu);
+int codegen_program(CodegenContext *ctx, AstTranslationUnit *tu);
 
 #ifdef __cplusplus
 }

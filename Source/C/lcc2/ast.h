@@ -168,6 +168,9 @@ typedef struct AstDeclList {
 struct AstTranslationUnit {
     AstNode node;
     AstDeclList declarations;
+    AstExpr *origin;
+    unsigned char has_pc_pragma;
+    unsigned char no_save;
 };
 
 struct AstDecl {
