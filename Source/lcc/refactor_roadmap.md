@@ -1150,7 +1150,34 @@ word index 128 (byte offset 256), and expression indices; outputs were
 `FF 00 EF BE FF 00 00 00`. Both verify stack balance (R=86), register
 restoration, BASIC program retention, and a responsive BASIC caller.
 
-#### Task 5.3.4.9: Pointer operations
+#### Task 5.3.4.9: Compact array initialization (code-size follow-up)
+
+Prioritize this follow-up before the backend completion gate in Task
+5.3.4.13; do not defer it to Phase 6. Task 5.3.4.8 remains functionally
+complete, but its per-element initialization stores are too costly for
+larger arrays on the PC-1403. The 3721-byte for `pc1403_arrays_wide.c` declares
+526 bytes of globals and currently spends roughly 3.1 KiB in startup,
+mostly zero initialization.
+
+- Replace repeated zero stores for sufficiently large contiguous regions
+  with compact fill loops or a shared routine. Keep short initializations
+  inline when that produces smaller output; determine the crossover from
+  assembled byte counts rather than assuming a loop is always cheaper.
+- Preserve C zero initialization, explicit initializer values, and zero-filled
+  tails of partial brace lists. Cover register/XRAM globals and initialized
+  local arrays where applicable, without zeroing uninitialized local arrays.
+- Preserve startup-before-main ordering, page-crossing behavior, stack
+  balance, and the register save/restore contract. Keep storage/layout
+  decisions outside the instruction emitter.
+- Record before/after PASM sizes for both array fixtures and require a
+  substantial reduction for `pc1403_arrays_wide.c`, with size-regression
+  checks and repeated PC-1403 runtime verification of unchanged results.
+
+This is an initialization-emission improvement, separate from the legacy
+peephole port in Task 5.3.6 and the AST optimizations in Phase 6; those passes
+alone should not be expected to eliminate the repeated startup stores.
+
+#### Task 5.3.4.10: Pointer operations
 
 Port address-of, pointer loads/stores, dereference, and pointer assignment
 using explicit pointee type, width, and storage information from the resolver.
@@ -1158,7 +1185,7 @@ Cover register and XRAM addresses, byte and word pointees, and pointers passed
 as parameters. Keep function pointers and unsupported pointer arithmetic
 explicitly rejected.
 
-#### Task 5.3.4.10: Aggregate layout and member access
+#### Task 5.3.4.11: Aggregate layout and member access
 
 Extend the symbol table/layout work in Task 5.3.5 to compute aggregate member
 offsets and sizes. Port member reads and writes using those compiler-computed
@@ -1166,14 +1193,14 @@ offsets; keep type checking and layout outside the instruction emitter. Cover
 the supported structure member forms, including `.` and `->` where applicable,
 and explicitly reject unsupported aggregate forms.
 
-#### Task 5.3.4.11: Remaining arithmetic and standard-C extensions
+#### Task 5.3.4.12: Remaining arithmetic and standard-C extensions
 
 Port remaining arithmetic/library operations and floating-point support as
 their AST constructs become supported. Implement signed operations and
 standard-C switch semantics separately from legacy unsigned/switch behavior.
 Track and deduplicate required runtime libraries in the context.
 
-#### Task 5.3.4.12: Operation-parity checklist and completion gates
+#### Task 5.3.4.13: Operation-parity checklist and completion gates
 
 Maintain a checklist against the Task 5.1.4 fixture inventory, recording
 ported and deferred operations explicitly. Compare equivalent output with
