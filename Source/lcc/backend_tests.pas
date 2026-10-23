@@ -4,7 +4,7 @@ program BackendTests;
   {$MODE Delphi}
 {$ENDIF}
 
-uses Backend, SysUtils;
+uses Backend, CodeGen, Classes, Output, SysUtils;
 
 var
   TestCount: integer;
@@ -53,6 +53,22 @@ begin
     WriteLn(StdErr, 'FAIL: ', TestName, ' (missing ', QuotedStr(Substring), ')');
     Halt(1);
   end;
+end;
+
+function CountOccurrences(const Value, Substring: string): integer;
+var
+  p, StartAt: integer;
+begin
+  Result := 0;
+  StartAt := 1;
+  repeat
+    p := Pos(Substring, Copy(Value, StartAt, MaxInt));
+    if p > 0 then
+    begin
+      Inc(Result);
+      Inc(StartAt, p + Length(Substring) - 1);
+    end;
+  until p = 0;
 end;
 
 procedure TestDoubleEXAB;
@@ -126,7 +142,7 @@ end;
 
 procedure TestPipelinePreservesUnrelatedText;
 var
-  Assembly, Libraries, Optimized: string;
+  Assembly, Libraries, Optimized, LibraryRoutine: string;
   LineCount: integer;
 begin
   Assembly := 'START:' + #13#10 + '; keep assembly comment' + #13#10 +
@@ -145,13 +161,124 @@ begin
     '; keep library comment');
   AssertEqual('pipeline reports non-empty output line count',
     IntToStr(LineCount), '7');
+
+  LibraryRoutine := 'LIB_PATTERN:'#13#10 + #9 + 'LIB'#9'1'#13#10 +
+    #9 + 'LP'#9'3'#13#10 + #9 + 'ADM'#13#10 + #9 + 'EXAB';
+  Optimized := OptimizeAssembly(#9 + 'CALL'#9'main'#13#10,
+    LibraryRoutine, LineCount);
+  AssertContains('runtime library text is not optimizer-rewritten', Optimized,
+    LibraryRoutine);
+end;
+
+procedure TestRuntimeLibraries(const FixturePath: string);
+const
+  RuntimeLibraries: array[0..15] of string =
+    ('divmod8', 'sr8', 'sl8', 'xor8', 'mul8', 'mul16', 'div16', 'xor16',
+     'sr16', 'sl16', 'cpe16', 'cpne16', 'cps16', 'cpg16', 'cpse16', 'cpge16');
+  ComparisonLibraries: array[0..5] of string =
+    ('cpe16', 'cpne16', 'cps16', 'cpg16', 'cpse16', 'cpge16');
+var
+  i: integer;
+  ErrorMessage: string;
+  Fixture: TStringList;
+  Libraries: string;
+begin
+  ResetRuntimeLibraries;
+  ResolveRuntimeLibraries;
+  AssertEqual('no-library program has no runtime code', GetLibText, '');
+
+  asmtext := #9 + 'CALL' + #9 + 'LIB_UNTRACKED';
+  ErrorMessage := '';
+  try
+    ResolveRuntimeLibraries;
+  except
+    on E: Exception do
+      ErrorMessage := E.Message;
+  end;
+  AssertContains('untracked runtime call is rejected', ErrorMessage,
+    'has no included routine definition');
+  asmtext := '';
+
+  ResetRuntimeLibraries;
+  outfile := True;
+  optype := otWord;
+  pushcnt := 4;
+  CompEqual;
+  CompEqual;
+  ResolveRuntimeLibraries;
+  AssertEqual('repeated codegen helper calls remain in generated code',
+    IntToStr(CountOccurrences(asmtext, 'CALL'#9'LIB_CPE16')), '2');
+  AssertEqual('codegen deduplicates repeated helper definitions',
+    IntToStr(CountOccurrences(GetLibText, 'LIB_CPE16:')), '1');
+  asmtext := '';
+
+  ResetRuntimeLibraries;
+  RequireRuntimeLibrary('cpe16');
+  ResolveRuntimeLibraries;
+  Libraries := GetLibText;
+  AssertContains('single runtime dependency is embedded', Libraries,
+    'LIB_CPE16:');
+  AssertEqual('embedded library has no unresolved include',
+    IntToStr(CountOccurrences(Libraries, '.include')), '0');
+
+  RequireRuntimeLibrary('cpe16');
+  ResolveRuntimeLibraries;
+  Libraries := GetLibText;
+  AssertEqual('repeated runtime dependency is embedded once',
+    IntToStr(CountOccurrences(Libraries, 'LIB_CPE16:')), '1');
+
+  ResetRuntimeLibraries;
+  for i := Low(RuntimeLibraries) to High(RuntimeLibraries) do
+    RequireRuntimeLibrary(RuntimeLibraries[i]);
+  ResolveRuntimeLibraries;
+  Libraries := GetLibText;
+  for i := Low(ComparisonLibraries) to High(ComparisonLibraries) do
+    AssertEqual('comparison helper embedded once: ' + ComparisonLibraries[i],
+      IntToStr(CountOccurrences(Libraries,
+        'LIB_' + UpperCase(ComparisonLibraries[i]) + ':')), '1');
+  AssertContains('byte division helper embedded', Libraries, 'LIB_DIV8:');
+  AssertContains('byte modulo helper embedded', Libraries, 'LIB_MOD8:');
+  AssertContains('word XOR dependency embedded', Libraries, 'LIB_XOR8:');
+
+  Fixture := TStringList.Create;
+  try
+    Fixture.Add('.ORG 40000');
+    Fixture.Add(#9 + 'CALL' + #9 + 'main');
+    Fixture.Add('main:');
+    Fixture.Add(#9 + 'CALL' + #9 + 'LIB_CPE16');
+    Fixture.Add(#9 + 'RTN');
+    Fixture.Add('');
+    Fixture.Text := Fixture.Text + Libraries;
+    Fixture.SaveToFile(FixturePath);
+  finally
+    Fixture.Free;
+  end;
+
+  ResetRuntimeLibraries;
+  RequireRuntimeLibrary('missing_runtime_test');
+  ErrorMessage := '';
+  try
+    ResolveRuntimeLibraries;
+  except
+    on E: Exception do
+      ErrorMessage := E.Message;
+  end;
+  AssertContains('unresolved runtime dependency reports an error',
+    ErrorMessage, 'could not be resolved');
+  ResetRuntimeLibraries;
 end;
 
 begin
+  if ParamCount <> 1 then
+  begin
+    WriteLn(StdErr, 'Expected path for PASM runtime-library fixture');
+    Halt(2);
+  end;
   TestDoubleEXAB;
   TestLIAtoLIB;
   TestRedundantPUSHPOP;
   TestIncDec;
   TestPipelinePreservesUnrelatedText;
-  WriteLn('PASS: ', TestCount, ' backend optimizer checks.');
+  TestRuntimeLibraries(ParamStr(1));
+  WriteLn('PASS: ', TestCount, ' backend and runtime-library checks.');
 end.

@@ -18,9 +18,9 @@ explicit `CodegenContext`.
 | `pushcnt` | Number of bytes currently reserved/occupied on the evaluation/call stack; helpers increment/decrement it as they emit stack operations. Local accesses calculate offsets using its current value. | Keep byte-accurate stack depth in the context. Every emitted push/pop or bulk allocation/restoration updates it exactly once; diagnose underflow or imbalance at function boundaries. |
 | `optype` | Selects byte, word, or float behavior for `Push`, `Pop*`, comparisons, and unary operations. | Pass value type/width explicitly to each operation; do not share mutable process-global type state. |
 | `LCount` | Monotonic counter used by `NewLabel`, producing `LB0`, `LB1`, etc. | Keep a translation-unit label counter in the context; labels must be unique and deterministically allocated in emission order. |
-| `libins`, `libname`, `libcnt` | Tracks library routines used and emits one `.include name.lib` per selected routine. | Track library use per output unit, deduplicate includes, and emit the include block after normal assembly as the Pascal output does. |
+| `libins`, `libname`, `libcnt` | Tracks and deduplicates required runtime routines. | Track library use per output unit and append resolved routine definitions after optimized generated assembly. |
 | `Output.asmtext`, `asmcnt` / `asmlist`, `outfile` | `writLn` appends to the main assembly buffer when `outfile` is true; otherwise it stores a line in `asmlist`. | Provide explicit output destinations/buffers. Preserve main assembly, separately buffered data, and their final ordering. |
-| `Output.libtext` | Accumulates library directives/data independently. | Keep libraries separate from code/data until final serialization. |
+| `Output.libtext` | Accumulates library directives/data independently. | Keep resolved runtime definitions separate from code/data until final serialization. |
 
 `EmitPush` / `EmitPop` and many `Pop*`, comparison, and storage helpers
 manipulate `pushcnt` internally. The C API must either preserve that ownership
@@ -44,11 +44,17 @@ single operation twice.
 
 ## Runtime-library contract
 
-`addlib(id)` appends `; LIB Code` on first use and emits each `.include`
-exactly once. These are the mappings declared in `CodeGen.pas`; only routines
-actually called by the selected operations should be included.
+`addlib(id)` records each required routine once. Before output is written,
+`ResolveRuntimeLibraries` searches the working directory and executable
+directory and their parents for each mapped `.lib`, verifies that it defines
+the expected `LIB_*` label, and appends its source to the separate library
+buffer. Missing or malformed helpers raise an explicit error rather than
+leaving an external call in generated output. Runtime source is appended after
+optimization so optimizer rewrites cannot alter library calling conventions.
+These are the mappings declared in `CodeGen.pas`; only routines actually
+called by the selected operations should be included.
 
-| Library id | Include | Selected operation use |
+| Library id | Runtime source | Selected operation use |
 |---|---|---|
 | `MUL8` | `mul8.lib` | Byte multiplication |
 | `DIVMOD8` | `divmod8.lib` | Byte division and modulo |

@@ -2187,6 +2187,7 @@ var i: integer;
     f2: textfile;
 begin
         md := MODESTR;
+        ResetRuntimeLibraries;
 
         { Emit program intro and startup sequence }
         EmitProgramStartup(org, not nosave);
@@ -2268,6 +2269,7 @@ begin
                 for i := 0 to asmcnt - 1 do
                         writln( asmlist[i]);
 
+        ResolveRuntimeLibraries;
         s := OptimizeAssembly(asmtext, GetLibText, i);
         assignfile(f2, filen);
         rewrite(f2);

@@ -258,11 +258,14 @@ var
   i: integer;
 begin
   Result := OptimizeInitialIncDec(Assembly);
-  Result := Result + CRLF + Libraries + CRLF;
   Result := OptimizeLIAtoLIB(Result);
   Result := OptimizeRedundantPUSHPOP(Result);
   Result := OptimizeDoubleEXAB(Result);
   Result := OptimizeIncDec(Result);
+  if Libraries <> '' then
+    Result := Result + CRLF + Libraries + CRLF
+  else
+    Result := Result + CRLF + CRLF;
 
   Lines := TStringList.Create;
   try

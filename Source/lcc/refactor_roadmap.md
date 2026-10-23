@@ -1056,6 +1056,18 @@ currently supported compiler subset, especially comparison helpers.
 This subtask supplies helper definitions; it does not restructure all output
 channels or declare Task 5.3.4.7 complete.
 
+Implemented runtime dependency tracking with per-compilation deduplication.
+The compiler resolves each requested `.lib` from the working/executable
+directory ancestry, verifies its expected routine label, and embeds its source
+after optimized generated code; missing or malformed helpers fail before the
+output file is rewritten. Backend tests cover no-library output, individual
+and repeated dependencies, unresolved helpers, and all six word-comparison
+routines. The comparison helper fixture assembles with PASM, and an end-to-end
+word-comparison program also assembled successfully. PC-1403 runtime
+comparison validation was not performed. `mod16.lib` is not present, so a
+word-modulo request now fails explicitly rather than emitting an unresolved
+call.
+
 ##### Task 5.3.4.7.3: Ordered output sections and end-to-end program integration
 
 Integrate startup, global initialization, generated functions, data

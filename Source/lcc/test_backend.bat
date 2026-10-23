@@ -17,7 +17,11 @@ if errorlevel 1 exit /b 1
 set "RESULT=%ERRORLEVEL%"
 if not "%RESULT%"=="0" goto :FAILED
 
-"%TEST_DIR%\backend_tests.exe"
+"%TEST_DIR%\backend_tests.exe" "%TEST_DIR%\runtime_helpers.asm"
+set "RESULT=%ERRORLEVEL%"
+if not "%RESULT%"=="0" goto :FAILED
+
+"..\..\pasm.exe" "%TEST_DIR%\runtime_helpers.asm" "%TEST_DIR%\runtime_helpers.bin"
 set "RESULT=%ERRORLEVEL%"
 if not "%RESULT%"=="0" goto :FAILED
 

@@ -37,6 +37,9 @@ procedure EmitProgramStartup(const org: string; saveRegisters: boolean);
 
 // Finalize current asm buffers and write to output file
 procedure FinalizeAndWrite(const filename: string);
+procedure ResetRuntimeLibraries;
+procedure RequireRuntimeLibrary(const libraryName: string);
+procedure ResolveRuntimeLibraries;
 
 
 // Label management
@@ -165,7 +168,6 @@ var
   pushcnt: integer;
   optype: OpTypes;
 
-
 const   { Math }
   MUL8 = 0;
   DIVMOD8 = 1;
@@ -196,6 +198,11 @@ const   { Math }
 
   {--------------------------------------------------------------}
 implementation
+
+uses Classes;
+
+var
+  RequiredLibraries: TStringList;
 
 {--------------------------------------------------------------}
 { Core Instruction Emission }
@@ -370,6 +377,226 @@ procedure FinalizeAndWrite(const filename: string);
 begin
   // write accumulated asm + libtext to disk
   SaveToFile(filename);
+end;
+
+procedure ResetRuntimeLibraries;
+var
+  i: integer;
+begin
+  for i := Low(libins) to High(libins) do
+    libins[i] := False;
+  libcnt := 0;
+  RequiredLibraries.Clear;
+  ClearLibText;
+end;
+
+procedure RequireRuntimeLibrary(const libraryName: string);
+var
+  i: integer;
+  ch: char;
+begin
+  if libraryName = '' then
+    raise Exception.Create('Runtime library name cannot be empty');
+  for i := 1 to Length(libraryName) do
+  begin
+    ch := libraryName[i];
+    if not (ch in ['a'..'z', 'A'..'Z', '0'..'9', '_', '-']) then
+      raise Exception.CreateFmt('Invalid runtime library name "%s"',
+        [libraryName]);
+  end;
+
+  for i := 0 to RequiredLibraries.Count - 1 do
+    if SameText(RequiredLibraries[i], libraryName) then
+      Exit;
+  RequiredLibraries.Add(libraryName);
+end;
+
+function FindRuntimeLibrary(const libraryName: string;
+  out searchedPaths: string): string;
+var
+  SearchDirs: TStringList;
+  Candidate: string;
+  i: integer;
+
+  procedure AddSearchDirectory(const directory: string);
+  var
+    j: integer;
+    normalized: string;
+  begin
+    if directory = '' then
+      Exit;
+    normalized := ExpandFileName(directory);
+    for j := 0 to SearchDirs.Count - 1 do
+      if SameText(SearchDirs[j], normalized) then
+        Exit;
+    SearchDirs.Add(normalized);
+  end;
+
+  procedure AddDirectoryAndParents(const directory: string);
+  var
+    currentDir, parent: string;
+  begin
+    currentDir := ExpandFileName(directory);
+    while currentDir <> '' do
+    begin
+      AddSearchDirectory(currentDir);
+      parent := ExpandFileName(IncludeTrailingPathDelimiter(currentDir) + '..');
+      if SameText(parent, currentDir) then
+        Break;
+      currentDir := parent;
+    end;
+  end;
+
+begin
+  Result := '';
+  searchedPaths := '';
+  SearchDirs := TStringList.Create;
+  try
+    AddDirectoryAndParents(GetCurrentDir);
+    AddDirectoryAndParents(ExtractFilePath(ParamStr(0)));
+    for i := 0 to SearchDirs.Count - 1 do
+    begin
+      Candidate := IncludeTrailingPathDelimiter(SearchDirs[i]) +
+        libraryName + '.lib';
+      if searchedPaths <> '' then
+        searchedPaths := searchedPaths + '; ';
+      searchedPaths := searchedPaths + Candidate;
+      if FileExists(Candidate) then
+      begin
+        Result := Candidate;
+        Exit;
+      end;
+    end;
+  finally
+    SearchDirs.Free;
+  end;
+end;
+
+function HasRuntimeLabel(const source, labelName: string): boolean;
+var
+  SourceLines: TStringList;
+  i: integer;
+  line: string;
+begin
+  Result := False;
+  SourceLines := TStringList.Create;
+  try
+    SourceLines.Text := source;
+    for i := 0 to SourceLines.Count - 1 do
+    begin
+      line := Trim(SourceLines[i]);
+      if SameText(Copy(line, 1, Length(labelName)), labelName) then
+      begin
+        if Length(line) = Length(labelName) then
+        begin
+          Result := True;
+          Exit;
+        end;
+        if line[Length(labelName) + 1] in [#9, ' ', ';'] then
+        begin
+          Result := True;
+          Exit;
+        end;
+      end;
+    end;
+  finally
+    SourceLines.Free;
+  end;
+end;
+
+procedure ResolveRuntimeLibraries;
+var
+  i: integer;
+  hasExpectedLabel: boolean;
+  fileName, searchedPaths, contents, expectedLabel: string;
+  Lines: TStringList;
+
+  procedure ValidateRuntimeCalls(const source: string);
+  var
+    CallLines: TStringList;
+    line, target, upperLine: string;
+    lineIndex, targetEnd, commentStart: integer;
+  begin
+    CallLines := TStringList.Create;
+    try
+      CallLines.Text := source;
+      for lineIndex := 0 to CallLines.Count - 1 do
+      begin
+        line := Trim(CallLines[lineIndex]);
+        upperLine := UpperCase(line);
+        if (Copy(upperLine, 1, 4) <> 'CALL') or (Length(line) < 5) or
+          not (line[5] in [#9, ' ']) then
+          Continue;
+
+        target := Trim(Copy(line, 6, Length(line)));
+        commentStart := Pos(';', target);
+        if commentStart > 0 then
+          Delete(target, commentStart, Length(target));
+        targetEnd := 1;
+        while (targetEnd <= Length(target)) and
+          not (target[targetEnd] in [#9, ' ']) do
+          Inc(targetEnd);
+        target := Copy(target, 1, targetEnd - 1);
+        if Copy(UpperCase(target), 1, 4) = 'LIB_' then
+          if not HasRuntimeLabel(GetLibText, UpperCase(target) + ':') then
+            raise Exception.CreateFmt(
+              'Runtime call to %s has no included routine definition', [target]);
+      end;
+    finally
+      CallLines.Free;
+    end;
+  end;
+
+begin
+  ClearLibText;
+  if RequiredLibraries.Count > 0 then
+  begin
+    AddLibText('; Runtime library routines'#13#10);
+    Lines := TStringList.Create;
+    try
+      for i := 0 to RequiredLibraries.Count - 1 do
+      begin
+        fileName := FindRuntimeLibrary(RequiredLibraries[i], searchedPaths);
+        if fileName = '' then
+          raise Exception.CreateFmt(
+            'Required runtime library "%s.lib" could not be resolved. Searched: %s',
+            [RequiredLibraries[i], searchedPaths]);
+
+        Lines.Clear;
+        Lines.LoadFromFile(fileName);
+        contents := Lines.Text;
+        if SameText(RequiredLibraries[i], 'divmod8') then
+        begin
+          expectedLabel := 'LIB_DIV8: and LIB_MOD8:';
+          hasExpectedLabel :=
+            HasRuntimeLabel(contents, 'LIB_DIV8:') and
+            HasRuntimeLabel(contents, 'LIB_MOD8:');
+        end
+        else
+        begin
+          expectedLabel := 'LIB_' + UpperCase(RequiredLibraries[i]) + ':';
+          hasExpectedLabel := HasRuntimeLabel(contents, expectedLabel);
+        end;
+        if not hasExpectedLabel then
+        begin
+          raise Exception.CreateFmt(
+            'Runtime library "%s" does not define expected label(s) %s',
+            [fileName, expectedLabel]);
+        end;
+
+        AddLibText('; ' + RequiredLibraries[i] + '.lib'#13#10);
+        AddLibText(contents);
+        if (contents <> '') and (contents[Length(contents)] <> #10) then
+          AddLibText(#13#10);
+        AddLibText(#13#10);
+      end;
+    finally
+      Lines.Free;
+    end;
+  end;
+
+  ValidateRuntimeCalls(asmtext);
+  ValidateRuntimeCalls(GetLibText);
 end;
 
 
@@ -1035,14 +1262,15 @@ end;
 
 procedure addlib(lib: integer);
 begin
-  if libcnt = 0 then
-    AddLibText('; LIB Code'#13#10);
-  Inc(libcnt);
-
-  if (libins[lib] = False) then
+  if (lib < Low(libins)) or (lib > High(libins)) then
+    raise Exception.CreateFmt('Unknown runtime library id %d', [lib]);
+  if libname[lib] = '' then
+    raise Exception.CreateFmt('Unknown runtime library id %d', [lib]);
+  if not libins[lib] then
   begin
     libins[lib] := True;
-    AddLibText('.include ' + libname[lib] + '.lib'#13#10);
+    Inc(libcnt);
+    RequireRuntimeLibrary(libname[lib]);
   end;
 end;
 
@@ -2334,10 +2562,9 @@ end;
 
 
 begin
-  for libcnt := 0 to 100 do
-    libins[libcnt] := False;
+  RequiredLibraries := TStringList.Create;
+  ResetRuntimeLibraries;
   asmcnt := 0;
-  libcnt := 0;
 
   libname[MUL8] := 'mul8';
   libname[DIVMOD8] := 'divmod8';
