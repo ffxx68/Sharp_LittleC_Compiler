@@ -16,6 +16,18 @@ typedef struct ScalarLocation {
     unsigned char is_unsigned;
 } ScalarLocation;
 
+typedef struct ResolvedAddress {
+    const AstType *pointee_type;
+    ScalarLocation location;
+    size_t pointer_width;
+} ResolvedAddress;
+
+typedef struct ResolvedDereference {
+    const AstType *pointee_type;
+    size_t width;
+    unsigned char is_unsigned;
+} ResolvedDereference;
+
 typedef struct ScalarSymbol {
     const AstVarDecl *declaration;
     const AstParamDecl *parameter;
@@ -39,6 +51,12 @@ const ScalarSymbol *symtab_identifier(const ScalarSymbols *table,
 int symtab_index_location(const ScalarSymbols *table,
                           const AstIndexExpr *expression,
                           ScalarLocation *location);
+int symtab_address_info(const ScalarSymbols *table,
+                        const AstAddressExpr *expression,
+                        ResolvedAddress *address);
+int symtab_dereference_info(const ScalarSymbols *table,
+                            const AstDereferenceExpr *expression,
+                            ResolvedDereference *dereference);
 const ScalarSymbol *symtab_declaration(const ScalarSymbols *table,
                                        const AstVarDecl *declaration);
 const ScalarSymbol *symtab_parameter(const ScalarSymbols *table,

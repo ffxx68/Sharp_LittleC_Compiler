@@ -78,6 +78,24 @@ static void test_rejections(void)
         "int main(void) { int __at(8) x; return x; }",
         "int main(void) { float x; return 0; }",
         "int main(void) { return 65536; }",
+        "unsigned char __at(8) value; int main(void) { &1; return 0; }",
+        "unsigned char __at(8) value; int main(void) { int local; &local; return 0; }",
+        "unsigned char __at(8) values[2]; int main(void) { &values; return 0; }",
+        "unsigned char __at(8) values[2]; int main(void) { unsigned int i = 0; &values[i]; return 0; }",
+        "unsigned char __at(8) value; int main(void) { (&value) + 1; return 0; }",
+        "unsigned char __at(8) value; int main(void) { return &value; }",
+        "unsigned char __at(8) value; int main(void) { if (&value) return 1; return 0; }",
+        "int f(void) { return 0; } int main(void) { &f; return 0; }",
+        "unsigned char __at(8) value; int main(void) { int *p; p = &value; return 0; }",
+        "unsigned char __at(8) value; int main(void) { signed char *p; p = &value; return 0; }",
+        "unsigned char __at(8) value; int main(void) { unsigned char *p; p = 1; return 0; }",
+        "unsigned char __at(8) value; unsigned char __at(10) *p = &value;"
+            " int main(void) { return 0; }",
+        "unsigned char __at(8) value; int take(int n) { return n; }"
+            " int main(void) { return take(&value); }",
+        "unsigned char __at(8) value; int take(unsigned char *p) { return 0; }"
+            " int main(void) { return take(&value[0]); }",
+        "unsigned char __at(8) value; unsigned char *take(void) { return &value; }",
         "void main(void) { return 1; }",
         "int main(void) { return; }",
         "int main(void) {}",
@@ -99,6 +117,150 @@ static void test_rejections(void)
         symtab_destroy(table);
         ast_arena_destroy(arena);
     }
+}
+
+static void test_address_resolution(void)
+{
+    AstArena *arena = ast_arena_create();
+    ScalarSymbols *table = symtab_create();
+    AstTranslationUnit *unit = parse(arena,
+        "unsigned char __at(8) byte_value;"
+        "unsigned int __at(10) word_value;"
+        "unsigned char __at(12) byte_array[3];"
+        "__xram __at(0xE600) unsigned char xram_byte;"
+        "__xram __at(0xE602) unsigned int xram_word;"
+        "__xram __at(0xE604) unsigned int word_array[2];"
+        "void main(void) { &byte_value; &word_value; &xram_byte; &xram_word;"
+        " &byte_array[2]; &word_array[1]; }");
+    AstFunctionDecl *function = (AstFunctionDecl *)unit->declarations.items[6];
+    AstAddressExpr *byte_address = (AstAddressExpr *)
+        ((AstExprStmt *)function->body->items[0].as.statement)->expression;
+    AstAddressExpr *word_address = (AstAddressExpr *)
+        ((AstExprStmt *)function->body->items[1].as.statement)->expression;
+    AstAddressExpr *xram_byte_address = (AstAddressExpr *)
+        ((AstExprStmt *)function->body->items[2].as.statement)->expression;
+    AstAddressExpr *xram_word_address = (AstAddressExpr *)
+        ((AstExprStmt *)function->body->items[3].as.statement)->expression;
+    AstAddressExpr *byte_element_address = (AstAddressExpr *)
+        ((AstExprStmt *)function->body->items[4].as.statement)->expression;
+    AstAddressExpr *word_element_address = (AstAddressExpr *)
+        ((AstExprStmt *)function->body->items[5].as.statement)->expression;
+    ResolvedAddress resolved;
+
+    assert(symtab_resolve(table, unit) == 0);
+    assert(symtab_address_info(table, byte_address, &resolved) == 0);
+    assert(resolved.pointee_type->as.base.base == AST_TYPE_CHAR);
+    assert(resolved.pointer_width == 2);
+    assert(resolved.location.storage == SCALAR_REGISTER);
+    assert(resolved.location.address == 8 && resolved.location.width == 1);
+    assert(symtab_address_info(table, word_address, &resolved) == 0);
+    assert(resolved.pointee_type->as.base.base == AST_TYPE_INT);
+    assert(resolved.pointer_width == 2);
+    assert(resolved.location.storage == SCALAR_REGISTER);
+    assert(resolved.location.address == 10 && resolved.location.width == 2);
+    assert(symtab_address_info(table, xram_byte_address, &resolved) == 0);
+    assert(resolved.pointee_type->as.base.base == AST_TYPE_CHAR);
+    assert(resolved.location.storage == SCALAR_XRAM);
+    assert(resolved.location.address == 0xE600 && resolved.location.width == 1);
+    assert(symtab_address_info(table, xram_word_address, &resolved) == 0);
+    assert(resolved.pointee_type->as.base.base == AST_TYPE_INT);
+    assert(resolved.location.storage == SCALAR_XRAM);
+    assert(resolved.location.address == 0xE602 && resolved.location.width == 2);
+    assert(symtab_address_info(table, byte_element_address, &resolved) == 0);
+    assert(resolved.pointee_type->as.base.base == AST_TYPE_CHAR);
+    assert(resolved.location.storage == SCALAR_REGISTER);
+    assert(resolved.location.address == 14 && resolved.location.width == 1);
+    assert(symtab_address_info(table, word_element_address, &resolved) == 0);
+    assert(resolved.pointee_type->as.base.base == AST_TYPE_INT);
+    assert(resolved.location.storage == SCALAR_XRAM);
+    assert(resolved.location.address == 0xE606 && resolved.location.width == 2);
+    symtab_destroy(table);
+    ast_arena_destroy(arena);
+}
+
+static void test_pointer_values_and_parameters(void)
+{
+    AstArena *arena = ast_arena_create();
+    ScalarSymbols *table = symtab_create();
+    AstTranslationUnit *unit = parse(arena,
+        "unsigned char __at(8) byte_value;"
+        "unsigned int __at(10) word_value;"
+        "__xram __at(0xE610) unsigned char xram_value;"
+        "unsigned char __at(12) *stored_pointer;"
+        "__xram __at(0xE5FF) unsigned char *remote_pointer;"
+        "unsigned int use_pointer(unsigned char *input, unsigned int *output) {"
+        " unsigned char *copy = input; copy = input; return 0; }"
+        "unsigned int relay(unsigned char *input) {"
+        " return use_pointer(&xram_value, &word_value); }"
+        "unsigned int main(void) {"
+        " unsigned char *first = &byte_value; unsigned char *second;"
+        " second = first; stored_pointer = second; remote_pointer = stored_pointer;"
+        " relay(remote_pointer); use_pointer(0, &word_value); return 0; }");
+    AstFunctionDecl *function = (AstFunctionDecl *)unit->declarations.items[5];
+    AstVarDecl *copy = (AstVarDecl *)function->body->items[0].as.declaration;
+    const ScalarSymbol *input;
+    const ScalarSymbol *output;
+
+    assert(symtab_resolve(table, unit) == 0);
+    input = symtab_parameter(table, function->parameters[0]);
+    output = symtab_parameter(table, function->parameters[1]);
+    assert(input != NULL && input->location.width == 2);
+    assert(output != NULL && output->location.width == 2);
+    assert(input->location.address == 5 && output->location.address == 3);
+    assert(symtab_declaration(table, copy)->location.width == 2);
+    assert(symtab_declaration(table, copy)->location.storage == SCALAR_LOCAL);
+    assert(symtab_declaration(table,
+        (AstVarDecl *)unit->declarations.items[3])->location.address == 12);
+    assert(symtab_declaration(table,
+        (AstVarDecl *)unit->declarations.items[4])->location.address == 0xE5FF);
+    assert(symtab_declaration(table,
+        (AstVarDecl *)unit->declarations.items[4])->location.width == 2);
+    symtab_destroy(table);
+    ast_arena_destroy(arena);
+}
+
+static void test_dereference_resolution(void)
+{
+    AstArena *arena = ast_arena_create();
+    ScalarSymbols *table = symtab_create();
+    AstTranslationUnit *unit = parse(arena,
+        "unsigned char __at(8) byte_value;"
+        "__xram __at(0xE5FF) unsigned int word_value;"
+        "unsigned int read(unsigned char *byte_pointer,"
+        " unsigned int *word_pointer) {"
+        " *byte_pointer = 1; return *word_pointer; }"
+        "void main(void) { unsigned char *p = &byte_value;"
+        " *p; *(&word_value); }");
+    AstFunctionDecl *read_function =
+        (AstFunctionDecl *)unit->declarations.items[2];
+    AstBinaryExpr *assignment = (AstBinaryExpr *)
+        ((AstExprStmt *)read_function->body->items[0].as.statement)->expression;
+    AstDereferenceExpr *byte_dereference = (AstDereferenceExpr *)assignment->left;
+    AstReturnStmt *return_statement =
+        (AstReturnStmt *)read_function->body->items[1].as.statement;
+    AstDereferenceExpr *word_dereference =
+        (AstDereferenceExpr *)return_statement->expression;
+    AstFunctionDecl *main_function =
+        (AstFunctionDecl *)unit->declarations.items[3];
+    AstDereferenceExpr *local_dereference = (AstDereferenceExpr *)
+        ((AstExprStmt *)main_function->body->items[1].as.statement)->expression;
+    AstDereferenceExpr *xram_dereference = (AstDereferenceExpr *)
+        ((AstExprStmt *)main_function->body->items[2].as.statement)->expression;
+    ResolvedDereference resolved;
+
+    assert(symtab_resolve(table, unit) == 0);
+    assert(symtab_dereference_info(table, byte_dereference, &resolved) == 0);
+    assert(resolved.width == 1 && resolved.is_unsigned);
+    assert(resolved.pointee_type->as.base.base == AST_TYPE_CHAR);
+    assert(symtab_dereference_info(table, word_dereference, &resolved) == 0);
+    assert(resolved.width == 2 && resolved.is_unsigned);
+    assert(resolved.pointee_type->as.base.base == AST_TYPE_INT);
+    assert(symtab_dereference_info(table, local_dereference, &resolved) == 0);
+    assert(resolved.width == 1 && resolved.is_unsigned);
+    assert(symtab_dereference_info(table, xram_dereference, &resolved) == 0);
+    assert(resolved.width == 2 && resolved.is_unsigned);
+    symtab_destroy(table);
+    ast_arena_destroy(arena);
 }
 
 static void test_parameter_layout_and_calls(void)
@@ -332,6 +494,9 @@ int main(void)
 {
     test_scopes_and_layout();
     test_rejections();
+    test_address_resolution();
+    test_pointer_values_and_parameters();
+    test_dereference_resolution();
     test_global_initializers();
     test_storage_namespaces();
     test_frame_limit();

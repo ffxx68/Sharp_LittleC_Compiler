@@ -800,6 +800,123 @@ static int emit_dynamic_array_access(CodegenContext *ctx,
     return ctx->error[0] == '\0' ? 0 : -1;
 }
 
+static void emit_pointer_dispatch_test(CodegenContext *ctx,
+                                       const char *internal_label)
+{
+    emit_inst(ctx, "EXAB");
+    emit_inst_op(ctx, "TSIA", "255");
+    emit_inst_op(ctx, "JPZ", internal_label);
+    emit_inst(ctx, "EXAB");
+}
+
+static void emit_pointer_register_setup(CodegenContext *ctx, int store)
+{
+    emit_number(ctx, "LP", store ? 6 : 4);
+    emit_inst(ctx, "EXAM");
+    emit_inst(ctx, "EXAB");
+    emit_number(ctx, "LP", store ? 7 : 5);
+    emit_inst(ctx, "EXAM");
+    emit_inst(ctx, "EXAB");
+}
+
+static int emit_dynamic_dereference(CodegenContext *ctx,
+                                    const AstDereferenceExpr *dereference,
+                                    const AstExpr *value,
+                                    int store)
+{
+    ResolvedDereference resolved;
+    char *internal_label;
+    char *done_label;
+    size_t branch_stack_depth = 0;
+
+    if (symtab_dereference_info(ctx->symbols, dereference, &resolved) != 0) {
+        return set_error(ctx, "unresolved pointer dereference reached code generation");
+    }
+    internal_label = new_label(ctx);
+    done_label = new_label(ctx);
+    if (internal_label == NULL || done_label == NULL) {
+        free(internal_label);
+        free(done_label);
+        return -1;
+    }
+    if (store && (emit_expression(ctx, value) != 0 ||
+                  codegen_emit_push(ctx, 2) != 0)) {
+        free(internal_label);
+        free(done_label);
+        return -1;
+    }
+    if (emit_expression(ctx, dereference->operand) != 0) {
+        free(internal_label);
+        free(done_label);
+        return -1;
+    }
+    if (store) {
+        branch_stack_depth = ctx->stack_depth;
+    }
+    emit_pointer_dispatch_test(ctx, internal_label);
+
+    emit_pointer_register_setup(ctx, store);
+    emit_inst(ctx, store ? "DY" : "DX");
+    if (store) {
+        if (codegen_emit_pop(ctx, 2) != 0) {
+            free(internal_label);
+            free(done_label);
+            return -1;
+        }
+        emit_inst(ctx, "IYS");
+        if (resolved.width == 2) {
+            emit_inst(ctx, "EXAB");
+            emit_inst(ctx, "IYS");
+            emit_inst(ctx, "EXAB");
+        }
+    } else {
+        emit_inst(ctx, "IXL");
+        if (resolved.width == 2) {
+            emit_inst(ctx, "EXAB");
+            emit_inst(ctx, "IXL");
+            emit_inst(ctx, "EXAB");
+        }
+    }
+    emit_inst_op(ctx, "JP", done_label);
+
+    emit_label(ctx, internal_label);
+    emit_inst(ctx, "EXAB");
+    emit_inst(ctx, "STP");
+    if (store) {
+        /* Re-account the RHS for the mutually exclusive internal-RAM branch. */
+        ctx->stack_depth = branch_stack_depth;
+        if (codegen_emit_pop(ctx, 2) != 0) {
+            free(internal_label);
+            free(done_label);
+            return -1;
+        }
+        emit_inst(ctx, "EXAM");
+        emit_inst(ctx, "LDM");
+        if (resolved.width == 2) {
+            emit_inst(ctx, "EXAB");
+            emit_inst(ctx, "INCP");
+            emit_inst(ctx, "EXAM");
+            emit_inst(ctx, "LDM");
+            emit_inst(ctx, "EXAB");
+        }
+    } else {
+        emit_inst(ctx, "LDM");
+        if (resolved.width == 2) {
+            emit_inst(ctx, "EXAB");
+            emit_inst(ctx, "INCP");
+            emit_inst(ctx, "LDM");
+            emit_inst(ctx, "EXAB");
+        }
+    }
+    emit_label(ctx, done_label);
+    free(internal_label);
+    free(done_label);
+    if (resolved.width == 1) {
+        promote_byte(ctx, resolved.is_unsigned);
+    }
+    return ctx->error[0] == '\0' ? 0 : -1;
+}
+
 static int emit_branch_false(CodegenContext *ctx, const AstExpr *expression,
                              const char *label)
 {
@@ -869,6 +986,19 @@ static int emit_expression(CodegenContext *ctx, const AstExpr *expression)
             promote_byte(ctx, symbol->location.is_unsigned);
         }
         return ctx->error[0] == '\0' ? 0 : -1;
+    }
+    if (expression->node.kind == AST_NODE_ADDRESS_EXPR) {
+        const AstAddressExpr *address = (const AstAddressExpr *)expression;
+        ResolvedAddress resolved;
+        if (symtab_address_info(ctx->symbols, address, &resolved) != 0) {
+            return set_error(ctx, "unresolved object address reached code generation");
+        }
+        return codegen_load_constant(ctx, resolved.pointer_width,
+                                     (unsigned long)resolved.location.address);
+    }
+    if (expression->node.kind == AST_NODE_DEREFERENCE_EXPR) {
+        return emit_dynamic_dereference(ctx,
+            (const AstDereferenceExpr *)expression, NULL, 0);
     }
     if (expression->node.kind == AST_NODE_INDEX_EXPR) {
         const AstIndexExpr *index = (const AstIndexExpr *)expression;
@@ -949,6 +1079,11 @@ static int emit_expression(CodegenContext *ctx, const AstExpr *expression)
         if (binary->op == AST_BINARY_ASSIGN) {
             ScalarLocation location;
             const ScalarSymbol *symbol = NULL;
+            if (binary->left->node.kind == AST_NODE_DEREFERENCE_EXPR) {
+                return emit_dynamic_dereference(ctx,
+                    (const AstDereferenceExpr *)binary->left,
+                    binary->right, 1);
+            }
             if (binary->left->node.kind == AST_NODE_INDEX_EXPR) {
                 const AstIndexExpr *index = (const AstIndexExpr *)binary->left;
                 if (symtab_index_location(ctx->symbols, index, &location) != 0) {

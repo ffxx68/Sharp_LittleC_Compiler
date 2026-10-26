@@ -10,11 +10,25 @@ typedef struct Binding {
     size_t symbol;
 } Binding;
 
+typedef struct AddressBinding {
+    const AstAddressExpr *expression;
+    ResolvedAddress address;
+} AddressBinding;
+
+typedef struct DereferenceBinding {
+    const AstDereferenceExpr *expression;
+    ResolvedDereference dereference;
+} DereferenceBinding;
+
 struct ScalarSymbols {
     ScalarSymbol *symbols;
     size_t count;
     Binding *bindings;
     size_t binding_count;
+    AddressBinding *addresses;
+    size_t address_count;
+    DereferenceBinding *dereferences;
+    size_t dereference_count;
     const AstFunctionDecl *function;
     size_t scope;
     size_t local_bytes;
@@ -51,6 +65,8 @@ void symtab_destroy(ScalarSymbols *table)
     if (table != NULL) {
         free(table->symbols);
         free(table->bindings);
+        free(table->addresses);
+        free(table->dereferences);
         free(table);
     }
 }
@@ -62,8 +78,20 @@ const char *symtab_error(const ScalarSymbols *table)
 
 size_t symtab_type_width(const AstType *type)
 {
-    if (type == NULL || type->kind != AST_TYPE_BASE ||
-        (type->qualifiers & ~AST_QUALIFIER_CONST) != 0) {
+    if (type == NULL || (type->qualifiers & ~AST_QUALIFIER_CONST) != 0) {
+        return 0;
+    }
+
+    if (type->kind == AST_TYPE_POINTER) {
+        const AstType *target = type->as.pointer.target;
+        return target != NULL && target->kind == AST_TYPE_BASE &&
+               (target->as.base.base == AST_TYPE_CHAR ||
+                target->as.base.base == AST_TYPE_INT) &&
+               (target->qualifiers &
+                ~(AST_QUALIFIER_CONST | AST_QUALIFIER_VOLATILE)) == 0
+            ? 2 : 0;
+    }
+    if (type->kind != AST_TYPE_BASE) {
         return 0;
     }
     return type->as.base.base == AST_TYPE_CHAR ? 1 :
@@ -220,7 +248,8 @@ static int add_variable(ScalarSymbols *table, const AstVarDecl *variable)
     symbol.active = 1;
     symbol.location.is_unsigned = symbol.is_array
         ? variable->type->as.array.element->as.base.is_unsigned
-        : variable->type->as.base.is_unsigned;
+        : variable->type->kind == AST_TYPE_BASE
+            ? variable->type->as.base.is_unsigned : 1;
     if (table->function != NULL) {
         if (variable->attributes.has_address || variable->attributes.is_xram) {
             return fail(table, "local storage attributes are not supported yet", variable->name);
@@ -241,6 +270,14 @@ static int add_variable(ScalarSymbols *table, const AstVarDecl *variable)
              symtab_initializer_constant(variable->initializer->as.expression,
                                          &initial_value) != 0)) {
             return fail(table, "global initializer must be a scalar constant expression",
+                        variable->name);
+        }
+        if (!symbol.is_array && variable->type->kind == AST_TYPE_POINTER &&
+            variable->initializer != NULL &&
+            (symtab_initializer_constant(variable->initializer->as.expression,
+                                         &initial_value) != 0 ||
+             initial_value != 0)) {
+            return fail(table, "global pointer initializer must be a null pointer constant",
                         variable->name);
         }
         if (symbol.is_array && variable->initializer != NULL) {
@@ -310,7 +347,8 @@ static int add_parameter(ScalarSymbols *table, const AstParamDecl *parameter)
     symbol.active = 1;
     symbol.location.storage = SCALAR_LOCAL;
     symbol.location.width = width;
-    symbol.location.is_unsigned = parameter->type->as.base.is_unsigned;
+    symbol.location.is_unsigned = parameter->type->kind == AST_TYPE_BASE
+        ? parameter->type->as.base.is_unsigned : 1;
     table->parameter_bytes += width;
     grown = (ScalarSymbol *)realloc(table->symbols,
         (table->count + 1) * sizeof(*grown));
@@ -381,6 +419,123 @@ static int bind_identifier(ScalarSymbols *table, const AstExpr *expression,
     return fail(table, "undeclared scalar", name);
 }
 
+static int bind_address(ScalarSymbols *table,
+                        const AstAddressExpr *expression,
+                        const AstType *pointee_type,
+                        ScalarLocation location)
+{
+    AddressBinding *grown;
+    ResolvedAddress address;
+
+    if (pointee_type == NULL || pointee_type->kind != AST_TYPE_BASE ||
+        location.storage == SCALAR_LOCAL ||
+        (location.storage != SCALAR_REGISTER &&
+         location.storage != SCALAR_XRAM) ||
+        symtab_type_width(pointee_type) == 0 ||
+        location.width != symtab_type_width(pointee_type)) {
+        return fail(table, "address-of requires a byte or word register/XRAM object",
+                    NULL);
+    }
+    if (location.storage == SCALAR_XRAM && location.address < 256) {
+        return fail(table,
+                    "XRAM pointers require addresses at or above 256 to distinguish them from register addresses",
+                    NULL);
+    }
+    address.pointee_type = pointee_type;
+    address.location = location;
+    address.pointer_width = 2;
+    grown = realloc(table->addresses,
+                    (table->address_count + 1) * sizeof(*grown));
+    if (grown == NULL) {
+        return fail(table, "out of memory resolving object address", NULL);
+    }
+    table->addresses = grown;
+    grown[table->address_count].expression = expression;
+    grown[table->address_count++].address = address;
+    return 0;
+}
+
+static int bind_dereference(ScalarSymbols *table,
+                            const AstDereferenceExpr *expression,
+                            const AstType *pointee_type)
+{
+    DereferenceBinding *grown;
+    ResolvedDereference dereference;
+
+    dereference.width = symtab_type_width(pointee_type);
+    if (pointee_type == NULL || pointee_type->kind != AST_TYPE_BASE ||
+        dereference.width == 0) {
+        return fail(table, "dereference requires a pointer to byte or word", NULL);
+    }
+    dereference.pointee_type = pointee_type;
+    dereference.is_unsigned = pointee_type->as.base.is_unsigned;
+    grown = realloc(table->dereferences,
+                    (table->dereference_count + 1) * sizeof(*grown));
+    if (grown == NULL) {
+        return fail(table, "out of memory resolving pointer dereference", NULL);
+    }
+    table->dereferences = grown;
+    grown[table->dereference_count].expression = expression;
+    grown[table->dereference_count++].dereference = dereference;
+    return 0;
+}
+
+static const AstType *expression_pointer_pointee(const ScalarSymbols *table,
+                                                 const AstExpr *expression)
+{
+    if (expression == NULL) {
+        return NULL;
+    }
+    if (expression->node.kind == AST_NODE_ADDRESS_EXPR) {
+        ResolvedAddress address;
+        return symtab_address_info(table, (const AstAddressExpr *)expression,
+                                   &address) == 0
+            ? address.pointee_type : NULL;
+    }
+    if (expression->node.kind == AST_NODE_IDENT_EXPR) {
+        const ScalarSymbol *symbol = symtab_identifier(table, expression);
+        const AstType *type = symbol == NULL ? NULL :
+            symbol->declaration != NULL ? symbol->declaration->type :
+            symbol->parameter->type;
+        return type != NULL && type->kind == AST_TYPE_POINTER
+            ? type->as.pointer.target : NULL;
+    }
+    return NULL;
+}
+
+static int expression_is_pointer(const ScalarSymbols *table,
+                                 const AstExpr *expression)
+{
+    return expression_pointer_pointee(table, expression) != NULL;
+}
+
+static int compatible_pointee_type(const AstType *left, const AstType *right)
+{
+    return left != NULL && right != NULL &&
+           left->kind == AST_TYPE_BASE && right->kind == AST_TYPE_BASE &&
+           left->as.base.base == right->as.base.base &&
+           left->as.base.is_unsigned == right->as.base.is_unsigned &&
+           left->qualifiers == right->qualifiers;
+}
+
+static int compatible_pointer_value(const ScalarSymbols *table,
+                                    const AstType *target_type,
+                                    const AstExpr *value)
+{
+    const AstType *pointee = expression_pointer_pointee(table, value);
+    return target_type != NULL && target_type->kind == AST_TYPE_POINTER &&
+           compatible_pointee_type(target_type->as.pointer.target, pointee);
+}
+
+static int is_null_pointer_constant(const AstExpr *expression)
+{
+    unsigned long value;
+    return symtab_initializer_constant(expression, &value) == 0 && value == 0;
+}
+
+static const AstType *expression_pointer_pointee(const ScalarSymbols *table,
+                                                 const AstExpr *expression);
+
 static int resolve_expression(ScalarSymbols *table, const AstExpr *expression)
 {
     if (expression == NULL) {
@@ -404,6 +559,76 @@ static int resolve_expression(ScalarSymbols *table, const AstExpr *expression)
         }
         return table->symbols[symbol_index].is_array
             ? fail(table, "array value requires an index", name) : 0;
+    }
+    if (expression->node.kind == AST_NODE_ADDRESS_EXPR) {
+        const AstAddressExpr *address = (const AstAddressExpr *)expression;
+        const AstType *pointee_type;
+        ScalarLocation location;
+        size_t symbol_index;
+        if (address->operand == NULL) {
+            return fail(table, "address-of requires a supported lvalue", NULL);
+        }
+        if (address->operand->node.kind == AST_NODE_IDENT_EXPR) {
+            const AstIdentExpr *identifier =
+                (const AstIdentExpr *)address->operand;
+            const ScalarSymbol *symbol;
+            if (symtab_function(table, identifier->name) != NULL) {
+                return fail(table, "function pointers are not supported",
+                            identifier->name);
+            }
+            if (bind_identifier(table, address->operand, identifier->name,
+                                &symbol_index) != 0) {
+                return -1;
+            }
+            symbol = &table->symbols[symbol_index];
+            if (symbol->is_array) {
+                return fail(table, "whole-array addresses are not supported",
+                            identifier->name);
+            }
+            pointee_type = symbol->declaration != NULL
+                ? symbol->declaration->type : symbol->parameter->type;
+            location = symbol->location;
+        } else if (address->operand->node.kind == AST_NODE_INDEX_EXPR) {
+            const AstIndexExpr *index =
+                (const AstIndexExpr *)address->operand;
+            const AstIdentExpr *identifier;
+            const ScalarSymbol *symbol;
+            if (index->array == NULL ||
+                index->array->node.kind != AST_NODE_IDENT_EXPR) {
+                return fail(table, "address-of array element requires a declared array",
+                            NULL);
+            }
+            identifier = (const AstIdentExpr *)index->array;
+            if (bind_identifier(table, index->array, identifier->name,
+                                &symbol_index) != 0) {
+                return -1;
+            }
+            symbol = &table->symbols[symbol_index];
+            if (!symbol->is_array ||
+                symtab_index_location(table, index, &location) != 0) {
+                return fail(table,
+                            "address-of array element requires an in-bounds constant index",
+                            identifier->name);
+            }
+            pointee_type = symbol->declaration->type->as.array.element;
+        } else {
+            return fail(table, "address-of requires a supported scalar lvalue", NULL);
+        }
+        return bind_address(table, address, pointee_type, location);
+    }
+    if (expression->node.kind == AST_NODE_DEREFERENCE_EXPR) {
+        const AstDereferenceExpr *dereference =
+            (const AstDereferenceExpr *)expression;
+        const AstType *pointee_type;
+        if (dereference->operand == NULL ||
+            resolve_expression(table, dereference->operand) != 0) {
+            return fail(table, "dereference requires a resolved pointer value", NULL);
+        }
+        pointee_type = expression_pointer_pointee(table, dereference->operand);
+        if (pointee_type == NULL) {
+            return fail(table, "dereference requires a pointer to byte or word", NULL);
+        }
+        return bind_dereference(table, dereference, pointee_type);
     }
     if (expression->node.kind == AST_NODE_INDEX_EXPR) {
         const AstIndexExpr *index = (const AstIndexExpr *)expression;
@@ -430,7 +655,8 @@ static int resolve_expression(ScalarSymbols *table, const AstExpr *expression)
             return 0;
         }
         if (expression_contains_void_call(table, index->index) ||
-            resolve_expression(table, index->index) != 0) {
+            resolve_expression(table, index->index) != 0 ||
+            expression_is_pointer(table, index->index)) {
             return fail(table, "array index requires an integer value", array->name);
         }
         return 0;
@@ -454,10 +680,22 @@ static int resolve_expression(ScalarSymbols *table, const AstExpr *expression)
                         function->name);
         }
         for (index = 0; index < call->arguments.count; ++index) {
-            if (symtab_type_width(function->parameters[index]->type) == 0 ||
-                expression_contains_void_call(table, call->arguments.items[index]) ||
-                resolve_expression(table, call->arguments.items[index]) != 0) {
+            const AstType *parameter_type = function->parameters[index]->type;
+            const AstExpr *argument = call->arguments.items[index];
+            if (symtab_type_width(parameter_type) == 0 ||
+                expression_contains_void_call(table, argument) ||
+                resolve_expression(table, argument) != 0) {
                 return fail(table, "unsupported function argument", function->name);
+            }
+            if (parameter_type->kind == AST_TYPE_POINTER) {
+                if (!compatible_pointer_value(table, parameter_type, argument) &&
+                    !is_null_pointer_constant(argument)) {
+                    return fail(table, "function argument has incompatible pointer type",
+                                function->name);
+                }
+            } else if (expression_is_pointer(table, argument)) {
+                return fail(table, "pointer argument requires a pointer parameter",
+                            function->name);
             }
         }
         return 0;
@@ -482,6 +720,55 @@ static int resolve_expression(ScalarSymbols *table, const AstExpr *expression)
             resolve_expression(table, binary->right) != 0) {
             return -1;
         }
+        if (binary->op == AST_BINARY_ASSIGN) {
+            const ScalarSymbol *symbol = NULL;
+            const AstType *target_type = NULL;
+            int modifiable;
+
+            if (binary->left->node.kind == AST_NODE_IDENT_EXPR) {
+                symbol = symtab_identifier(table, binary->left);
+            } else if (binary->left->node.kind == AST_NODE_INDEX_EXPR) {
+                symbol = symtab_identifier(table,
+                    ((const AstIndexExpr *)binary->left)->array);
+            }
+            if (symbol != NULL) {
+                target_type = symbol->is_array
+                    ? symbol->declaration->type->as.array.element
+                    : symbol->declaration != NULL
+                        ? symbol->declaration->type : symbol->parameter->type;
+            } else if (binary->left->node.kind == AST_NODE_DEREFERENCE_EXPR) {
+                ResolvedDereference resolved;
+                if (symtab_dereference_info(table,
+                        (const AstDereferenceExpr *)binary->left,
+                        &resolved) == 0) {
+                    target_type = resolved.pointee_type;
+                }
+            }
+            modifiable = target_type != NULL &&
+                (target_type->qualifiers & AST_QUALIFIER_CONST) == 0 &&
+                (binary->left->node.kind == AST_NODE_IDENT_EXPR ||
+                 binary->left->node.kind == AST_NODE_INDEX_EXPR ||
+                 binary->left->node.kind == AST_NODE_DEREFERENCE_EXPR);
+
+            if (!modifiable) {
+                return fail(table, "assignment requires a modifiable scalar lvalue", NULL);
+            }
+            if (target_type->kind == AST_TYPE_POINTER) {
+                if (binary->left->node.kind != AST_NODE_IDENT_EXPR ||
+                    (!compatible_pointer_value(table, target_type, binary->right) &&
+                     !is_null_pointer_constant(binary->right))) {
+                    return fail(table, "assignment has incompatible pointer type", NULL);
+                }
+            } else if (expression_is_pointer(table, binary->right)) {
+                return fail(table, "pointer value cannot be assigned to a scalar", NULL);
+            }
+            return 0;
+        }
+        if (expression_is_pointer(table, binary->left) ||
+            expression_is_pointer(table, binary->right)) {
+            return fail(table, "pointer arithmetic and other pointer operators are not supported",
+                        NULL);
+        }
         if ((binary->op == AST_BINARY_LESS ||
              binary->op == AST_BINARY_LESS_EQUAL ||
              binary->op == AST_BINARY_GREATER ||
@@ -492,22 +779,6 @@ static int resolve_expression(ScalarSymbols *table, const AstExpr *expression)
               expression_nonnegative(table, binary->right))) {
             return fail(table, "signed relational comparison is not supported", NULL);
         }
-        if (binary->op == AST_BINARY_ASSIGN) {
-            const ScalarSymbol *symbol = binary->left->node.kind == AST_NODE_INDEX_EXPR
-                ? symtab_identifier(table,
-                    ((const AstIndexExpr *)binary->left)->array)
-                : symtab_identifier(table, binary->left);
-            const AstType *target_type = symbol == NULL ? NULL :
-                symbol->is_array ? symbol->declaration->type->as.array.element :
-                symbol->declaration != NULL ? symbol->declaration->type :
-                symbol->parameter->type;
-            if (symbol == NULL || target_type == NULL ||
-                (target_type->qualifiers & AST_QUALIFIER_CONST) != 0 ||
-                (binary->left->node.kind != AST_NODE_IDENT_EXPR &&
-                 binary->left->node.kind != AST_NODE_INDEX_EXPR)) {
-                return fail(table, "assignment requires a modifiable scalar lvalue", NULL);
-            }
-        }
         return 0;
     }
     return fail(table, "unsupported scalar expression", NULL);
@@ -516,6 +787,12 @@ static int resolve_expression(ScalarSymbols *table, const AstExpr *expression)
 static int expression_unsigned_word(const ScalarSymbols *table,
                                     const AstExpr *expression)
 {
+    if (expression->node.kind == AST_NODE_DEREFERENCE_EXPR) {
+        ResolvedDereference dereference;
+        return symtab_dereference_info(table,
+            (const AstDereferenceExpr *)expression, &dereference) == 0 &&
+            dereference.width == 2 && dereference.is_unsigned;
+    }
     if (expression->node.kind == AST_NODE_IDENT_EXPR ||
         expression->node.kind == AST_NODE_INDEX_EXPR) {
         const AstExpr *identifier = expression->node.kind == AST_NODE_INDEX_EXPR
@@ -557,6 +834,12 @@ static int expression_nonnegative(const ScalarSymbols *table,
         const ScalarSymbol *symbol = symtab_identifier(table, identifier);
         return symbol != NULL && symbol->location.is_unsigned;
     }
+    if (expression->node.kind == AST_NODE_DEREFERENCE_EXPR) {
+        ResolvedDereference dereference;
+        return symtab_dereference_info(table,
+            (const AstDereferenceExpr *)expression, &dereference) == 0 &&
+            dereference.is_unsigned;
+    }
     if (expression->node.kind == AST_NODE_BINARY_EXPR) {
         const AstBinaryExpr *binary = (const AstBinaryExpr *)expression;
         if (binary->op == AST_BINARY_ASSIGN) {
@@ -597,7 +880,8 @@ static int resolve_local_declaration(ScalarSymbols *table,
                 const AstInitializer *item = variable->initializer->as.list.items[index];
                 if (item->kind != AST_INITIALIZER_EXPR ||
                     expression_contains_void_call(table, item->as.expression) ||
-                    resolve_expression(table, item->as.expression) != 0) {
+                    resolve_expression(table, item->as.expression) != 0 ||
+                    expression_is_pointer(table, item->as.expression)) {
                     return fail(table, "unsupported array initializer", variable->name);
                 }
             }
@@ -607,6 +891,17 @@ static int resolve_local_declaration(ScalarSymbols *table,
                    resolve_expression(table,
                        variable->initializer->as.expression) != 0) {
             return fail(table, "unsupported scalar initializer", variable->name);
+        } else if (variable->type->kind == AST_TYPE_POINTER) {
+            const AstExpr *value = variable->initializer->as.expression;
+            if (!compatible_pointer_value(table, variable->type, value) &&
+                !is_null_pointer_constant(value)) {
+                return fail(table, "initializer has incompatible pointer type",
+                            variable->name);
+            }
+        } else if (expression_is_pointer(table,
+                       variable->initializer->as.expression)) {
+            return fail(table, "pointer value cannot initialize a scalar",
+                        variable->name);
         }
     }
     return 0;
@@ -661,8 +956,13 @@ static int resolve_statement(ScalarSymbols *table, const AstStmt *statement)
         if (expression_contains_void_call(table, conditional->condition)) {
             return fail(table, "void function call used as a value", NULL);
         }
-        if (resolve_expression(table, conditional->condition) != 0 ||
-            resolve_statement(table, conditional->then_branch) != 0) {
+        if (resolve_expression(table, conditional->condition) != 0) {
+            return -1;
+        }
+        if (expression_is_pointer(table, conditional->condition)) {
+            return fail(table, "pointer value is not a supported condition", NULL);
+        }
+        if (resolve_statement(table, conditional->then_branch) != 0) {
             return -1;
         }
         then_returns = table->returned;
@@ -687,6 +987,9 @@ static int resolve_statement(ScalarSymbols *table, const AstStmt *statement)
         if (resolve_expression(table, loop->condition) != 0) {
             return -1;
         }
+        if (expression_is_pointer(table, loop->condition)) {
+            return fail(table, "pointer value is not a supported condition", NULL);
+        }
         ++table->loop_depth;
         if (resolve_statement(table, loop->body) != 0) {
             --table->loop_depth;
@@ -709,7 +1012,13 @@ static int resolve_statement(ScalarSymbols *table, const AstStmt *statement)
         if (expression_contains_void_call(table, loop->condition)) {
             return fail(table, "void function call used as a value", NULL);
         }
-        return resolve_expression(table, loop->condition);
+        if (resolve_expression(table, loop->condition) != 0) {
+            return -1;
+        }
+        if (expression_is_pointer(table, loop->condition)) {
+            return fail(table, "pointer value is not a supported condition", NULL);
+        }
+        return 0;
     }
     case AST_NODE_FOR_STMT: {
         const AstForStmt *loop = (const AstForStmt *)statement;
@@ -735,6 +1044,10 @@ static int resolve_statement(ScalarSymbols *table, const AstStmt *statement)
             resolve_expression(table, loop->condition) != 0) {
             --table->scope;
             return -1;
+        }
+        if (expression_is_pointer(table, loop->condition)) {
+            --table->scope;
+            return fail(table, "pointer value is not a supported condition", NULL);
         }
         ++table->loop_depth;
         if (resolve_statement(table, loop->body) != 0) {
@@ -775,8 +1088,14 @@ static int resolve_statement(ScalarSymbols *table, const AstStmt *statement)
         if (value != NULL && expression_contains_void_call(table, value)) {
             return fail(table, "void function call used as a value", NULL);
         }
+        if (value != NULL && resolve_expression(table, value) != 0) {
+            return -1;
+        }
+        if (expression_is_pointer(table, value)) {
+            return fail(table, "pointer return values are not supported yet", NULL);
+        }
         table->returned = 1;
-        return value == NULL ? 0 : resolve_expression(table, value);
+        return 0;
     }
     default:
         return fail(table, "unsupported scalar statement", NULL);
@@ -785,8 +1104,14 @@ static int resolve_statement(ScalarSymbols *table, const AstStmt *statement)
 
 static int compatible_type(const AstType *left, const AstType *right)
 {
-    return left != NULL && right != NULL &&
-           left->kind == AST_TYPE_BASE && right->kind == AST_TYPE_BASE &&
+    if (left == NULL || right == NULL || left->kind != right->kind) {
+        return 0;
+    }
+    if (left->kind == AST_TYPE_POINTER) {
+        return compatible_pointee_type(left->as.pointer.target,
+                                       right->as.pointer.target);
+    }
+    return left->kind == AST_TYPE_BASE &&
            left->as.base.base == right->as.base.base &&
            left->as.base.is_unsigned == right->as.base.is_unsigned;
 }
@@ -863,6 +1188,7 @@ int symtab_resolve(ScalarSymbols *table, AstTranslationUnit *unit)
         function = (const AstFunctionDecl *)declaration;
         if ((!function->is_prototype && function->body == NULL) ||
             function->storage != AST_STORAGE_NONE ||
+            function->return_type->kind == AST_TYPE_POINTER ||
             (symtab_type_width(function->return_type) == 0 &&
              (function->return_type->kind != AST_TYPE_BASE ||
               function->return_type->as.base.base != AST_TYPE_VOID))) {
@@ -967,6 +1293,42 @@ int symtab_index_location(const ScalarSymbols *table,
     *location = symbol->location;
     location->address += (int)offset;
     return 0;
+}
+
+int symtab_address_info(const ScalarSymbols *table,
+                        const AstAddressExpr *expression,
+                        ResolvedAddress *address)
+{
+    size_t index;
+
+    if (table == NULL || expression == NULL || address == NULL) {
+        return -1;
+    }
+    for (index = 0; index < table->address_count; ++index) {
+        if (table->addresses[index].expression == expression) {
+            *address = table->addresses[index].address;
+            return 0;
+        }
+    }
+    return -1;
+}
+
+int symtab_dereference_info(const ScalarSymbols *table,
+                            const AstDereferenceExpr *expression,
+                            ResolvedDereference *dereference)
+{
+    size_t index;
+
+    if (table == NULL || expression == NULL || dereference == NULL) {
+        return -1;
+    }
+    for (index = 0; index < table->dereference_count; ++index) {
+        if (table->dereferences[index].expression == expression) {
+            *dereference = table->dereferences[index].dereference;
+            return 0;
+        }
+    }
+    return -1;
 }
 
 const ScalarSymbol *symtab_declaration(const ScalarSymbols *table, const AstVarDecl *declaration)

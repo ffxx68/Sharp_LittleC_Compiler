@@ -1193,13 +1193,95 @@ This is an initialization-emission improvement, separate from the legacy
 peephole port in Task 5.3.6 and the AST optimizations in Phase 6; those passes
 alone should not be expected to eliminate the repeated startup stores.
 
-#### Task 5.3.4.10: Pointer operations
+#### Task 5.3.4.10 ✅: Pointer operations (umbrella)
 
-Port address-of, pointer loads/stores, dereference, and pointer assignment
-using explicit pointee type, width, and storage information from the resolver.
-Cover register and XRAM addresses, byte and word pointees, and pointers passed
-as parameters. Keep function pointers and unsupported pointer arithmetic
-explicitly rejected.
+This task is split because pointer support crosses three distinct contracts:
+resolver-produced pointee metadata and address formation, pointer values in
+storage and the call ABI, and indirect byte/word accesses. Keep type checking,
+address resolution, and storage classification outside the instruction
+emitter. The umbrella is complete only when all three subtasks and their
+combined end-to-end checks pass.
+
+##### Task 5.3.4.10.1 ✅: Pointer type resolution and address formation
+
+- Extend the resolver to describe supported pointer types, including explicit
+  pointee type, width, and address/storage information for register and XRAM
+  objects.
+- Form addresses for supported lvalues and reject invalid address-of operands
+  and unsupported pointee types before code generation.
+- Keep function pointers, pointer-to-pointer types, and other unsupported
+  pointer forms explicitly rejected.
+- Test resolver results and address formation independently for byte and word
+  objects in register and XRAM storage.
+
+Implemented resolver metadata for address-of byte/word scalar identifiers and
+constant-index elements of global arrays in register and XRAM storage,
+including the pointee type, object location, and 16-bit pointer width. The
+backend emits those resolved addresses as word constants. Local objects,
+whole-array addresses, dynamic array-element addresses, function pointers, and
+unsupported lvalues are rejected. This address-formation slice was initially
+tested as a discarded expression; pointer storage and call support are
+implemented separately in 5.3.4.10.2.
+Resolver and codegen tests cover both storage classes and pointee widths, plus
+invalid lvalues, local addresses, pointer arithmetic, and unsupported pointer
+returns.
+
+##### Task 5.3.4.10.2 ✅: Pointer values, assignment, and parameters
+
+- Support pointer variables and pointer assignment as address values, using
+  the target's pointer representation and explicit resolver results.
+- Pass pointer values as function parameters; preserve parameter layout,
+  caller cleanup, nested-call behavior, and stack balance.
+- Test pointer assignment/copying and pointer parameters independently of
+  dereferenced access, including diagnostics for incompatible assignments.
+
+Implemented 16-bit byte/word pointer variables in automatic locals and
+explicitly placed register/XRAM globals. Local pointer initialization,
+assignment, copying, and null-pointer constants use the regular scalar
+load/store and call paths; pointer parameters are passed by value and use
+two-byte frame offsets and caller cleanup. The resolver enforces matching
+pointee base type, signedness, and qualifiers, and rejects pointer-to-pointer
+types, pointer returns, pointer arithmetic, and scalar/pointer mismatches.
+Global pointer initializers are limited to null constants; address relocations
+and pointers to automatic locals remain unsupported.
+
+Resolver/codegen tests cover local and global pointer storage, register and
+XRAM pointer objects (including a word crossing an XRAM page boundary),
+initialization/copy/assignment, compatible and incompatible function
+arguments, null pointers, and zero stack depth. Pointer dereference remains
+the separate scope of Task 5.3.4.10.3.
+
+##### Task 5.3.4.10.3 ✅: Indirect pointee loads and stores
+
+- Implement dereference reads and writes for byte and word pointees in register
+  and XRAM storage. Preserve assignment-expression results and byte
+  promotion/conversion behavior.
+- Cover direct pointers and pointers received as parameters, including XRAM
+  page-boundary accesses, register restoration, and stack balance.
+- Reject unsupported pointer arithmetic explicitly rather than emitting
+  partial code. Validate assembled output and PC-1403 runtime results for the
+  supported combinations.
+
+Implemented resolver metadata and indirect byte/word loads and stores for
+register and XRAM pointers, including pointer parameters, assignment-expression
+results, and byte promotion. Dispatch uses a zero high byte for register RAM
+and nonzero high byte for XRAM; consequently, taking the address of an XRAM
+object below address 256 is rejected as ambiguous. Resolver/codegen tests cover
+both storage classes, parameter access, and a word crossing an XRAM page
+boundary. The 842-byte `tests/pc1403_pointers.c` fixture assembles through PASM
+and passed ten consecutive BASIC RUNs and machine-code returns in PC-1403 MAME using
+`tests/pc1403_pointers.lua`. Outputs were
+`0007 0007 BEEF 00A5 1234 FF80 D156 1234`, verifying indirect register/XRAM
+access, assignment conversion/results, signed-byte promotion, and the XRAM
+word crossing address `0xE5FF`. Each BASIC call verified stack balance (R=86
+at entry and before returning to BASIC) and restoration of the wrapper's
+twelve registers. After each RUN, the keyboard-entered BASIC command
+`POKE&E710,6*7` produced 42; the BASIC program and memory pointer remained
+unchanged. The harness reported calls=10, returns=10, and basic_checks=10.
+Runtime testing exposed and fixed X/Y selection for indirect XRAM stores
+and EXAM-clobbered assignment results for internal-RAM stores. The BASIC
+rerun required a device Reset key after the earlier CPU-state-injecting test;
+a machine soft reset alone did not restore a clean BASIC environment.
 
 #### Task 5.3.4.11: Aggregate layout and member access
 

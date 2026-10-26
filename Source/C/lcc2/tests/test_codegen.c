@@ -161,7 +161,7 @@ static void test_unsupported_unit_is_not_partially_emitted(void)
     assert(arena != NULL && ctx != NULL);
     unit = parse(arena,
         "int supported(void) { return 1; } "
-        "int unsupported(int *value) { return 1; }");
+        "int unsupported(int **value) { return 1; }");
     assert(codegen_translation_unit(ctx, unit) != 0);
     assert(codegen_output(ctx)[0] == '\0');
     assert(strstr(codegen_error(ctx), "unsupported function parameter type") != NULL);
@@ -316,7 +316,9 @@ static void test_invalid_programs(void)
         "#pragma org(1 - 2)\nvoid main(void) {}",
         "#pragma org(1 * 2)\nvoid main(void) {}",
         "#pragma pc(57392)\nvoid main(void) {}",
-        "int value; void main(void) {}"
+        "int value; void main(void) {}",
+        "__xram __at(32) unsigned char value;"
+        "void main(void) { &value; }"
     };
     size_t index;
     for (index = 0; index < sizeof(sources) / sizeof(sources[0]); ++index) {
@@ -674,6 +676,115 @@ static void test_program_sections(void)
     ast_arena_destroy(arena);
 }
 
+static void test_address_formation(void)
+{
+    AstArena *arena = ast_arena_create();
+    CodegenContext *ctx = codegen_context_create();
+    AstTranslationUnit *unit = parse(arena,
+        "unsigned char __at(8) byte_value;"
+        "unsigned char __at(9) byte_array[2];"
+        "__xram __at(0xE1FF) unsigned int word_value;"
+        "void main(void) { &byte_value; &byte_array[1]; &word_value; }");
+    const char *functions;
+
+    assert(codegen_program(ctx, unit) == 0);
+    functions = codegen_section_output(ctx, CODEGEN_FUNCTIONS);
+    assert(strstr(functions, "\tLIA\tLB(8)\t; Load word constant LB\n"
+                             "\tLIB\tHB(8)\t; Load word constant HB\n") != NULL);
+    assert(strstr(functions, "\tLIA\tLB(10)\t; Load word constant LB\n"
+                             "\tLIB\tHB(10)\t; Load word constant HB\n") != NULL);
+    assert(strstr(functions, "\tLIA\tLB(57855)\t; Load word constant LB\n"
+                             "\tLIB\tHB(57855)\t; Load word constant HB\n") != NULL);
+    assert(codegen_stack_depth(ctx) == 0);
+    codegen_context_destroy(ctx);
+    ast_arena_destroy(arena);
+}
+
+static void test_pointer_values_and_parameters(void)
+{
+    AstArena *arena = ast_arena_create();
+    CodegenContext *ctx = codegen_context_create();
+    AstTranslationUnit *unit = parse(arena,
+        "unsigned char __at(8) byte_value;"
+        "__xram __at(0xE610) unsigned char xram_byte;"
+        "__xram __at(0xE602) unsigned int xram_word;"
+        "unsigned char __at(10) *stored_pointer;"
+        "__xram __at(0xE5FF) unsigned char *remote_pointer;"
+        "unsigned int consume(unsigned char *first, unsigned char *second) {"
+        " unsigned char *copy = first; copy = second; return 1; }"
+        "unsigned int consume_word(unsigned int *value) { return 1; }"
+        "unsigned int relay(unsigned char *input) {"
+        " return consume(&xram_byte, &byte_value); }"
+        "unsigned int main(void) {"
+        " unsigned char *pointer = &byte_value;"
+        " pointer = pointer; stored_pointer = pointer;"
+        " remote_pointer = stored_pointer;"
+        " consume_word(&xram_word); return relay(remote_pointer); }");
+    const char *functions;
+
+    assert(codegen_program(ctx, unit) == 0);
+    functions = codegen_section_output(ctx, CODEGEN_FUNCTIONS);
+    assert(strstr(functions, "\tCALL\tconsume\t; Function call\n") != NULL);
+    assert(strstr(functions, "\tCALL\tconsume_word\t; Function call\n") != NULL);
+    assert(strstr(functions, "\tCALL\trelay\t; Function call\n") != NULL);
+    assert(strstr(functions, "\tLIA\tLB(8)\t; Load word constant LB\n"
+                             "\tLIB\tHB(8)\t; Load word constant HB\n") != NULL);
+    assert(strstr(functions, "\tLDR\n\tADIA\t") != NULL);
+    assert(strstr(functions, "\tLIA\tLB(58896)\t; Load word constant LB\n"
+                             "\tLIB\tHB(58896)\t; Load word constant HB\n") != NULL);
+    assert(strstr(functions, "\tLIA\tLB(58882)\t; Load word constant LB\n"
+                             "\tLIB\tHB(58882)\t; Load word constant HB\n") != NULL);
+    assert(strstr(codegen_section_output(ctx, CODEGEN_STARTUP),
+                  "\tLIDP\t58879\n\tSTD\n\tEXAB\n\tLIDP\t58880\n\tSTD\n") != NULL);
+    assert(codegen_stack_depth(ctx) == 0);
+    codegen_context_destroy(ctx);
+    ast_arena_destroy(arena);
+}
+
+static void test_indirect_pointer_access(void)
+{
+    AstArena *arena = ast_arena_create();
+    CodegenContext *ctx = codegen_context_create();
+    AstTranslationUnit *unit = parse(arena,
+        "unsigned char __at(8) register_byte;"
+        "unsigned int __at(10) register_word;"
+        "signed char __at(12) signed_register_byte;"
+        "__xram __at(0xE610) unsigned char xram_byte;"
+        "__xram __at(0xE5FF) unsigned int xram_word;"
+        "unsigned char modify_byte(unsigned char *pointer) {"
+        " *pointer = 255; return *pointer; }"
+        "unsigned int modify_word(unsigned int *pointer) {"
+        " *pointer = 4660; return *pointer; }"
+        "int read_signed(signed char *pointer) { return *pointer; }"
+        "unsigned int main(void) {"
+        " unsigned char *byte_pointer = &register_byte;"
+        " unsigned int *word_pointer = &xram_word;"
+        " register_byte = (*byte_pointer = 7);"
+        " register_word = modify_word(word_pointer) +"
+        " read_signed(&signed_register_byte);"
+        " return modify_byte(&xram_byte); }");
+    const char *functions;
+
+    assert(codegen_program(ctx, unit) == 0);
+    functions = codegen_section_output(ctx, CODEGEN_FUNCTIONS);
+    assert(strstr(functions, "\tTSIA\t255\n\tJPZ\tLB") != NULL);
+    assert(strstr(functions, "\tDX\n\tIXL\n\tEXAB\n\tIXL\n\tEXAB\n") != NULL);
+    assert(strstr(functions,
+        "\tDY\n\tPOP\n\tEXAB\n\tPOP\n\tIYS\n\tEXAB\n\tIYS\n") != NULL);
+    assert(strstr(functions,
+        "\tLP\t6\n\tEXAM\n\tEXAB\n\tLP\t7\n\tEXAM\n\tEXAB\n\tDY\n") != NULL);
+    assert(strstr(functions,
+        "\tSTP\n\tPOP\n\tEXAB\n\tPOP\n\tEXAM\n\tLDM\n"
+        "\tEXAB\n\tINCP\n\tEXAM\n\tLDM\n\tEXAB\n") != NULL);
+    assert(strstr(functions, "\tSTP\n\tLDM\n\tEXAB\n\tINCP\n\tLDM\n\tEXAB\n") != NULL);
+    assert(strstr(functions, "\tTSIA\t128\n\tJPZ\tLB") != NULL);
+    assert(strstr(functions, "\tCALL\tmodify_word\t; Function call\n") != NULL);
+    assert(strstr(functions, "\tCALL\tmodify_byte\t; Function call\n") != NULL);
+    assert(codegen_stack_depth(ctx) == 0);
+    codegen_context_destroy(ctx);
+    ast_arena_destroy(arena);
+}
+
 static void test_runtime_libraries(void)
 {
     static const char *operators[] = {"==", "!=", "<", "<=", ">", ">="};
@@ -750,6 +861,9 @@ int main(void)
     test_comparisons_and_control_flow();
     test_function_calls_parameters_and_frames();
     test_runtime_libraries();
+    test_address_formation();
+    test_pointer_values_and_parameters();
+    test_indirect_pointer_access();
     test_program_sections();
     return 0;
 }

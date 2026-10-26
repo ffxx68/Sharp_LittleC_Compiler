@@ -69,8 +69,19 @@ calls. Prototypes must match definitions; calls require a definition in the
 translation unit. The entry-point `main` remains parameterless. A `for` step
 executes after its body, and `continue` targets the step. Signed relational
 comparisons are rejected. Non-void functions require a return. Static/extern
-storage, pointers, aggregates, and statements after a
-return are not yet supported by the resolver. Array extents must be positive
+storage, aggregates, and statements after a return are not yet supported by
+the resolver. Byte/word pointers to globals or constant-
+index elements of global arrays in register or XRAM storage are 16-bit values;
+pointer locals and fixed-address global pointer objects support initialization,
+assignment, copying, null values, and by-value function parameters. Indirect
+byte/word loads and stores are supported for pointers to register and XRAM
+objects, including pointers received as parameters. The high byte distinguishes
+register addresses from XRAM addresses, so address-of on XRAM objects below 256
+is rejected. Global pointer initialization is limited to null constants.
+Addresses of automatic locals, whole arrays, dynamic array elements, and
+functions are unsupported, as are pointer-to-pointer types, pointer returns,
+and pointer arithmetic.
+Array extents must be positive
 constants (or inferred from a nonempty initializer); multidimensional arrays
 remain unsupported.
 
@@ -181,6 +192,34 @@ It overwrites CPU state, RAM at `&E000`, generated code, and test globals at
 function output. `codegen_translation_unit` leaves it separate; complete
 `codegen_program` appends it once in catalog order after generated functions.
 `codegen_require_runtime` reports an error for unknown routine names.
+
+## Pointer runtime test in MAME
+
+Compile and assemble `tests\pc1403_pointers.c`, then in a **disposable**
+bridge-enabled PC-1403 session running BASIC, load `pc1403_key.lua` and run:
+
+If a previous test injected CPU state directly, use the emulated device Reset
+key first to restore a clean BASIC environment; a machine soft reset may not
+be sufficient.
+
+```lua
+dofile([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\tests\pc1403_pointers.lua]])
+lcc2_pointer_test([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\build\pc1403_pointers.bin]])
+```
+
+If the debugger is stopped, resume execution with F5. Inspect
+`lcc2_pointer_result`: success requires `status="PASS"`, `calls=10`,
+`returns=10`, and `basic_checks=10`.
+The harness checks indirect byte/word register and XRAM accesses, pointer
+parameters, assignment-expression conversion/results, signed-byte promotion,
+and an XRAM word crossing `&E5FF`. The eight output words at `&E700` must be
+`0007 0007 BEEF 00A5 1234 FF80 D156 1234`. Every call checks stack balance
+and wrapper register restoration. The harness clears BASIC, reserves the ASM
+area, and enters a two-line BASIC caller through the keyboard. After each
+`RUN`, it executes `POKE&E710,6*7` and verifies the value 42, the unchanged
+BASIC program, and the BASIC memory pointer. It pauses on success or failure.
+Use only a disposable session: this clears the current BASIC program and
+overwrites reserved test RAM.
 
 ## Complete-program output and integration test
 
