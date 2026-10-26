@@ -48,6 +48,9 @@ static const struct {
 
 #define RUNTIME_COUNT (sizeof(runtime_routines) / sizeof(runtime_routines[0]))
 
+#define COMPACT_FILL_THRESHOLD 4
+#define COMPACT_FILL_CHUNK 255
+
 struct CodegenContext {
     char *output;
     size_t output_length;
@@ -60,6 +63,10 @@ struct CodegenContext {
     char *startup_output;
     char *function_output;
     char *data_output;
+    char *internal_fill_label;
+    char *internal_fill_loop;
+    char *xram_fill_label;
+    char *xram_fill_loop;
     ScalarSymbols *symbols;
     AstTranslationUnit *resolved_unit;
     char *return_label;
@@ -172,6 +179,10 @@ void codegen_context_destroy(CodegenContext *ctx)
         free(ctx->startup_output);
         free(ctx->function_output);
         free(ctx->data_output);
+        free(ctx->internal_fill_label);
+        free(ctx->internal_fill_loop);
+        free(ctx->xram_fill_label);
+        free(ctx->xram_fill_loop);
         free(ctx);
     }
 }
@@ -240,6 +251,12 @@ static int resolve_runtime(CodegenContext *ctx)
             length += strlen(runtime_routines[index].source) + 1;
         }
     }
+    if (ctx->internal_fill_label != NULL) {
+        length += 128;
+    }
+    if (ctx->xram_fill_label != NULL) {
+        length += 128;
+    }
     output = (char *)malloc(length + 1);
     if (output == NULL) {
         return set_error(ctx, "out of memory while including runtime routines");
@@ -252,6 +269,18 @@ static int resolve_runtime(CodegenContext *ctx)
             next += size;
             *next++ = '\n';
         }
+    }
+    if (ctx->internal_fill_label != NULL) {
+        next += (size_t)sprintf(next, "%s:\n%s:\n"
+            "\tLIA\t0\n\tEXAM\n\tINCP\n\tDECI\n\tJRNZM\t%s\n\tRTN\n\n",
+            ctx->internal_fill_label, ctx->internal_fill_loop,
+            ctx->internal_fill_loop);
+    }
+    if (ctx->xram_fill_label != NULL) {
+        next += (size_t)sprintf(next, "%s:\n\tLIA\t0\n%s:\n"
+            "\tIYS\n\tDECI\n\tJRNZM\t%s\n\tRTN\n\n",
+            ctx->xram_fill_label, ctx->xram_fill_loop,
+            ctx->xram_fill_loop);
     }
     *next = '\0';
     free(ctx->runtime_output);
@@ -991,6 +1020,159 @@ static int validate_translation_unit(CodegenContext *ctx, AstTranslationUnit *tu
     return 0;
 }
 
+static int ensure_fill_routine(CodegenContext *ctx, int xram)
+{
+    char **entry = xram ? &ctx->xram_fill_label : &ctx->internal_fill_label;
+    char **loop = xram ? &ctx->xram_fill_loop : &ctx->internal_fill_loop;
+
+    if (*entry == NULL) {
+        *entry = new_label(ctx);
+        *loop = new_label(ctx);
+        if (*entry == NULL || *loop == NULL) {
+            return -1;
+        }
+    }
+    return 0;
+}
+
+static int emit_compact_zero_bytes(CodegenContext *ctx,
+                                  ScalarLocation location,
+                                  size_t byte_offset, size_t byte_count)
+{
+    size_t max_chunk = COMPACT_FILL_CHUNK;
+
+    if (location.width == 2) {
+        max_chunk -= max_chunk % 2;
+    }
+    while (byte_count >= COMPACT_FILL_THRESHOLD) {
+        size_t chunk = byte_count < max_chunk ? byte_count : max_chunk;
+        int address;
+        char operand[40];
+
+        if (chunk < COMPACT_FILL_THRESHOLD) {
+            break;
+        }
+        address = location.address + (int)byte_offset;
+        if (location.storage == SCALAR_LOCAL) {
+            address += location.width == 1 ? 2 : 1;
+            address += (int)ctx->stack_depth;
+            if (address < -128 || address > 255) {
+                return set_error(ctx, "local array offset exceeds target addressing");
+            }
+            emit_inst(ctx, "LDR");
+            emit_number(ctx, "ADIA", address);
+            emit_inst(ctx, "STP");
+            if (ensure_fill_routine(ctx, 0) != 0) {
+                return -1;
+            }
+            emit_number(ctx, "LII", (int)chunk);
+            emit_inst_op(ctx, "CALL", ctx->internal_fill_label);
+        } else if (location.storage == SCALAR_REGISTER) {
+            if (address < 0 || address > 95) {
+                return set_error(ctx, "array address exceeds target memory");
+            }
+            emit_number(ctx, address < 64 ? "LP" : "LIP", address);
+            if (ensure_fill_routine(ctx, 0) != 0) {
+                return -1;
+            }
+            emit_number(ctx, "LII", (int)chunk);
+            emit_inst_op(ctx, "CALL", ctx->internal_fill_label);
+        } else if (location.storage == SCALAR_XRAM) {
+            if (address < 0 || address > 65535) {
+                return set_error(ctx, "array address exceeds target memory");
+            }
+            emit_inst_op(ctx, "LP", "6");
+            (void)snprintf(operand, sizeof(operand), "LB(%d)", address);
+            emit_inst_op(ctx, "LIA", operand);
+            emit_inst(ctx, "EXAM");
+            emit_inst_op(ctx, "LP", "7");
+            (void)snprintf(operand, sizeof(operand), "HB(%d)", address);
+            emit_inst_op(ctx, "LIA", operand);
+            emit_inst(ctx, "EXAM");
+            emit_inst(ctx, "DY");
+            if (ensure_fill_routine(ctx, 1) != 0) {
+                return -1;
+            }
+            emit_number(ctx, "LII", (int)chunk);
+            emit_inst_op(ctx, "CALL", ctx->xram_fill_label);
+        } else {
+            return set_error(ctx, "invalid array storage class");
+        }
+        byte_offset += chunk;
+        byte_count -= chunk;
+    }
+    return ctx->error[0] == '\0' ? (int)byte_count : -1;
+}
+
+static int emit_local_array_initializer(CodegenContext *ctx,
+                                        const AstVarDecl *variable,
+                                        const ScalarSymbol *symbol)
+{
+    size_t element = 0;
+
+    while (element < symbol->array_length) {
+        const AstInitializer *item = variable->initializer->as.list.items != NULL &&
+            element < variable->initializer->as.list.count
+            ? variable->initializer->as.list.items[element] : NULL;
+        unsigned long value = 0;
+        int is_zero = item == NULL ||
+            (item->kind == AST_INITIALIZER_EXPR &&
+             symtab_constant(item->as.expression, &value) == 0 &&
+             (value & (symbol->location.width == 1 ? 255UL : 65535UL)) == 0);
+
+        if (is_zero) {
+            size_t first = element;
+            size_t bytes;
+            int remainder;
+
+            do {
+                ++element;
+                if (element >= symbol->array_length) {
+                    break;
+                }
+                item = element < variable->initializer->as.list.count
+                    ? variable->initializer->as.list.items[element] : NULL;
+                value = 0;
+                is_zero = item == NULL ||
+                    (item->kind == AST_INITIALIZER_EXPR &&
+                     symtab_constant(item->as.expression, &value) == 0 &&
+                     (value & (symbol->location.width == 1 ? 255UL : 65535UL)) == 0);
+            } while (is_zero);
+            bytes = (element - first) * symbol->location.width;
+            remainder = emit_compact_zero_bytes(ctx, symbol->location,
+                first * symbol->location.width, bytes);
+            if (remainder < 0) {
+                return -1;
+            }
+            if (remainder != 0) {
+                size_t offset = bytes - (size_t)remainder;
+                size_t first_inline = first + offset / symbol->location.width;
+                size_t inline_count = (size_t)remainder / symbol->location.width;
+                size_t index;
+
+                for (index = 0; index < inline_count; ++index) {
+                    ScalarLocation location = symbol->location;
+                    location.address += (int)((first_inline + index) *
+                                              location.width);
+                    if (codegen_load_constant(ctx, location.width, 0) != 0 ||
+                        codegen_store_scalar(ctx, location) != 0) {
+                        return -1;
+                    }
+                }
+            }
+        } else {
+            ScalarLocation location = symbol->location;
+            location.address += (int)(element * location.width);
+            if (emit_expression(ctx, item->as.expression) != 0 ||
+                codegen_store_scalar(ctx, location) != 0) {
+                return -1;
+            }
+            ++element;
+        }
+    }
+    return 0;
+}
+
 static int emit_statement(CodegenContext *ctx, const AstStmt *statement)
 {
     if (statement->node.kind == AST_NODE_COMPOUND_STMT) {
@@ -1002,25 +1184,12 @@ static int emit_statement(CodegenContext *ctx, const AstStmt *statement)
                 const AstVarDecl *variable = (const AstVarDecl *)item->as.declaration;
                 const ScalarSymbol *symbol =
                     symtab_declaration(ctx->symbols, variable);
-                size_t element;
                 if (variable->initializer != NULL && symbol == NULL) {
                     return set_error(ctx, "unresolved local declaration reached code generation");
                 }
                 if (variable->initializer != NULL && symbol->is_array) {
-                    for (element = 0; element < symbol->array_length; ++element) {
-                        ScalarLocation location = symbol->location;
-                        location.address += (int)(element * location.width);
-                        if (element < variable->initializer->as.list.count) {
-                            if (emit_expression(ctx, variable->initializer->as.list.items[element]
-                                    ->as.expression) != 0) {
-                                return -1;
-                            }
-                        } else if (codegen_load_constant(ctx, location.width, 0) != 0) {
-                            return -1;
-                        }
-                        if (codegen_store_scalar(ctx, location) != 0) {
-                            return -1;
-                        }
+                    if (emit_local_array_initializer(ctx, variable, symbol) != 0) {
+                        return -1;
                     }
                 } else if (variable->initializer != NULL &&
                     (emit_expression(ctx, variable->initializer->as.expression) != 0 ||
@@ -1321,22 +1490,84 @@ static int emit_global_initializers(CodegenContext *ctx,
             return set_error(ctx, "unresolved global reached code generation");
         }
         if (symbol->is_array) {
-            size_t element;
-            for (element = 0; element < symbol->array_length; ++element) {
-                ScalarLocation location = symbol->location;
-                location.address += (int)(element * location.width);
+            size_t element = 0;
+            while (element < symbol->array_length) {
+                const AstInitializer *item =
+                    variable->initializer != NULL &&
+                    element < variable->initializer->as.list.count
+                    ? variable->initializer->as.list.items[element] : NULL;
+                int is_zero = item == NULL;
+
                 value = 0;
-                if (variable->initializer != NULL &&
-                    element < variable->initializer->as.list.count &&
-                    symtab_initializer_constant(variable->initializer->as.list.items[element]
-                        ->as.expression, &value) != 0) {
-                    return set_error(ctx,
-                        "unsupported global array initializer reached code generation");
+                if (item != NULL) {
+                    if (item->kind != AST_INITIALIZER_EXPR ||
+                        symtab_initializer_constant(item->as.expression,
+                                                   &value) != 0) {
+                        return set_error(ctx,
+                            "unsupported global array initializer reached code generation");
+                    }
+                    value &= symbol->location.width == 1 ? 255UL : 65535UL;
+                    is_zero = value == 0;
                 }
-                value &= location.width == 1 ? 255UL : 65535UL;
-                if (codegen_load_constant(ctx, location.width, value) != 0 ||
-                    codegen_store_scalar(ctx, location) != 0) {
-                    return -1;
+                if (is_zero) {
+                    size_t first = element;
+                    size_t bytes;
+                    int remainder;
+
+                    do {
+                        ++element;
+                        if (element >= symbol->array_length) {
+                            break;
+                        }
+                        item = variable->initializer != NULL &&
+                            element < variable->initializer->as.list.count
+                            ? variable->initializer->as.list.items[element] : NULL;
+                        value = 0;
+                        if (item != NULL) {
+                            if (item->kind != AST_INITIALIZER_EXPR ||
+                                symtab_initializer_constant(item->as.expression,
+                                                           &value) != 0) {
+                                return set_error(ctx,
+                                    "unsupported global array initializer reached code generation");
+                            }
+                            value &= symbol->location.width == 1
+                                ? 255UL : 65535UL;
+                        }
+                        is_zero = item == NULL || value == 0;
+                    } while (is_zero);
+                    bytes = (element - first) * symbol->location.width;
+                    remainder = emit_compact_zero_bytes(ctx, symbol->location,
+                        first * symbol->location.width, bytes);
+                    if (remainder < 0) {
+                        return -1;
+                    }
+                    if (remainder != 0) {
+                        size_t offset = bytes - (size_t)remainder;
+                        size_t first_inline = first +
+                            offset / symbol->location.width;
+                        size_t inline_count = (size_t)remainder /
+                            symbol->location.width;
+                        size_t inline_index;
+
+                        for (inline_index = 0; inline_index < inline_count;
+                             ++inline_index) {
+                            ScalarLocation location = symbol->location;
+                            location.address += (int)((first_inline +
+                                inline_index) * location.width);
+                            if (codegen_load_constant(ctx, location.width, 0) != 0 ||
+                                codegen_store_scalar(ctx, location) != 0) {
+                                return -1;
+                            }
+                        }
+                    }
+                } else {
+                    ScalarLocation location = symbol->location;
+                    location.address += (int)(element * location.width);
+                    if (codegen_load_constant(ctx, location.width, value) != 0 ||
+                        codegen_store_scalar(ctx, location) != 0) {
+                        return -1;
+                    }
+                    ++element;
                 }
             }
             continue;

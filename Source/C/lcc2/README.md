@@ -94,6 +94,9 @@ caller must avoid placing objects
 over live stack slots, generated code, or BASIC/firmware memory. Registers
 8-11 are included in the existing startup save/restore wrapper, so changes
 there do not persist after returning to BASIC.
+Contiguous zero runs of at least four bytes use shared internal-RAM or XRAM
+fill routines; shorter runs stay inline. This applies to global arrays and
+initialized local arrays, while uninitialized local arrays remain untouched.
 
 Local bytes and words use one function-wide frame, including declarations in
 nested blocks, without reusing slots. The local frame is limited to 32 bytes;

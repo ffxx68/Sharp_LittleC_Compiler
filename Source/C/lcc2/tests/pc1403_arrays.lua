@@ -46,7 +46,7 @@ function lcc2_array_test(binary_path, wide)
     end
     local expected = {
         11, 22, 3, 0x468a, 0xcf12, 0,
-        18, 30, 3, 0xf257, 0xd014, 0, 256, 0xffff
+        18, 30, 3, 0xf257, 0xd014, 0, 256, 0xffff, 0, 0
     }
     if wide then expected = {255, 0xbeef, 255, 0} end
     lcc2_array_result = {status = "running", calls = 0, returns = 0}
@@ -77,6 +77,14 @@ function lcc2_array_test(binary_path, wide)
                     assert(space:read_u8(0xec20) == 2, "index call evaluated more than once")
                     assert(dump(0xeefe, 3) == "12 1E 03", "XRAM byte/page boundary")
                     assert(dump(0xefff, 6) == "57 F2 14 D0 00 00", "XRAM word/page boundary")
+                    for address = 0xecfc, 0xed03 do
+                        assert(space:read_u8(address) == 0,
+                            "XRAM array was not zero initialized")
+                    end
+                    for address = 22, 29 do
+                        assert(ram:read(address) == 0,
+                            "internal-RAM array was not zero initialized")
+                    end
                 end
                 restore(restore_address)
                 install(return_address)
@@ -121,7 +129,8 @@ function lcc2_array_test(binary_path, wide)
                 else
                     for address = 0xeefe, 0xef00 do space:write_u8(address, 0x55) end
                     for address = 0xefff, 0xf004 do space:write_u8(address, 0x55) end
-                    for address = 12, 21 do ram:write(address, 0x55) end
+                    for address = 0xecfc, 0xed03 do space:write_u8(address, 0x55) end
+                    for address = 12, 29 do ram:write(address, 0x55) end
                 end
                 install(origin)
                 install(restore_address)

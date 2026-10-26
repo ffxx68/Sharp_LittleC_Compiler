@@ -245,6 +245,61 @@ static void test_global_initialization(void)
     ast_arena_destroy(arena);
 }
 
+static void test_compact_local_array_initialization(void)
+{
+    AstArena *arena = ast_arena_create();
+    CodegenContext *ctx = codegen_context_create();
+    AstTranslationUnit *unit = parse(arena,
+        "#pragma nosave\n"
+        "void main(void) {\n"
+        "  unsigned char initialized[4] = {0};\n"
+        "  unsigned char uninitialized[8];\n"
+        "}");
+    const char *functions;
+    const char *runtime;
+
+    assert(arena != NULL && ctx != NULL);
+    assert(codegen_program(ctx, unit) == 0);
+    functions = codegen_section_output(ctx, CODEGEN_FUNCTIONS);
+    runtime = codegen_section_output(ctx, CODEGEN_RUNTIME);
+    assert(strstr(functions, "\tLII\t4\n\tCALL\tLB") != NULL);
+    assert(strstr(functions, "\tCALL\tLB") ==
+           strstr(functions, "\tLII\t4\n\tCALL\tLB") + strlen("\tLII\t4\n"));
+    assert(strstr(strstr(functions, "\tCALL\tLB") + 1, "\tCALL\tLB") == NULL);
+    assert(strstr(runtime, "LB") != NULL);
+    assert(strstr(runtime, "\tEXAM\n\tINCP\n\tDECI\n\tJRNZM\t") != NULL);
+    assert(codegen_stack_depth(ctx) == 0);
+    codegen_context_destroy(ctx);
+    ast_arena_destroy(arena);
+}
+
+static void test_compact_global_array_initialization(void)
+{
+    AstArena *arena = ast_arena_create();
+    CodegenContext *ctx = codegen_context_create();
+    AstTranslationUnit *unit = parse(arena,
+        "#pragma nosave\n"
+        "unsigned char __at(8) values[8] = {0, 0, 0, 7};\n"
+        "__xram __at(0xE600) unsigned char external[8] = {1};\n"
+        "void main(void) {}\n");
+    const char *startup;
+    const char *runtime;
+
+    assert(arena != NULL && ctx != NULL);
+    assert(codegen_program(ctx, unit) == 0);
+    startup = codegen_section_output(ctx, CODEGEN_STARTUP);
+    runtime = codegen_section_output(ctx, CODEGEN_RUNTIME);
+    assert(strstr(startup, "\tLII\t4\n\tCALL\tLB") != NULL);
+    assert(strstr(startup, "\tLII\t7\n\tCALL\tLB") != NULL);
+    assert(strstr(runtime, "\tIYS\n\tDECI\n\tJRNZM\t") != NULL);
+    assert(strstr(startup, "\tEXAM\n\tDY\n\tLII\t7\n") != NULL);
+    assert(strstr(startup, "\tLIA\t7\t; Load byte constant 7") != NULL);
+    assert(strstr(startup, "\tLIA\t1\t; Load byte constant 1") != NULL);
+    assert(codegen_stack_depth(ctx) == 0);
+    codegen_context_destroy(ctx);
+    ast_arena_destroy(arena);
+}
+
 static void test_invalid_programs(void)
 {
     static const char *sources[] = {
@@ -683,6 +738,8 @@ int main(void)
     test_unsupported_unit_is_not_partially_emitted();
     test_complete_program();
     test_global_initialization();
+    test_compact_local_array_initialization();
+    test_compact_global_array_initialization();
     test_invalid_programs();
     test_scalar_access_sequences();
     test_scalar_validation();

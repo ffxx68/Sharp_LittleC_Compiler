@@ -1150,7 +1150,7 @@ word index 128 (byte offset 256), and expression indices; outputs were
 `FF 00 EF BE FF 00 00 00`. Both verify stack balance (R=86), register
 restoration, BASIC program retention, and a responsive BASIC caller.
 
-#### Task 5.3.4.9: Compact array initialization (code-size follow-up)
+#### Task 5.3.4.9 ✅: Compact array initialization (code-size follow-up)
 
 Prioritize this follow-up before the backend completion gate in Task
 5.3.4.13; do not defer it to Phase 6. Task 5.3.4.8 remains functionally
@@ -1172,6 +1172,22 @@ mostly zero initialization.
 - Record before/after PASM sizes for both array fixtures and require a
   substantial reduction for `pc1403_arrays_wide.c`, with size-regression
   checks and repeated PC-1403 runtime verification of unchanged results.
+
+Implemented shared internal-RAM and XRAM fill routines for contiguous zero
+runs of at least four bytes; shorter runs remain inline. Global arrays compact
+all zero runs, including explicit zero values and partial-list tails, while
+initialized local arrays compact constant-zero runs and tails without touching
+uninitialized local arrays. XRAM fill starts with `DY` so `IYS` correctly
+handles page crossings. Nonzero initializers retain their original order.
+
+PASM sizes are 1964 to 1896 bytes for `pc1403_arrays.c` and 3721 to 646 bytes
+for `pc1403_arrays_wide.c` (about 83% smaller for the wide fixture). The small
+fixture now also covers register, XRAM, and local zero initialization. CLI
+regression limits are 1964 and 700 bytes respectively. `make test` passes.
+In MAME, both fixtures passed ten BASIC calls and ten returns; the small
+fixture verified zeroed register/local/XRAM arrays across an XRAM page
+boundary, and the wide fixture retained outputs `FF 00 EF BE FF 00 00 00`.
+Both runs verified stack balance, register restoration, and BASIC return.
 
 This is an initialization-emission improvement, separate from the legacy
 peephole port in Task 5.3.6 and the AST optimizations in Phase 6; those passes
