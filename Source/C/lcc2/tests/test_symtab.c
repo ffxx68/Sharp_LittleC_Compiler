@@ -64,7 +64,7 @@ static void test_rejections(void)
         "int main(void) { int x; return X; }",
         "int main(void) { const int x = 1; x = 2; return x; }",
         "int main(void) { 1 = 2; return 0; }",
-        "int main(void) { int x; return x * 2; }",
+        "int main(void) { int x; return x %= 2; }",
         "int main(void) { return later; } int __at(8) later;",
         "int __at(8) x; int __at(9) y;",
         "int __at(95) x;",
@@ -689,8 +689,216 @@ static void test_control_flow_resolution(void)
     }
 }
 
+static void test_bitwise_and_unary_resolution(void)
+{
+    static const char *invalid[] = {
+        "int main(void) { int x; int y; return x >>= y; }",
+        "int main(void) { int x; return x /= 2; }",
+        "unsigned char __at(8) v; int main(void) { return -&v; }",
+        "unsigned char __at(8) v; int main(void) { return ~&v; }",
+        "unsigned char __at(8) v; int main(void) { return v & &v; }",
+        "void f(void) {} int main(void) { return !f(); }",
+        "void f(void) {} int main(void) { return -f(); }",
+        "int main(void) { int x; if ((x & 1) < (x ^ 2)) return 1; return 0; }"
+    };
+    AstArena *arena = ast_arena_create();
+    ScalarSymbols *table = symtab_create();
+    AstTranslationUnit *unit = parse(arena,
+        "unsigned char __at(8) low = -1;"
+        "__xram __at(0xE600) unsigned int word = ~0 & 0x0F0F | 0x1000 ^ 1;"
+        "unsigned int main(void) {"
+        " unsigned int a = 1; unsigned char b = 2; int s = -3;"
+        " a = (a & b) | (a ^ b);"
+        " a = ~a; a = -a; a = !a; a = +a;"
+        " s = s & 1; s = s ^ s;"
+        " if ((a & b) < 4) a = 1;"
+        " if (!a == 0) a = 2;"
+        " return a | b; }");
+    size_t index;
+
+    assert(symtab_resolve(table, unit) == 0);
+    symtab_destroy(table);
+    ast_arena_destroy(arena);
+
+    for (index = 0; index < sizeof(invalid) / sizeof(invalid[0]); ++index) {
+        arena = ast_arena_create();
+        table = symtab_create();
+        unit = parse(arena, invalid[index]);
+        assert(symtab_resolve(table, unit) != 0);
+        assert(symtab_error(table)[0] != '\0');
+        symtab_destroy(table);
+        ast_arena_destroy(arena);
+    }
+}
+
+static void test_update_resolution(void)
+{
+    static const char *invalid[] = {
+        "int main(void) { const int c = 1; c++; return 0; }",
+        "int main(void) { const int c = 1; return c += 1; }",
+        "int main(void) { 1++; return 0; }",
+        "int main(void) { int x; (x + 1)++; return 0; }",
+        "unsigned int f(void) { return 1; } int main(void) { f()++; return 0; }",
+        "int main(void) { int a[4]; int i = 0; a[i++] += 1; return 0; }",
+        "int main(void) { int a[4]; int i = 0; a[i = 1]++; return 0; }",
+        "int main(void) { unsigned int x; int y; x += &y; return 0; }",
+        "int main(void) { unsigned char *p; p *= 2; return 0; }",
+        "int main(void) { unsigned char *p; unsigned char *q; p += q; return 0; }",
+        "void f(void) {} int main(void) { unsigned int x; x += f(); return 0; }",
+        "int main(void) { unsigned int x; x /= 0; return 0; }"
+    };
+    AstArena *arena = ast_arena_create();
+    ScalarSymbols *table = symtab_create();
+    AstTranslationUnit *unit = parse(arena,
+        "__xram __at(0xE600) struct R { unsigned int a; unsigned char b; } rec;"
+        "__xram __at(0xE700) unsigned int g[3];"
+        "unsigned int f(struct P { unsigned int a; unsigned char b; } *rp) {"
+        " unsigned int x = 1; unsigned char c = 2; int s = 3;"
+        " unsigned int *wp; unsigned char *bp;"
+        " x += 1; x -= c; x *= 3; x /= 2; x %= 5; x <<= 1; x >>= 1;"
+        " x &= 255; x ^= 1; x |= 4; s += 2; s -= 1; s &= 1; s ^= 1; s |= 2;"
+        " s *= 2; c += 1; c <<= 1;"
+        " x++; ++x; x--; --x; c++; s++; --s;"
+        " g[1] += 2; g[x]++; --g[c]; (&rec)->a += 1; (&rec)->b++;"
+        " rp->a -= 1; rp->b++;"
+        " wp++; --wp; wp += 2; bp -= x; rp += c; rp++;"
+        " *wp += 1; (*bp)++;"
+        " x = (c += 1) + s++;"
+        " return x++ + --x; }"
+        "unsigned int main(void) { return 0; }");
+    size_t index;
+
+    assert(symtab_resolve(table, unit) == 0);
+    symtab_destroy(table);
+    ast_arena_destroy(arena);
+
+    for (index = 0; index < sizeof(invalid) / sizeof(invalid[0]); ++index) {
+        arena = ast_arena_create();
+        table = symtab_create();
+        unit = parse(arena, invalid[index]);
+        assert(symtab_resolve(table, unit) != 0);
+        assert(symtab_error(table)[0] != '\0');
+        symtab_destroy(table);
+        ast_arena_destroy(arena);
+    }
+}
+
+static void test_shift_resolution(void)
+{
+    static const char *invalid[] = {
+        "int main(void) { int x; return x >> 1; }",
+        "int main(void) { unsigned int x; unsigned char *p; return x << p; }",
+        "unsigned char __at(8) v; int main(void) { return &v << 1; }",
+        "void f(void) {} int main(void) { return 1 << f(); }",
+        "int main(void) { int x; return x >>= 1; }"
+    };
+    AstArena *arena = ast_arena_create();
+    ScalarSymbols *table = symtab_create();
+    AstTranslationUnit *unit = parse(arena,
+        "unsigned int __at(8) g = 1 << 4 | 0x100 >> 4;"
+        "unsigned int main(void) {"
+        " unsigned int a = 1; unsigned char b = 2; int s = 3;"
+        " a = a << b; a = a >> 2; a = (a << 1) >> 1; s = s << 1;"
+        " s = 8 >> 2; b = b >> 1;"
+        " if ((a >> 1) < 4) a = 1;"
+        " return a << 15; }");
+    size_t index;
+
+    assert(symtab_resolve(table, unit) == 0);
+    symtab_destroy(table);
+    ast_arena_destroy(arena);
+
+    for (index = 0; index < sizeof(invalid) / sizeof(invalid[0]); ++index) {
+        arena = ast_arena_create();
+        table = symtab_create();
+        unit = parse(arena, invalid[index]);
+        assert(symtab_resolve(table, unit) != 0);
+        assert(symtab_error(table)[0] != '\0');
+        symtab_destroy(table);
+        ast_arena_destroy(arena);
+    }
+}
+
+static void test_logical_and_comma_resolution(void)
+{
+    static const char *invalid[] = {
+        "void f(void) {} int main(void) { return 1 && f(); }",
+        "void f(void) {} int main(void) { return (f(), 1); }",
+        "unsigned char __at(8) v; int main(void) { unsigned char *p = &v; return p && 1; }",
+        "int main(void) { int x; return (x, &x); }",
+        "int main(void) { int x; return x && y; }"
+    };
+    AstArena *arena = ast_arena_create();
+    ScalarSymbols *table = symtab_create();
+    AstTranslationUnit *unit = parse(arena,
+        "unsigned int main(void) {"
+        " unsigned int a = 1; unsigned char b = 2; int s = 3;"
+        " a = a && b; a = a || s; a = (s, b);"
+        " if (s && a < 4 || b) a = 1;"
+        " if ((s || a) < 2) a = 2;"
+        " while ((a = a - 1, a)) b = 0;"
+        " return a || b; }");
+    size_t index;
+
+    assert(symtab_resolve(table, unit) == 0);
+    symtab_destroy(table);
+    ast_arena_destroy(arena);
+
+    for (index = 0; index < sizeof(invalid) / sizeof(invalid[0]); ++index) {
+        arena = ast_arena_create();
+        table = symtab_create();
+        unit = parse(arena, invalid[index]);
+        assert(symtab_resolve(table, unit) != 0);
+        assert(symtab_error(table)[0] != '\0');
+        symtab_destroy(table);
+        ast_arena_destroy(arena);
+    }
+}
+
+static void test_multiply_divide_resolution(void)
+{
+    static const char *invalid[] = {
+        "unsigned int main(void) { unsigned int x = 1; return x / 0; }",
+        "unsigned int main(void) { unsigned int x = 1; return x % (1 - 1); }",
+        "int main(void) { int x = 1; int y = 2; return x / y; }",
+        "int main(void) { int x = 1; return x % 3; }",
+        "unsigned char __at(8) v; int main(void) { return &v * 2; }",
+        "void f(void) {} int main(void) { return 2 * f(); }"
+    };
+    AstArena *arena = ast_arena_create();
+    ScalarSymbols *table = symtab_create();
+    AstTranslationUnit *unit = parse(arena,
+        "unsigned int __at(8) g = 6 * 7 + 100 / 7 + 9 % 4;"
+        "unsigned int main(void) {"
+        " unsigned int a = 1; unsigned char b = 2; int s = 3;"
+        " a = a * b; s = s * 2 + a; a = a / b; a = a % 3; b = b / 2;"
+        " s = 6 / 2; a = a - b / 1;"
+        " if (a * 2 < 5) a = 1;"
+        " return a / s; }");
+    size_t index;
+
+    assert(symtab_resolve(table, unit) == 0);
+    symtab_destroy(table);
+    ast_arena_destroy(arena);
+
+    for (index = 0; index < sizeof(invalid) / sizeof(invalid[0]); ++index) {
+        arena = ast_arena_create();
+        table = symtab_create();
+        unit = parse(arena, invalid[index]);
+        assert(symtab_resolve(table, unit) != 0);
+        assert(symtab_error(table)[0] != '\0');
+        symtab_destroy(table);
+        ast_arena_destroy(arena);
+    }
+}
+
 int main(void)
 {
+    test_multiply_divide_resolution();
+    test_logical_and_comma_resolution();
+    test_shift_resolution();
+    test_update_resolution();
+    test_bitwise_and_unary_resolution();
     test_scopes_and_layout();
     test_rejections();
     test_address_resolution();

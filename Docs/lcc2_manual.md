@@ -9,9 +9,18 @@ and does not compile the full language described in
 mean a construct can be compiled.
 
 The current implementation supports byte/word scalars and arrays, parameterized
-functions, direct calls, assignments, comparisons, and structured control flow.
+functions, direct calls, assignments, arithmetic, bitwise, shift, logical and
+comparison operators on unsigned values, byte/word pointers, structure-pointer
+member access, and structured control flow.
 Earlier execution checks were made in PC-1403 MAME sessions; physical-device
 execution and compatibility with other Sharp models have not been verified.
+
+**Unsigned only for now:** integer operators are implemented with unsigned
+semantics. Signed operands are accepted only where the result is the same as
+unsigned (for example `+`, `-`, `&`, `|`, `^`, `<<`, equality, and operands the
+compiler can prove nonnegative). Signed relational comparisons, signed `>>`,
+and signed `/` and `%` are rejected with a diagnostic. Full signed semantics
+are planned for roadmap Task 5.3.9.
 
 See the [project README](../Source/C/lcc2/README.md) for implementation details
 and test harnesses, and the [roadmap](../Source/lcc/refactor_roadmap.md) for
@@ -82,7 +91,8 @@ collisions. See the project README for the integrated BASIC-caller test.
 | Functions | Byte/word parameters by value, compatible prototypes, direct calls to definitions in the same translation unit; CLI `main` must be parameterless |
 | Variables | Fixed-address globals, automatic locals, and single-dimensional byte/word arrays; scalar and brace-list initialization |
 | Statements | Compound blocks, expression statements, empty statements, `if`/`else`, `while`, `do`/`while`, expression-initialized `for`, `break`, `continue`, `return` |
-| Expressions | Nonnegative 16-bit integer constants, character constants, scalar identifiers, constant/runtime array subscripts, direct function calls, `=`, `+`, `-`, `==`, `!=`, unsigned `<`, `<=`, `>`, `>=`, parentheses |
+| Expressions | 16-bit integer constants, character constants, scalar identifiers, constant/runtime array subscripts, direct function calls, `=`, `+`, `-`, `*`, `/`, `%`, `&`, `|`, `^`, `~`, `<<`, `>>`, unary `+`/`-`/`!`, `&&`, `\|\|`, comma, `==`, `!=`, unsigned `<`, `<=`, `>`, `>=`, parentheses |
+| Pointers and structures | Byte/word pointers (assignment, copy, null, parameters, indirect loads/stores) and `->` member access through pointers to fixed-address structures |
 | Names | Case-sensitive lookup, nested block scopes, and local-over-global shadowing |
 | `const` | Const-qualified scalar objects and array elements cannot be assigned after initialization |
 
@@ -95,11 +105,19 @@ named scalar parameters; prototypes may omit parameter names. Calls are
 left-to-right and may be nested or recursive. Argument and return values use
 the byte/word stack convention described below.
 
-Pointers, aggregates, `switch`, `goto`, static/extern objects,
-external function calls, and operators other than those listed above are not
-implemented. Global scalar initializers are limited to integer and character
-constants combined with `+` and `-`; scalar list and floating-point
-initializers are rejected. Array subscripts accept supported integer
+Compound assignment (`+= -= *= /= %= <<= >>= &= ^= |=`) and `++`/`--` work on
+variables, array elements, members and dereferences, but the target must not
+contain side effects (no calls, assignments or `++` inside the subscript).
+Pointer variables accept `++`, `--`, `+=` and `-=`, scaled by the pointee size.
+
+`switch`, `goto`, static/extern objects, external function calls, casts,
+`sizeof`, the conditional
+`?:` operator, floating point, other pointer arithmetic, pointer-to-pointer types,
+pointer returns and addresses of automatic locals are not implemented.
+Global scalar initializers are integer and character constant expressions
+using `+ - * / % & | ^ ~ << >> !` and unary `+`/`-` (constant results are
+truncated modulo 65536); scalar list and floating-point initializers are
+rejected. Array subscripts accept supported integer
 expressions, including function calls and other array accesses; each subscript
 is evaluated once. Constant out-of-range subscripts are rejected. Runtime
 bounds are not checked, and out-of-range runtime access has undefined behavior.
@@ -107,12 +125,28 @@ Multidimensional arrays, variable-length arrays, array-to-pointer decay, and
 non-byte/word element types remain unsupported.
 Array brace lists may be shorter than the declared extent; omitted elements
 are zero-initialized, including local arrays. An extent may be inferred from a
-nonempty brace list. Comparison expressions call legacy `LIB_CP*16`
-routines, embedded once after generated functions when needed. Their source
-is built into the compiler, so no external `.lib` files are required.
+nonempty brace list. Comparison, shift, multiply, divide and XOR operations
+call runtime routines (`LIB_CP*16`, `LIB_SHL16`/`LIB_SHR16`, `LIB_MUL16`,
+`LIB_DIV16`/`LIB_MOD16`, `LIB_XOR16`), embedded once after generated functions
+when needed. Their source is built into the compiler, so no external `.lib`
+files are required.
 Unknown runtime requests and function names colliding with included runtime
-labels are rejected before CLI output is written. In particular, use `0 - 1`
-rather than unary `-1` in this initial slice.
+labels are rejected before CLI output is written. Negative constants may be
+written with unary minus (`-1` is `0xFFFF` in a word).
+
+### Operator semantics
+
+| Operator | Behavior |
+|----------|----------|
+| `+`, `-`, `*` | Wrap modulo 65536 (`*` keeps the low 16 bits) |
+| `/`, `%` | Unsigned; constant zero divisors are rejected. A runtime zero divisor gives quotient `0xFFFF` and remainder equal to the dividend (not standard C; avoid) |
+| `&`, `\|`, `^`, `~` | Bitwise on the 16-bit promoted operands |
+| unary `-`, `+` | Two's complement negate (`0 - x`) / identity |
+| `<<`, `>>` | Logical. A count of 16 or more yields 0; a zero count is the identity. Signed `>>` is rejected |
+| `&&`, `\|\|` | Short-circuit; result is 1 or 0 |
+| `!` | Result is 1 or 0 |
+| `,` | Evaluates left, then right; yields the right value. Void calls are rejected as operands |
+| `==`, `!=`, `<`, `<=`, `>`, `>=` | Unsigned; result is 255 for true and 0 for false (differs from the 1 produced by `!`, `&&`, `\|\|`; compare against zero rather than `1`) |
 
 ### Types and conversions
 
@@ -120,11 +154,12 @@ Bytes are 8 bits; words are 16 bits. Plain `char` is unsigned. Expressions
 use the word accumulator B:A; byte loads zero-extend for unsigned types and
 sign-extend for `signed char`. Byte assignments retain the low byte, and
 assignment expressions yield the converted stored value. Unsigned word
-addition/subtraction wraps modulo 65536.
+arithmetic wraps modulo 65536. Integer constants must fit in 16 bits
+(0..65535); larger literals are rejected.
 
 Signed overflow and reads of uninitialized locals are not diagnosed.
-Negative constants via unary minus, casts, and general signed operations
-remain outside the implemented subset.
+Signed relational comparisons, signed `>>`, `/` and `%`, and casts remain
+outside the implemented subset.
 
 ### Variable placement
 
@@ -139,8 +174,7 @@ Register-space objects must fit entirely within internal RAM addresses
 8 through 95. XRAM objects must fit within the 16-bit external address space.
 Overlapping declarations in the same address space are rejected. Fixed-address
 globals with no initializer are zeroed before `main`. Explicit scalar
-initializers are constant expressions using integer/character constants and
-`+`/`-`; results are truncated to the declared width (8 or 16 bits) and stored
+initializers are constant expressions (see above); results are truncated to the declared width (8 or 16 bits) and stored
 before `main` as part of startup.
 
 Single-dimensional byte and word arrays use the same fixed register/XRAM

@@ -61,16 +61,19 @@ instruction emission. Names are case-sensitive, with block scopes and local
 shadowing. Byte/word scalar declarations, single-dimensional byte/word arrays
 with declared or inferred extents, brace-list initialization, and
 constant and runtime-index reads/writes are supported, alongside local expression
-initializers, plain assignments, `+`/`-`, equality, unsigned relational
-comparisons, conditionals, `while`, `do`/`while`, and expression-initialized
+initializers, assignments (plain and compound), `++`/`--`, `+ - * / %`,
+`& | ^ ~ << >>`, `!`, `&&`, `||`, the comma operator, equality, unsigned
+relational comparisons, structures with `.`/`->` member access, conditionals, `while`, `do`/`while`, and expression-initialized
 `for` loops, including `break` and `continue`. Functions accept named byte/word
 parameters by value and support direct calls, including recursion and nested
 calls. Prototypes must match definitions; calls require a definition in the
 translation unit. The entry-point `main` remains parameterless. A `for` step
 executes after its body, and `continue` targets the step. Signed relational
-comparisons are rejected. Non-void functions require a return. Static/extern
-storage, aggregates, and statements after a return are not yet supported by
-the resolver. Byte/word pointers to globals or constant-
+comparisons, `/`, `%` and `>>` are rejected unless an operand is provably
+unsigned or nonnegative (signed semantics are deferred to roadmap 5.3.9).
+Compound/increment operands must be side-effect-free lvalues. Non-void
+functions require a return. Static/extern storage, `switch`, unions, and
+statements after a return are not yet supported by the resolver. Byte/word pointers to globals or constant-
 index elements of global arrays in register or XRAM storage are 16-bit values;
 pointer locals and fixed-address global pointer objects support initialization,
 assignment, copying, null values, and by-value function parameters. Indirect
@@ -79,8 +82,9 @@ objects, including pointers received as parameters. The high byte distinguishes
 register addresses from XRAM addresses, so address-of on XRAM objects below 256
 is rejected. Global pointer initialization is limited to null constants.
 Addresses of automatic locals, whole arrays, dynamic array elements, and
-functions are unsupported, as are pointer-to-pointer types, pointer returns,
-and pointer arithmetic.
+functions are unsupported, as are pointer-to-pointer types and pointer returns.
+Pointer arithmetic is limited to `++ -- += -=` on plain pointer variables,
+scaled by the pointee size.
 Array extents must be positive
 constants (or inferred from a nonempty initializer); multidimensional arrays
 remain unsupported.
@@ -240,6 +244,81 @@ requires `status="PASS"`, `calls=10`, `returns=10`, and `basic_checks=10`; the
 six output bytes at `&E700` must be `EF BE 7C 00 34 12`. Use only a disposable
 session: this clears the current BASIC program and overwrites reserved test
 RAM.
+
+## Bitwise and unary operator runtime test in MAME
+
+Compile and assemble `tests\pc1403_bitwise_unary.c`, then in a **disposable**
+bridge-enabled PC-1403 session load `pc1403_key.lua` and run:
+
+```lua
+dofile([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\tests\pc1403_bitwise_unary.lua]])
+lcc2_bitwise_unary_test([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\build\pc1403_bitwise_unary.bin]])
+```
+
+The fixture computes 16 word results at `&E720` covering `& | ^ ~ - + !`.
+Success requires `status="PASS"`; the 32 output bytes must match `EXPECTED`
+in the Lua file. This clears the current BASIC program.
+
+## Shift operator runtime test in MAME
+
+Compile and assemble `tests\pc1403_shifts.c`, then in a **disposable**
+bridge-enabled PC-1403 session load `pc1403_key.lua` and run:
+
+```lua
+dofile([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\tests\pc1403_shifts.lua]])
+lcc2_shifts_test([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\build\pc1403_shifts.bin]])
+```
+
+The fixture checks `<<` and `>>` with constant, byte and word counts
+(including 0, 8, 15, 16 and 256) at `&E720`. Success requires
+`status="PASS"`. Signed `>>` is rejected until signed semantics are added.
+
+## Logical operator runtime test in MAME
+
+Compile and assemble `tests\pc1403_logical.c`, then in a **disposable**
+bridge-enabled PC-1403 session load `pc1403_key.lua` and run:
+
+```lua
+dofile([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\tests\pc1403_logical.lua]])
+lcc2_logical_test([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\build\pc1403_logical.bin]])
+```
+
+The fixture checks `&&`, `||` and comma values, short-circuit side effects,
+precedence and use in `if`/`while` conditions (results at `&E720`). Success
+requires `status="PASS"`.
+
+## Multiply/divide runtime test in MAME
+
+Compile and assemble `tests\pc1403_muldiv.c`, then in a **disposable**
+bridge-enabled PC-1403 session load `pc1403_key.lua` and run:
+
+```lua
+dofile([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\tests\pc1403_muldiv.lua]])
+lcc2_muldiv_test([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\build\pc1403_muldiv.bin]])
+```
+
+The fixture checks `*`, `/` and `%` (truncation, zero operands, runtime zero
+divisor, mixed expressions) with results at `&E720`. Success requires
+`status="PASS"`. `/` and `%` on signed operands are rejected until signed
+semantics are added.
+
+## Compound assignment and increment/decrement runtime test in MAME
+
+Compile and assemble `tests\pc1403_update_ops.c`, `pc1403_incdec.c`,
+`pc1403_update_arrays.c` and `pc1403_update_members.c`, then in a
+**disposable** bridge-enabled PC-1403 session load `pc1403_key.lua` and run
+each harness, for example:
+
+```lua
+dofile([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\tests\pc1403_incdec.lua]])
+lcc2_incdec_test([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\build\pc1403_incdec.bin]])
+```
+
+The harnesses are `lcc2_update_ops_test`, `lcc2_incdec_test`,
+`lcc2_update_arrays_test` and `lcc2_update_members_test`. They check all
+compound operators, prefix/postfix values, byte wrap-around, array, pointer
+(scaled) and member updates (results at `&E720`). Success requires
+`status="PASS"`.
 
 ## Complete-program output and integration test
 

@@ -1153,7 +1153,7 @@ restoration, BASIC program retention, and a responsive BASIC caller.
 #### Task 5.3.4.9 ✅: Compact array initialization (code-size follow-up)
 
 Prioritize this follow-up before the backend completion gate in Task
-5.3.4.13; do not defer it to Phase 6. Task 5.3.4.8 remains functionally
+5.3.4.14; do not defer it to Phase 6. Task 5.3.4.8 remains functionally
 complete, but its per-element initialization stores are too costly for
 larger arrays on the PC-1403. The 3721-byte for `pc1403_arrays_wide.c` declares
 526 bytes of globals and currently spends roughly 3.1 KiB in startup,
@@ -1352,14 +1352,98 @@ restoration, and BASIC responsiveness over ten calls. MAME runtime validation
 passed with outputs `EF BE 7C 00 34 12`; unsupported pointer and aggregate
 forms remain rejected.
 
-#### Task 5.3.4.12: Remaining arithmetic and standard-C extensions
+#### Task 5.3.4.12: Remaining integer operators (unsigned, umbrella)
 
-Port remaining arithmetic/library operations and floating-point support as
-their AST constructs become supported. Implement signed operations and
-standard-C switch semantics separately from legacy unsigned/switch behavior.
-Track and deduplicate required runtime libraries in the context.
+Standard-C `switch` is control flow and is tracked separately in Task
+5.3.4.13. Signed integer semantics are deferred until after Task 5.3.8 (see
+Task 5.3.9) and floating-point support likewise (Task 5.3.10). Until then,
+operators operate on unsigned byte/word operands, and signed operands must
+continue to be rejected explicitly. Runtime-routine registration and
+deduplication are already provided by the code-generation context; extend
+that catalog only where an operator requires a new routine.
 
-#### Task 5.3.4.13: Operation-parity checklist and completion gates
+Split because the unsupported operators fall into five groups with different
+backend mechanisms (inline code, runtime routines, short-circuit control flow,
+lvalue read-modify-write). Complete all five subtasks before closing the
+umbrella. For every subtask: define target-width behavior for unsigned
+operands, reject unsupported (including signed) cases explicitly rather than
+emitting incomplete code, reuse and test the runtime-routine registry for any
+helper routines, and cover expression results, side effects, and stack
+balance. Each subtask adds resolver/codegen tests, a CLI assembly check and,
+where behavior is non-trivial, a PC-1403 runtime fixture.
+
+##### Task 5.3.4.12.1 ✅: Bitwise and unary operators
+
+- `&`, `|`, `^`, `~`, unary `+`, unary `-` (two's complement) and logical
+  `!` on unsigned byte/word operands, with byte and word width handling.
+- Constant-operand forms and byte-to-word promotion; result 0/1 for `!`.
+- Implemented with inline AND/OR, a `LIB_XOR16` runtime routine, constant
+  folding in global initializers, resolver/codegen/CLI tests and the MAME
+  fixture `pc1403_bitwise_unary` (16 results verified on PC-1403).
+- Note: comparisons yield 255 for true while `!` yields 1; unification is
+  deferred.
+
+##### Task 5.3.4.12.2 ✅: Shift operators
+
+- `<<` and `>>` (logical right shift) with constant and variable counts.
+- Counts of 16 or more (or above 255) yield 0; a zero count is the identity.
+- Implemented via `LIB_SHL16`/`LIB_SHR16` runtime routines (count in J:I,
+  loop on RC/SL/SR); constant folding in global initializers; MAME fixture
+  `pc1403_shifts` (16 results verified on PC-1403).
+- Signed `>>` is rejected until Task 5.3.9 (arithmetic shift).
+
+##### Task 5.3.4.12.3 ✅: Logical `&&`, `||` and comma
+
+- Short-circuit evaluation with 0/1 results, usable as values and in
+  `if`/`while`/`for` conditions; operands are tested one at a time so the
+  evaluation stack stays balanced. Comma evaluates left then right.
+- Verified on PC-1403 with fixture `pc1403_logical` (short-circuit side
+  effects, high-byte-only truthiness, precedence, comma in `while`).
+- Void calls remain rejected as operands (including the left of a comma).
+
+##### Task 5.3.4.12.4 ✅: Multiplication, division and remainder
+
+- `*`, `/`, `%` on unsigned byte/word operands, reusing the legacy
+  `mul16.lib` and `div16.lib` algorithms as registry routines `LIB_MUL16` and
+  `LIB_DIV16`/`LIB_MOD16` (`mul16.lib` loop branch corrected to a backward
+  `JRNZM`).
+- `*` truncates to 16 bits. Constant zero divisors are diagnosed; a runtime
+  zero divisor yields quotient 0xFFFF and remainder equal to the dividend.
+- `/` and `%` on signed operands are rejected until Task 5.3.9.
+- Verified on PC-1403 with fixture `pc1403_muldiv` (16 results).
+
+##### Task 5.3.4.12.5 ✅: Compound assignment and increment/decrement
+
+- `+=`, `-=`, `*=`, `/=`, `%=`, `<<=`, `>>=`, `&=`, `^=`, `|=`, and
+  prefix/postfix `++`/`--` on variables, array elements, members and pointer
+  dereferences.
+- Implemented by rewriting to `lvalue = lvalue op rhs` (`symtab_update_rewrite`,
+  shared by resolver and code generator). Lvalues with side effects (calls,
+  assignments, nested updates) are rejected, so the double evaluation is
+  exact. Postfix saves the old value on the stack; a discarded postfix
+  (statement, `for` clause, comma left) costs nothing extra.
+- Pointer variables support `++ -- += -=` with the pointee size scaling
+  (structure size included). Other pointer operators are rejected.
+- Signed `/= %= >>=` follow the existing signed-operator restrictions.
+- Verified on PC-1403 with fixtures `pc1403_update_ops`, `pc1403_incdec`,
+  `pc1403_update_arrays` and `pc1403_update_members`.
+
+#### Task 5.3.4.13: Standard-C switch statement
+
+Implement `switch` as control flow, separate from legacy `CASE`/`ENDCASE`
+behavior, building on the loop/`break`/`continue` label stack and the
+existing unsigned comparison semantics. Signed controlling values are
+deferred to Task 5.3.9.
+
+- Implement `switch`, `case`, and `default` using standard C integer
+  controlling-expression and case-constant semantics.
+- Preserve source-order fallthrough and ensure `break` exits the nearest
+  switch or loop while `continue` still targets the enclosing loop.
+- Test duplicate/default labels, nested control flow, fallthrough, and
+  unsigned controlling values; do not rely on legacy `CASE` behavior
+  unless it is proven equivalent.
+
+#### Task 5.3.4.14: Operation-parity checklist and completion gates
 
 Maintain a checklist against the Task 5.1.4 fixture inventory, recording
 ported and deferred operations explicitly. Compare equivalent output with
@@ -1418,12 +1502,37 @@ Tests for new constructs should include:
 - Add minimal `<stdint.h>`: `typedef unsigned char uint8_t; typedef unsigned int uint16_t;`
 - Provide `compat.h` with convenience typedefs: `typedef unsigned char byte; typedef unsigned int word;`
 
-### Task 5.3.9: Port completion gates
+### Task 5.3.9: Signed integer semantics (deferred until after Task 5.3.8)
+
+- Correct signedness, integer promotions/conversions, and comparisons for
+  supported signed and unsigned byte/word expressions without changing
+  legacy unsigned behavior; replace the current "signed relational comparison
+  is not supported" rejection with real signed comparisons (e.g. `SBB`-based).
+- Extend the Task 5.3.4.12 operators (division, remainder, shifts, unary
+  minus) and Task 5.3.4.13 `switch` to signed operands.
+- Cover arithmetic results, boundary values (-1 vs 1, 0x7FFF/0x8000, signed
+  bytes), compound uses, and byte promotion.
+- Add resolver/codegen tests and target-level functional tests for negative
+  values and signed/unsigned comparison boundaries.
+- Until this task is complete, signed operations beyond the currently
+  supported forms must continue to fail explicitly.
+
+### Task 5.3.10: Floating-point support (deferred until after Task 5.3.9)
+
+- Add floating-point expression, conversion, and storage behavior only after
+  the standard-C library headers in Task 5.3.8 have been migrated.
+- Establish the supported precision/ABI and runtime-library requirements
+  before implementation; test constants, arithmetic, comparisons, calls, and
+  target execution.
+- Until this task is complete, floating-point constructs must continue to
+  fail explicitly and must not be treated as supported integer expressions.
+
+### Task 5.3.11: Port completion gates
 
 - The Pascal reference compiler remains buildable and its existing regression tests continue to pass.
 - Every backend capability required by a supported C construct has an operation-parity fixture or a new-construct functional test.
 - Unsupported constructs fail with a clear diagnostic; they must not silently generate partial or success-shaped output.
-- Do not retire or archive the Pascal compiler until the C compiler satisfies the final acceptance criteria and repository workflows have migrated.
+- Complete Task 5.3.9's signed-integer slice and Task 5.3.10's floating-point slice, and do not retire or archive the Pascal compiler until the C compiler satisfies the final acceptance criteria and repository workflows have migrated.
 
 ---
 # Phase 6 — Advanced optimizations (post-porting)
@@ -1440,7 +1549,7 @@ With an AST available, implement optimizations that the old syntax-directed tran
 ---
 # Phase 7 — Cleanup, docs and release
 
-- Task 7.1: Decide whether to retain the Pascal compiler as a reference or archive it only after the Phase 5.3.9 completion gates pass.
+- Task 7.1: Decide whether to retain the Pascal compiler as a reference or archive it only after the Phase 5.3.11 completion gates pass.
 - Task 7.2: Write the user manual for the new compiler (`Docs/sc61860cc_manual.md`).
 - Task 7.3: Update README with build instructions (`make` / `cmake`).
 - Task 7.4: CI scripts (GitHub Actions or similar) for automated regression tests.
@@ -1474,7 +1583,9 @@ Phase 5    📋  Migrazione a Flex/Bison
       ├─ 5.3.6: peephole optimizer
       ├─ 5.3.7: regression test + test nuovi costrutti
       ├─ 5.3.8: migrazione header libreria
-      └─ 5.3.9: gate di completamento porting
+      ├─ 5.3.9: semantica signed (dopo migrazione header)
+      ├─ 5.3.10: supporto floating-point (dopo 5.3.9)
+      └─ 5.3.11: gate di completamento porting
 
 Phase 6    📋  Ottimizzazioni avanzate (AST-based)
 Phase 7    📋  Cleanup e rilascio

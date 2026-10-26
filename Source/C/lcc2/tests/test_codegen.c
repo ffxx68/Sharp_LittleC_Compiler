@@ -950,8 +950,188 @@ static void test_runtime_libraries(void)
     }
 }
 
+static void test_bitwise_and_unary_operators(void)
+{
+    AstArena *arena = ast_arena_create();
+    CodegenContext *ctx = codegen_context_create();
+    AstTranslationUnit *unit = parse(arena,
+        "unsigned int main(void) {"
+        " unsigned int a = 1; unsigned int b = 2;"
+        " a = a & b; a = a | b; a = a ^ b; a = ~a; a = -a; a = !a; a = +a;"
+        " return a ^ b; }");
+    const char *assembly;
+
+    assert(codegen_program(ctx, unit) == 0);
+    assert(codegen_stack_depth(ctx) == 0);
+    assembly = codegen_output(ctx);
+    assert(strstr(assembly,
+        "\tANMA\n\tLP\t0\n\tPOP\n\tANMA\n\tEXAM\n\tEXAB\n"
+        "\tLP\t1\n\tEXAM\n\tEXAB\n") != NULL);
+    assert(strstr(assembly,
+        "\tORMA\n\tLP\t0\n\tPOP\n\tORMA\n\tEXAM\n\tEXAB\n"
+        "\tLP\t1\n\tEXAM\n\tEXAB\n") != NULL);
+    assert(strstr(assembly, "\tEXAB\n\tPOP\n\tCALL\tLIB_XOR16") != NULL);
+    assert(strstr(assembly,
+        "\tLP\t1\n\tORIM\t255\n\tLP\t0\n\tORIM\t255\n\tSBB") != NULL);
+    assert(strstr(assembly,
+        "\tLP\t1\n\tANIM\t0\n\tLP\t0\n\tANIM\t0\n\tSBB") != NULL);
+    assert(strstr(assembly, "\tTSIA\t255\n\tJPNZ\tLB") != NULL);
+    assert(occurrences(codegen_runtime_output(ctx), "LIB_XOR16:") == 1);
+    assert(occurrences(codegen_runtime_output(ctx), "LIB_XORB:") == 1);
+    assert(occurrences(codegen_output(ctx), "LIB_XORB:") == 1);
+    codegen_context_destroy(ctx);
+
+    ctx = codegen_context_create();
+    unit = parse(arena, "unsigned int main(void) { return !1 + ~2 - -3 + (4 & 5 | 6); }");
+    assert(codegen_program(ctx, unit) == 0);
+    assert(codegen_stack_depth(ctx) == 0);
+    assert(codegen_runtime_output(ctx)[0] == '\0');
+    codegen_context_destroy(ctx);
+    ast_arena_destroy(arena);
+}
+
+static void test_update_operators(void)
+{
+    AstArena *arena = ast_arena_create();
+    CodegenContext *ctx = codegen_context_create();
+    AstTranslationUnit *unit = parse(arena,
+        "unsigned int main(void) {"
+        " unsigned int x = 1; unsigned int y = 2;"
+        " x += 2; x -= y; x &= 3; x |= y; x ^= y; x <<= 1; x >>= 1;"
+        " x *= 3; x /= 2; x %= 5; x++; --x;"
+        " return x; }");
+    const char *assembly;
+
+    assert(codegen_program(ctx, unit) == 0);
+    assert(codegen_stack_depth(ctx) == 0);
+    assembly = codegen_output(ctx);
+    assert(strstr(assembly, "\tCALL\tLIB_XOR16") != NULL);
+    assert(strstr(assembly, "\tCALL\tLIB_SHL16") != NULL);
+    assert(strstr(assembly, "\tCALL\tLIB_SHR16") != NULL);
+    assert(strstr(assembly, "\tCALL\tLIB_MUL16") != NULL);
+    assert(strstr(assembly, "\tCALL\tLIB_DIV16") != NULL);
+    assert(strstr(assembly, "\tCALL\tLIB_MOD16") != NULL);
+    codegen_context_destroy(ctx);
+
+    /* A discarded postfix update costs no saved old value. */
+    ctx = codegen_context_create();
+    unit = parse(arena, "unsigned int main(void) { unsigned int x = 1; x++; return x; }");
+    assert(codegen_program(ctx, unit) == 0);
+    assert(occurrences(codegen_output(ctx), "word (A, then B)") == 1);
+    codegen_context_destroy(ctx);
+
+    ctx = codegen_context_create();
+    unit = parse(arena,
+        "unsigned int main(void) { unsigned int x = 1; unsigned int y = x++;"
+        " y += x--; return y; }");
+    assert(codegen_program(ctx, unit) == 0);
+    assert(codegen_stack_depth(ctx) == 0);
+    assert(occurrences(codegen_output(ctx), "word (A, then B)") == 5);
+    codegen_context_destroy(ctx);
+
+    /* Pointer updates scale by the pointee size. */
+    ctx = codegen_context_create();
+    unit = parse(arena,
+        "unsigned int main(void) { unsigned int n = 3; unsigned int *w;"
+        " unsigned char *b; w++; b++; w += n; b -= n; return n; }");
+    assert(codegen_program(ctx, unit) == 0);
+    assert(codegen_stack_depth(ctx) == 0);
+    assembly = codegen_output(ctx);
+    assert(strstr(assembly, "LIA\tLB(2)") != NULL);
+    assert(strstr(assembly, "LIA\tLB(1)") != NULL);
+    assert(occurrences(assembly, "CALL\tLIB_MUL16") == 1);
+    codegen_context_destroy(ctx);
+
+    ctx = codegen_context_create();
+    unit = parse(arena, "unsigned int main(void) { unsigned int x = 1; return x++ + 1; }");
+    assert(codegen_program(ctx, unit) == 0);
+    assert(codegen_stack_depth(ctx) == 0);
+    codegen_context_destroy(ctx);
+    ast_arena_destroy(arena);
+}
+
+static void test_shift_operators(void)
+{
+    AstArena *arena = ast_arena_create();
+    CodegenContext *ctx = codegen_context_create();
+    AstTranslationUnit *unit = parse(arena,
+        "unsigned int main(void) {"
+        " unsigned int a = 1; unsigned char n = 2;"
+        " a = a << 3; a = a >> n; return a << 1; }");
+    const char *assembly;
+
+    assert(codegen_program(ctx, unit) == 0);
+    assert(codegen_stack_depth(ctx) == 0);
+    assembly = codegen_output(ctx);
+    assert(strstr(assembly, "\tCALL\tLIB_SHL16") != NULL);
+    assert(strstr(assembly, "\tCALL\tLIB_SHR16") != NULL);
+    assert(strstr(assembly, "\tEXAB\n\tPOP\n\tCALL\tLIB_SH") != NULL);
+    assert(occurrences(assembly, "LIB_SHL16:") == 1);
+    assert(occurrences(assembly, "LIB_SHR16:") == 1);
+    codegen_context_destroy(ctx);
+    ast_arena_destroy(arena);
+}
+
+static void test_logical_and_comma(void)
+{
+    AstArena *arena = ast_arena_create();
+    CodegenContext *ctx = codegen_context_create();
+    AstTranslationUnit *unit = parse(arena,
+        "unsigned int main(void) {"
+        " unsigned int a = 1; unsigned int b = 0;"
+        " b = a && b; b = a || b; b = (a, b);"
+        " if (a && b || a) b = 1;"
+        " while (a || b) a = 0;"
+        " return a && (b = 2); }");
+    const char *assembly;
+
+    assert(codegen_program(ctx, unit) == 0);
+    assert(codegen_stack_depth(ctx) == 0);
+    assembly = codegen_output(ctx);
+    assert(strstr(assembly, "\tLIA\t1\n\tJP\tLB") != NULL);
+    assert(strstr(assembly, "\tLIA\t0\n\tJP\tLB") != NULL);
+    assert(codegen_runtime_output(ctx)[0] == '\0');
+    codegen_context_destroy(ctx);
+    ast_arena_destroy(arena);
+}
+
+static void test_multiply_divide(void)
+{
+    AstArena *arena = ast_arena_create();
+    CodegenContext *ctx = codegen_context_create();
+    AstTranslationUnit *unit = parse(arena,
+        "unsigned int main(void) {"
+        " unsigned int a = 9; unsigned int b = 2;"
+        " a = a * b; a = a / b; a = a % b; return a * 3 / b; }");
+    const char *assembly;
+
+    assert(codegen_program(ctx, unit) == 0);
+    assert(codegen_stack_depth(ctx) == 0);
+    assembly = codegen_output(ctx);
+    assert(strstr(assembly, "\tCALL\tLIB_MUL16") != NULL);
+    assert(strstr(assembly, "\tCALL\tLIB_DIV16") != NULL);
+    assert(strstr(assembly, "\tCALL\tLIB_MOD16") != NULL);
+    assert(occurrences(assembly, "LIB_MUL16:") == 1);
+    assert(occurrences(assembly, "LIB_DIV16:") == 1);
+    assert(occurrences(assembly, "LIB_MOD16:") == 1);
+    codegen_context_destroy(ctx);
+
+    ctx = codegen_context_create();
+    unit = parse(arena, "unsigned int main(void) { unsigned int a = 5; return a % 2; }");
+    assert(codegen_program(ctx, unit) == 0);
+    assert(occurrences(codegen_output(ctx), "LIB_DIV16:") == 1);
+    assert(occurrences(codegen_output(ctx), "LIB_MUL16:") == 0);
+    codegen_context_destroy(ctx);
+    ast_arena_destroy(arena);
+}
+
 int main(void)
 {
+    test_multiply_divide();
+    test_logical_and_comma();
+    test_update_operators();
+    test_shift_operators();
+    test_bitwise_and_unary_operators();
     test_word_return_addition();
     test_stack_and_constants();
     test_byte_arithmetic_sequences();

@@ -305,16 +305,60 @@ int symtab_initializer_constant(const AstExpr *expression,
     if (expression->node.kind == AST_NODE_BINARY_EXPR) {
         const AstBinaryExpr *binary = (const AstBinaryExpr *)expression;
         unsigned long left, right;
-        if (binary->op != AST_BINARY_ADD && binary->op != AST_BINARY_SUB) {
+        if (binary->op != AST_BINARY_ADD && binary->op != AST_BINARY_SUB &&
+            binary->op != AST_BINARY_BIT_AND &&
+            binary->op != AST_BINARY_BIT_OR &&
+            binary->op != AST_BINARY_BIT_XOR &&
+            binary->op != AST_BINARY_SHIFT_LEFT &&
+            binary->op != AST_BINARY_MUL &&
+            ((binary->op != AST_BINARY_DIV && binary->op != AST_BINARY_MOD &&
+              binary->op != AST_BINARY_SHIFT_RIGHT) ||
+             binary->left->node.kind != AST_NODE_CONSTANT_EXPR ||
+             (binary->op != AST_BINARY_SHIFT_RIGHT &&
+              binary->right->node.kind != AST_NODE_CONSTANT_EXPR))) {
             return -1;
         }
         if (symtab_initializer_constant(binary->left, &left) != 0 ||
             symtab_initializer_constant(binary->right, &right) != 0) {
             return -1;
         }
-        *value = binary->op == AST_BINARY_ADD
-            ? (left + right) & 65535UL
-            : (left - right) & 65535UL;
+        if ((binary->op == AST_BINARY_DIV || binary->op == AST_BINARY_MOD) &&
+            right == 0) {
+            return -1;
+        }
+        switch (binary->op) {
+        case AST_BINARY_MUL: *value = (left * right) & 65535UL; break;
+        case AST_BINARY_DIV: *value = left / right; break;
+        case AST_BINARY_MOD: *value = left % right; break;
+        case AST_BINARY_SHIFT_LEFT:
+            *value = right >= 16 ? 0 : (left << right) & 65535UL; break;
+        case AST_BINARY_SHIFT_RIGHT:
+            *value = right >= 16 ? 0 : left >> right; break;
+        case AST_BINARY_ADD: *value = (left + right) & 65535UL; break;
+        case AST_BINARY_SUB: *value = (left - right) & 65535UL; break;
+        case AST_BINARY_BIT_AND: *value = left & right; break;
+        case AST_BINARY_BIT_OR: *value = left | right; break;
+        default: *value = left ^ right; break;
+        }
+        return 0;
+    }
+    if (expression->node.kind == AST_NODE_UNARY_EXPR) {
+        const AstUnaryExpr *unary = (const AstUnaryExpr *)expression;
+        unsigned long operand;
+        if (unary->op != AST_UNARY_PLUS && unary->op != AST_UNARY_MINUS &&
+            unary->op != AST_UNARY_BITWISE_NOT &&
+            unary->op != AST_UNARY_LOGICAL_NOT) {
+            return -1;
+        }
+        if (symtab_initializer_constant(unary->operand, &operand) != 0) {
+            return -1;
+        }
+        switch (unary->op) {
+        case AST_UNARY_PLUS: *value = operand; break;
+        case AST_UNARY_MINUS: *value = (0UL - operand) & 65535UL; break;
+        case AST_UNARY_BITWISE_NOT: *value = ~operand & 65535UL; break;
+        default: *value = operand == 0; break;
+        }
         return 0;
     }
     return -1;
@@ -565,6 +609,9 @@ static int expression_contains_void_call(const ScalarSymbols *table,
         const AstBinaryExpr *binary = (const AstBinaryExpr *)expression;
         return expression_contains_void_call(table, binary->left) ||
                expression_contains_void_call(table, binary->right);
+    } else if (expression->node.kind == AST_NODE_UNARY_EXPR) {
+        return expression_contains_void_call(table,
+            ((const AstUnaryExpr *)expression)->operand);
     } else if (expression->node.kind == AST_NODE_INDEX_EXPR) {
         return expression_contains_void_call(table,
             ((const AstIndexExpr *)expression)->index);
@@ -793,6 +840,198 @@ static int expression_is_pointer(const ScalarSymbols *table,
     return expression_pointer_pointee(table, expression) != NULL;
 }
 
+static int compound_base_operator(AstBinaryOp op, AstBinaryOp *base)
+{
+    switch (op) {
+    case AST_BINARY_MUL_ASSIGN: *base = AST_BINARY_MUL; return 1;
+    case AST_BINARY_DIV_ASSIGN: *base = AST_BINARY_DIV; return 1;
+    case AST_BINARY_MOD_ASSIGN: *base = AST_BINARY_MOD; return 1;
+    case AST_BINARY_ADD_ASSIGN: *base = AST_BINARY_ADD; return 1;
+    case AST_BINARY_SUB_ASSIGN: *base = AST_BINARY_SUB; return 1;
+    case AST_BINARY_SHIFT_LEFT_ASSIGN: *base = AST_BINARY_SHIFT_LEFT; return 1;
+    case AST_BINARY_SHIFT_RIGHT_ASSIGN: *base = AST_BINARY_SHIFT_RIGHT; return 1;
+    case AST_BINARY_AND_ASSIGN: *base = AST_BINARY_BIT_AND; return 1;
+    case AST_BINARY_XOR_ASSIGN: *base = AST_BINARY_BIT_XOR; return 1;
+    case AST_BINARY_OR_ASSIGN: *base = AST_BINARY_BIT_OR; return 1;
+    default: return 0;
+    }
+}
+
+static void init_synthetic_binary(AstBinaryExpr *binary, const AstExpr *origin,
+                                  AstBinaryOp op, AstExpr *left,
+                                  AstExpr *right)
+{
+    memset(binary, 0, sizeof(*binary));
+    binary->expression.node.kind = AST_NODE_BINARY_EXPR;
+    binary->expression.node.span = origin->node.span;
+    binary->op = op;
+    binary->left = left;
+    binary->right = right;
+}
+
+static void init_synthetic_constant(AstConstantExpr *constant,
+                                    const AstExpr *origin, size_t value)
+{
+    memset(constant, 0, sizeof(*constant));
+    constant->expression.node.kind = AST_NODE_CONSTANT_EXPR;
+    constant->expression.node.span = origin->node.span;
+    constant->constant_kind = AST_CONSTANT_INTEGER;
+    constant->value.integer = (long)value;
+}
+
+int symtab_update_rewrite(const ScalarSymbols *table,
+                          const AstExpr *expression,
+                          SymtabUpdateRewrite *rewrite)
+{
+    AstBinaryOp base;
+    AstExpr *lvalue;
+    AstExpr *operand = NULL;
+    const AstType *pointee;
+    size_t unit = 1;
+    int increment = 0;
+
+    if (expression == NULL || rewrite == NULL) {
+        return 0;
+    }
+    if (expression->node.kind == AST_NODE_UNARY_EXPR) {
+        const AstUnaryExpr *unary = (const AstUnaryExpr *)expression;
+        if (unary->op < AST_UNARY_PRE_INCREMENT) {
+            return 0;
+        }
+        lvalue = unary->operand;
+        base = unary->op == AST_UNARY_PRE_INCREMENT ||
+               unary->op == AST_UNARY_POST_INCREMENT
+            ? AST_BINARY_ADD : AST_BINARY_SUB;
+        rewrite->postfix = unary->op == AST_UNARY_POST_INCREMENT ||
+                           unary->op == AST_UNARY_POST_DECREMENT;
+        increment = 1;
+    } else if (expression->node.kind == AST_NODE_BINARY_EXPR &&
+               compound_base_operator(((const AstBinaryExpr *)expression)->op,
+                                      &base)) {
+        const AstBinaryExpr *binary = (const AstBinaryExpr *)expression;
+        lvalue = binary->left;
+        operand = binary->right;
+        rewrite->postfix = 0;
+    } else {
+        return 0;
+    }
+    rewrite->lvalue = lvalue;
+    pointee = expression_pointer_pointee(table, lvalue);
+    rewrite->is_pointer = pointee != NULL;
+    if (pointee != NULL) {
+        if (pointee->kind == AST_TYPE_STRUCT) {
+            if (symtab_structure_size(table,
+                    pointee->as.structure.declaration, &unit) != 0) {
+                return -1;
+            }
+        } else {
+            unit = symtab_type_width(pointee);
+        }
+        if (unit == 0) {
+            return -1;
+        }
+    }
+    init_synthetic_constant(&rewrite->step, expression, increment ? unit : 1);
+    init_synthetic_constant(&rewrite->factor, expression, unit);
+    if (increment) {
+        operand = (AstExpr *)&rewrite->step;
+    } else if (unit > 1) {
+        init_synthetic_binary(&rewrite->scale, expression, AST_BINARY_MUL,
+                              operand, (AstExpr *)&rewrite->factor);
+        operand = (AstExpr *)&rewrite->scale;
+    }
+    init_synthetic_binary(&rewrite->operation, expression, base, lvalue,
+                          operand);
+    init_synthetic_binary(&rewrite->assign, expression, AST_BINARY_ASSIGN,
+                          lvalue, (AstExpr *)&rewrite->operation);
+    return 1;
+}
+
+static int expression_has_side_effects(const AstExpr *expression)
+{
+    AstBinaryOp base;
+
+    if (expression == NULL) {
+        return 0;
+    }
+    switch (expression->node.kind) {
+    case AST_NODE_CALL_EXPR:
+        return 1;
+    case AST_NODE_BINARY_EXPR: {
+        const AstBinaryExpr *binary = (const AstBinaryExpr *)expression;
+        return binary->op == AST_BINARY_ASSIGN ||
+               compound_base_operator(binary->op, &base) ||
+               expression_has_side_effects(binary->left) ||
+               expression_has_side_effects(binary->right);
+    }
+    case AST_NODE_UNARY_EXPR: {
+        const AstUnaryExpr *unary = (const AstUnaryExpr *)expression;
+        return unary->op >= AST_UNARY_PRE_INCREMENT ||
+               expression_has_side_effects(unary->operand);
+    }
+    case AST_NODE_INDEX_EXPR:
+        return expression_has_side_effects(
+                   ((const AstIndexExpr *)expression)->array) ||
+               expression_has_side_effects(
+                   ((const AstIndexExpr *)expression)->index);
+    case AST_NODE_MEMBER_EXPR:
+        return expression_has_side_effects(
+            ((const AstMemberExpr *)expression)->object);
+    case AST_NODE_DEREFERENCE_EXPR:
+        return expression_has_side_effects(
+            ((const AstDereferenceExpr *)expression)->operand);
+    case AST_NODE_ADDRESS_EXPR:
+        return expression_has_side_effects(
+            ((const AstAddressExpr *)expression)->operand);
+    default:
+        return 0;
+    }
+}
+
+static int resolve_update(ScalarSymbols *table, SymtabUpdateRewrite *rewrite)
+{
+    if (expression_has_side_effects(rewrite->lvalue)) {
+        return fail(table,
+            "compound assignment and increment require a side-effect-free lvalue",
+            NULL);
+    }
+    if (!rewrite->is_pointer) {
+        return resolve_expression(table, &rewrite->assign.expression);
+    }
+    {
+        const AstType *type;
+        const ScalarSymbol *symbol;
+        const AstExpr *operand = rewrite->operation.right;
+
+        if (rewrite->lvalue->node.kind != AST_NODE_IDENT_EXPR ||
+            resolve_expression(table, rewrite->lvalue) != 0) {
+            return fail(table, "pointer update requires a pointer variable", NULL);
+        }
+        symbol = symtab_identifier(table, rewrite->lvalue);
+        type = symbol == NULL ? NULL : symbol->declaration != NULL
+            ? symbol->declaration->type : symbol->parameter->type;
+        if (type == NULL || (type->qualifiers & AST_QUALIFIER_CONST) != 0) {
+            return fail(table, "assignment requires a modifiable scalar lvalue", NULL);
+        }
+        if (rewrite->operation.op != AST_BINARY_ADD &&
+            rewrite->operation.op != AST_BINARY_SUB) {
+            return fail(table,
+                "pointer arithmetic and other pointer operators are not supported",
+                NULL);
+        }
+        if (operand == (const AstExpr *)&rewrite->scale) {
+            operand = rewrite->scale.left;
+        }
+        if (operand != (const AstExpr *)&rewrite->step &&
+            (expression_contains_void_call(table, operand) ||
+             resolve_expression(table, operand) != 0 ||
+             expression_is_pointer(table, operand))) {
+            return fail(table, "pointer update requires an integer operand", NULL);
+        }
+    }
+    return 0;
+}
+
 static int compatible_pointee_type(const AstType *left, const AstType *right)
 {
     if (left == NULL || right == NULL || left->kind != right->kind ||
@@ -998,9 +1237,64 @@ static int resolve_expression(ScalarSymbols *table, const AstExpr *expression)
         }
         return 0;
     }
+    if (expression->node.kind == AST_NODE_UNARY_EXPR ||
+        expression->node.kind == AST_NODE_BINARY_EXPR) {
+        SymtabUpdateRewrite rewrite;
+        const AstExpr *target = expression->node.kind == AST_NODE_UNARY_EXPR
+            ? ((const AstUnaryExpr *)expression)->operand
+            : ((const AstBinaryExpr *)expression)->left;
+        AstBinaryOp base;
+        int update;
+
+        if (target != NULL && target->node.kind == AST_NODE_IDENT_EXPR &&
+            (expression->node.kind == AST_NODE_UNARY_EXPR
+                ? ((const AstUnaryExpr *)expression)->op >= AST_UNARY_PRE_INCREMENT
+                : compound_base_operator(
+                      ((const AstBinaryExpr *)expression)->op, &base)) &&
+            resolve_expression(table, target) != 0) {
+            return -1;
+        }
+        update = symtab_update_rewrite(table, expression, &rewrite);
+        if (update < 0) {
+            return fail(table, "unsupported pointer update", NULL);
+        }
+        if (update > 0) {
+            return resolve_update(table, &rewrite);
+        }
+    }
+    if (expression->node.kind == AST_NODE_UNARY_EXPR) {
+        const AstUnaryExpr *unary = (const AstUnaryExpr *)expression;
+        if (unary->op != AST_UNARY_PLUS && unary->op != AST_UNARY_MINUS &&
+            unary->op != AST_UNARY_LOGICAL_NOT &&
+            unary->op != AST_UNARY_BITWISE_NOT) {
+            return fail(table, "unsupported scalar operator", NULL);
+        }
+        if (expression_contains_void_call(table, unary->operand)) {
+            return fail(table, "void function call used as a value", NULL);
+        }
+        if (resolve_expression(table, unary->operand) != 0) {
+            return -1;
+        }
+        if (expression_is_pointer(table, unary->operand)) {
+            return fail(table, "pointer arithmetic and other pointer operators are not supported",
+                        NULL);
+        }
+        return 0;
+    }
     if (expression->node.kind == AST_NODE_BINARY_EXPR) {
         const AstBinaryExpr *binary = (const AstBinaryExpr *)expression;
         if (binary->op != AST_BINARY_ADD && binary->op != AST_BINARY_SUB &&
+            binary->op != AST_BINARY_BIT_AND &&
+            binary->op != AST_BINARY_BIT_OR &&
+            binary->op != AST_BINARY_BIT_XOR &&
+            binary->op != AST_BINARY_SHIFT_LEFT &&
+            binary->op != AST_BINARY_SHIFT_RIGHT &&
+            binary->op != AST_BINARY_MUL &&
+            binary->op != AST_BINARY_DIV &&
+            binary->op != AST_BINARY_MOD &&
+            binary->op != AST_BINARY_LOGICAL_AND &&
+            binary->op != AST_BINARY_LOGICAL_OR &&
+            binary->op != AST_BINARY_COMMA &&
             binary->op != AST_BINARY_ASSIGN &&
             binary->op != AST_BINARY_LESS &&
             binary->op != AST_BINARY_LESS_EQUAL &&
@@ -1080,6 +1374,23 @@ static int resolve_expression(ScalarSymbols *table, const AstExpr *expression)
             return fail(table, "pointer arithmetic and other pointer operators are not supported",
                         NULL);
         }
+        if (binary->op == AST_BINARY_DIV || binary->op == AST_BINARY_MOD) {
+            unsigned long divisor;
+            if (symtab_initializer_constant(binary->right, &divisor) == 0 &&
+                divisor == 0) {
+                return fail(table, "division by constant zero", NULL);
+            }
+            if (!expression_unsigned_word(table, binary->left) &&
+                !expression_unsigned_word(table, binary->right) &&
+                !(expression_nonnegative(table, binary->left) &&
+                  expression_nonnegative(table, binary->right))) {
+                return fail(table, "signed division is not supported", NULL);
+            }
+        }
+        if (binary->op == AST_BINARY_SHIFT_RIGHT &&
+            !expression_nonnegative(table, binary->left)) {
+            return fail(table, "signed right shift is not supported", NULL);
+        }
         if ((binary->op == AST_BINARY_LESS ||
              binary->op == AST_BINARY_LESS_EQUAL ||
              binary->op == AST_BINARY_GREATER ||
@@ -1125,9 +1436,21 @@ static int expression_unsigned_word(const ScalarSymbols *table,
                constant->type->as.base.base == AST_TYPE_INT &&
                constant->type->as.base.is_unsigned;
     }
+    if (expression->node.kind == AST_NODE_UNARY_EXPR) {
+        const AstUnaryExpr *unary = (const AstUnaryExpr *)expression;
+        return unary->op != AST_UNARY_LOGICAL_NOT &&
+               expression_unsigned_word(table, unary->operand);
+    }
     if (expression->node.kind == AST_NODE_BINARY_EXPR) {
         const AstBinaryExpr *binary = (const AstBinaryExpr *)expression;
         if (binary->op == AST_BINARY_ASSIGN) {
+            return expression_unsigned_word(table, binary->left);
+        }
+        if (binary->op == AST_BINARY_COMMA) {
+            return expression_unsigned_word(table, binary->right);
+        }
+        if (binary->op == AST_BINARY_SHIFT_LEFT ||
+            binary->op == AST_BINARY_SHIFT_RIGHT) {
             return expression_unsigned_word(table, binary->left);
         }
         return expression_unsigned_word(table, binary->left) ||
@@ -1139,6 +1462,13 @@ static int expression_unsigned_word(const ScalarSymbols *table,
 static int expression_nonnegative(const ScalarSymbols *table,
                                  const AstExpr *expression)
 {
+    if (expression->node.kind == AST_NODE_UNARY_EXPR ||
+        expression->node.kind == AST_NODE_BINARY_EXPR) {
+        SymtabUpdateRewrite rewrite;
+        if (symtab_update_rewrite(table, expression, &rewrite) > 0) {
+            return expression_nonnegative(table, rewrite.lvalue);
+        }
+    }
     if (expression->node.kind == AST_NODE_CONSTANT_EXPR) {
         const AstConstantExpr *constant = (const AstConstantExpr *)expression;
         return constant->constant_kind == AST_CONSTANT_CHARACTER ||
@@ -1164,13 +1494,42 @@ static int expression_nonnegative(const ScalarSymbols *table,
             (const AstDereferenceExpr *)expression, &dereference) == 0 &&
             dereference.is_unsigned;
     }
+    if (expression->node.kind == AST_NODE_UNARY_EXPR) {
+        const AstUnaryExpr *unary = (const AstUnaryExpr *)expression;
+        return unary->op == AST_UNARY_LOGICAL_NOT ||
+               (unary->op == AST_UNARY_PLUS &&
+                expression_nonnegative(table, unary->operand));
+    }
     if (expression->node.kind == AST_NODE_BINARY_EXPR) {
         const AstBinaryExpr *binary = (const AstBinaryExpr *)expression;
         if (binary->op == AST_BINARY_ASSIGN) {
             return expression_nonnegative(table, binary->left) &&
                    expression_nonnegative(table, binary->right);
         }
-        if (binary->op == AST_BINARY_ADD) {
+        if (binary->op == AST_BINARY_BIT_AND) {
+            return expression_nonnegative(table, binary->left) ||
+                   expression_nonnegative(table, binary->right);
+        }
+        if (binary->op == AST_BINARY_BIT_OR ||
+            binary->op == AST_BINARY_BIT_XOR) {
+            return expression_nonnegative(table, binary->left) &&
+                   expression_nonnegative(table, binary->right);
+        }
+        if (binary->op == AST_BINARY_COMMA) {
+            return expression_nonnegative(table, binary->right);
+        }
+        if (binary->op == AST_BINARY_LOGICAL_AND ||
+            binary->op == AST_BINARY_LOGICAL_OR) {
+            return 1;
+        }
+        if (binary->op == AST_BINARY_SHIFT_RIGHT) {
+            return expression_nonnegative(table, binary->left);
+        }
+        if (binary->op == AST_BINARY_SHIFT_LEFT) {
+            return expression_unsigned_word(table, binary->left);
+        }
+        if (binary->op == AST_BINARY_ADD || binary->op == AST_BINARY_MUL ||
+            binary->op == AST_BINARY_DIV || binary->op == AST_BINARY_MOD) {
             return expression_nonnegative(table, binary->left) &&
                    expression_nonnegative(table, binary->right);
         }

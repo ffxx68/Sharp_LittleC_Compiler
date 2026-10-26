@@ -92,6 +92,24 @@ int symtab_structure_member(const ScalarSymbols *table,
 int symtab_member_access(const ScalarSymbols *table,
                          const AstMemberExpr *expression,
                          ResolvedMemberAccess *access);
+/* Compound assignment and ++/-- are rewritten as "lhs = lhs op rhs"; the
+ * lvalue is guaranteed side-effect free, so evaluating it twice is exact. */
+typedef struct SymtabUpdateRewrite {
+    AstBinaryExpr assign;
+    AstBinaryExpr operation;
+    AstBinaryExpr scale;
+    AstConstantExpr step;
+    AstConstantExpr factor;
+    const AstExpr *lvalue;
+    int postfix;
+    int is_pointer;
+} SymtabUpdateRewrite;
+
+/* Returns 1 and fills the rewrite for an update expression, 0 if the
+ * expression is not one, or -1 if a pointer target size is unknown. */
+int symtab_update_rewrite(const ScalarSymbols *table,
+                          const AstExpr *expression,
+                          SymtabUpdateRewrite *rewrite);
 int symtab_constant(const AstExpr *expression, unsigned long *value);
 int symtab_initializer_constant(const AstExpr *expression,
                                 unsigned long *value);

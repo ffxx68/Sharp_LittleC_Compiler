@@ -14,7 +14,7 @@ typedef struct LoopLabels {
    Results are 0 or 255 in A; the caller clears B. */
 static const struct {
     const char *name;
-    const char *labels[3];
+    const char *labels[10];
     const char *source;
 } runtime_routines[] = {
     {"LIB_CPE16", {"LIB_CPE16", "CPQ1", NULL},
@@ -43,7 +43,73 @@ static const struct {
      "LIB_CPGE16:\n\tEXAB\n\tLP\t1\n\tCPMA\n\tJRCP\tCPGE1\n"
      "\tJRNZP\tCPGE0\n\tLP\t0\n\tEXAB\n\tEXAM\n\tCPMA\n"
      "\tJRNCP\tCPGE1\nCPGE0:\n\tLIA\t0\n\tRTN\n"
-     "CPGE1:\n\tLIA\t255\n\tRTN\n"}
+     "CPGE1:\n\tLIA\t255\n\tRTN\n"},
+    /* B:A ^ J:I -> B:A, built from x ^ y = (x | y) - (x & y); preserves
+       internal RAM 6, which LIB_XORB uses as scratch. */
+    {"LIB_XOR16", {"LIB_XOR16", "LIB_XORB", NULL, NULL},
+     "LIB_XOR16:\n\tPUSH\n\tEXAB\n\tPUSH\n\tLP\t0\n\tLDM\n"
+     "\tCALL\tLIB_XORB\n\tLP\t0\n\tEXAM\n\tPOP\n\tEXAB\n"
+     "\tLP\t1\n\tLDM\n\tCALL\tLIB_XORB\n\tEXAB\n\tPOP\n"
+     "\tLP\t0\n\tLDM\n\tRTN\n"
+     "LIB_XORB:\n\tLP\t6\n\tEXAM\n\tPUSH\n\tEXAB\n\tPUSH\n"
+     "\tLP\t6\n\tLDM\n\tEXAB\n\tPOP\n\tLP\t3\n\tANMA\n"
+     "\tLP\t6\n\tORMA\n\tEXAB\n\tLP\t6\n\tSBM\n\tLDM\n"
+     "\tEXAB\n\tPOP\n\tEXAM\n\tRTN\n"},
+    /* B:A shifted by the count in J:I -> B:A. Counts of 256 or more and
+       counts of 16 or more yield 0 (the value is shifted out). */
+    {"LIB_SHL16", {"LIB_SHL16", "SHLL", "SHLB", "SHLZ"},
+     "LIB_SHL16:\n\tLP\t1\n\tTSIM\t255\n\tJPNZ\tSHLZ\n"
+     "SHLL:\n\tLP\t0\n\tTSIM\t255\n\tJPNZ\tSHLB\n\tRTN\n"
+     "SHLB:\n\tRC\n\tSL\n\tEXAB\n\tSL\n\tEXAB\n"
+     "\tLP\t0\n\tSBIM\t1\n\tJP\tSHLL\n"
+     "SHLZ:\n\tLIA\t0\n\tLIB\t0\n\tRTN\n"},
+    {"LIB_SHR16", {"LIB_SHR16", "SHRL", "SHRB", "SHRZ"},
+     "LIB_SHR16:\n\tLP\t1\n\tTSIM\t255\n\tJPNZ\tSHRZ\n"
+     "SHRL:\n\tLP\t0\n\tTSIM\t255\n\tJPNZ\tSHRB\n\tRTN\n"
+     "SHRB:\n\tRC\n\tEXAB\n\tSR\n\tEXAB\n\tSR\n"
+     "\tLP\t0\n\tSBIM\t1\n\tJP\tSHRL\n"
+     "SHRZ:\n\tLIA\t0\n\tLIB\t0\n\tRTN\n"},
+    /* Ported from mul16.lib: B:A = J:I * B:A (low 16 bits). */
+    {"LIB_MUL16", {"LIB_MUL16", "LM16", NULL},
+     "LIB_MUL16:\n\tLP\t6\n\tANIM\t0\n\tLP\t7\n\tANIM\t0\n"
+     "LM16:\n\tLP\t1\n\tEXAM\n\tRC\n\tSR\n\tEXAM\n\tDECP\n\tEXAM\n\tSR\n\tEXAM\n"
+     "\tJRNCP\t3\n\tLP\t6\n\tADB\n"
+     "\tRC\n\tSL\n\tEXAB\n\tSL\n\tEXAB\n"
+     "\tLP\t0\n\tCPIM\t0\n\tJRNZM\tLM16\n"
+     "\tLP\t1\n\tCPIM\t0\n\tJRNZM\tLM16\n"
+     "\tLP\t7\n\tEXAM\n\tEXAB\n\tLP\t6\n\tEXAM\n\tRTN\n"},
+    /* Ported from div16.lib: B:A = B:A / J:I (LIB_DIV16) or B:A % J:I
+       (LIB_MOD16). A zero divisor yields quotient 0xFFFF and remainder equal
+       to the dividend. */
+    {"LIB_DIV16", {"LIB_DIV16", "LIB_MOD16", "LIB_DIV16L1", "LIB_DIV16L2",
+                   "LIB_DIV16_DIVISOR", "LIB_DIV16_DIVIDEND",
+                   "LIB_DIV16_REMAINDER", NULL},
+     "LIB_MOD16:\n\tCALL\tLIB_DIV16\n\tLIDP\tLIB_DIV16_REMAINDER\n\tLDD\n"
+     "\tLIDP\tLIB_DIV16_REMAINDER+1\n\tLP\t3\n\tMVMD\n\tRTN\n"
+     "LIB_DIV16:\n\tLIDP\tLIB_DIV16_DIVIDEND\n\tSTD\n\tLP\t3\n"
+     "\tLIDP\tLIB_DIV16_DIVIDEND+1\n\tMVDM\n"
+     "\tLP\t0\n\tLIDP\tLIB_DIV16_DIVISOR\n\tMVDM\n"
+     "\tLP\t1\n\tLIDP\tLIB_DIV16_DIVISOR+1\n\tMVDM\n"
+     "\tLIA\t0\n\tLIDP\tLIB_DIV16_REMAINDER\n\tSTD\n"
+     "\tLIDP\tLIB_DIV16_REMAINDER+1\n\tSTD\n\tLII\t16\n"
+     "LIB_DIV16L1:\n\tRC\n\tLIDP\tLIB_DIV16_DIVIDEND\n\tLDD\n\tSL\n\tSTD\n"
+     "\tLIDP\tLIB_DIV16_DIVIDEND+1\n\tLDD\n\tSL\n\tSTD\n"
+     "\tLIDP\tLIB_DIV16_REMAINDER\n\tLDD\n\tSL\n\tSTD\n"
+     "\tLIDP\tLIB_DIV16_REMAINDER+1\n\tLDD\n\tSL\n\tSTD\n"
+     "\tLIDP\tLIB_DIV16_REMAINDER\n\tLP\t4\n\tMVMD\n"
+     "\tLIDP\tLIB_DIV16_REMAINDER+1\n\tLP\t5\n\tMVMD\n"
+     "\tRC\n\tLIDP\tLIB_DIV16_DIVISOR\n\tLDD\n\tLP\t4\n\tSBCM\n"
+     "\tLIDP\tLIB_DIV16_DIVISOR+1\n\tLDD\n\tLP\t5\n\tSBCM\n"
+     "\tJRCP\tLIB_DIV16L2\n"
+     "\tLIDP\tLIB_DIV16_REMAINDER\n\tLP\t4\n\tMVDM\n"
+     "\tLIDP\tLIB_DIV16_REMAINDER+1\n\tLP\t5\n\tMVDM\n"
+     "\tLIDP\tLIB_DIV16_DIVIDEND\n\tLDD\n\tINCA\n\tSTD\n"
+     "LIB_DIV16L2:\n\tDECI\n\tJRNZM\tLIB_DIV16L1\n"
+     "\tLIDP\tLIB_DIV16_DIVIDEND\n\tLDD\n"
+     "\tLIDP\tLIB_DIV16_DIVIDEND+1\n\tLP\t3\n\tMVMD\n\tRTN\n"
+     "LIB_DIV16_DIVISOR:\n\t.DW\t0\n"
+     "LIB_DIV16_DIVIDEND:\n\t.DW\t0\n"
+     "LIB_DIV16_REMAINDER:\n\t.DW\t0\n"}
 };
 
 #define RUNTIME_COUNT (sizeof(runtime_routines) / sizeof(runtime_routines[0]))
@@ -700,6 +766,127 @@ static int emit_comparison(CodegenContext *ctx, AstBinaryOp op)
     return ctx->error[0] == '\0' ? 0 : -1;
 }
 
+/* Left operand is on the evaluation stack, right operand in B:A. */
+static int emit_bitwise(CodegenContext *ctx, AstBinaryOp op)
+{
+    const char *instruction = op == AST_BINARY_BIT_AND ? "ANMA" : "ORMA";
+    if (ctx->stack_depth < 2) {
+        return set_error(ctx, "evaluation stack underflow");
+    }
+    if (op == AST_BINARY_BIT_XOR &&
+        codegen_require_runtime(ctx, "LIB_XOR16") != 0) {
+        return -1;
+    }
+    emit_inst_op(ctx, "LP", "0");
+    emit_inst(ctx, "EXAM");
+    emit_inst(ctx, "EXAB");
+    emit_inst_op(ctx, "LP", "1");
+    emit_inst(ctx, "EXAM");
+    emit_inst(ctx, "POP");
+    --ctx->stack_depth;
+    if (op == AST_BINARY_BIT_XOR) {
+        emit_inst(ctx, "EXAB");
+        emit_inst(ctx, "POP");
+        --ctx->stack_depth;
+        emit_inst_op_comment(ctx, "CALL", "LIB_XOR16", "Bitwise XOR");
+        return ctx->error[0] == '\0' ? 0 : -1;
+    }
+    emit_inst(ctx, instruction);
+    emit_inst_op(ctx, "LP", "0");
+    emit_inst(ctx, "POP");
+    --ctx->stack_depth;
+    emit_inst(ctx, instruction);
+    emit_inst(ctx, "EXAM");
+    emit_inst(ctx, "EXAB");
+    emit_inst_op(ctx, "LP", "1");
+    emit_inst(ctx, "EXAM");
+    emit_inst(ctx, "EXAB");
+    return ctx->error[0] == '\0' ? 0 : -1;
+}
+
+static int emit_shift(CodegenContext *ctx, AstBinaryOp op)
+{
+    const char *routine = "LIB_SHR16";
+    const char *entry = "LIB_SHR16";
+    switch (op) {
+    case AST_BINARY_SHIFT_LEFT: routine = entry = "LIB_SHL16"; break;
+    case AST_BINARY_MUL: routine = entry = "LIB_MUL16"; break;
+    case AST_BINARY_DIV: routine = entry = "LIB_DIV16"; break;
+    case AST_BINARY_MOD: routine = "LIB_DIV16"; entry = "LIB_MOD16"; break;
+    default: break;
+    }
+    if (ctx->stack_depth < 2) {
+        return set_error(ctx, "evaluation stack underflow");
+    }
+    if (codegen_require_runtime(ctx, routine) != 0) {
+        return -1;
+    }
+    emit_inst_op(ctx, "LP", "0");
+    emit_inst(ctx, "EXAM");
+    emit_inst(ctx, "EXAB");
+    emit_inst_op(ctx, "LP", "1");
+    emit_inst(ctx, "EXAM");
+    emit_inst(ctx, "POP");
+    --ctx->stack_depth;
+    emit_inst(ctx, "EXAB");
+    emit_inst(ctx, "POP");
+    --ctx->stack_depth;
+    emit_inst_op_comment(ctx, "CALL", entry, "Runtime shift/multiply/divide");
+    return ctx->error[0] == '\0' ? 0 : -1;
+}
+
+static int emit_unary(CodegenContext *ctx, const AstUnaryExpr *unary)
+{
+    if (unary->op != AST_UNARY_PLUS && unary->op != AST_UNARY_MINUS &&
+        unary->op != AST_UNARY_BITWISE_NOT &&
+        unary->op != AST_UNARY_LOGICAL_NOT) {
+        return set_error(ctx, "unsupported unary operator reached code generation");
+    }
+    if (emit_expression(ctx, unary->operand) != 0) {
+        return -1;
+    }
+    if (unary->op == AST_UNARY_PLUS) {
+        return 0;
+    }
+    if (unary->op == AST_UNARY_LOGICAL_NOT) {
+        char *nonzero = new_label(ctx);
+        char *done = new_label(ctx);
+        if (nonzero == NULL || done == NULL) {
+            free(nonzero);
+            free(done);
+            return -1;
+        }
+        emit_inst_op(ctx, "TSIA", "255");
+        emit_inst_op(ctx, "JPNZ", nonzero);
+        emit_inst(ctx, "EXAB");
+        emit_inst_op(ctx, "TSIA", "255");
+        emit_inst_op(ctx, "JPNZ", nonzero);
+        emit_inst_op_comment(ctx, "LIA", "1", "Logical not: operand is zero");
+        emit_inst_op(ctx, "JP", done);
+        emit_label(ctx, nonzero);
+        emit_inst_op(ctx, "LIA", "0");
+        emit_label(ctx, done);
+        emit_inst_op(ctx, "LIB", "0");
+        free(nonzero);
+        free(done);
+        return ctx->error[0] == '\0' ? 0 : -1;
+    }
+    emit_inst_op(ctx, "LP", "1");
+    emit_inst_op(ctx, unary->op == AST_UNARY_MINUS ? "ANIM" : "ORIM",
+                 unary->op == AST_UNARY_MINUS ? "0" : "255");
+    emit_inst_op(ctx, "LP", "0");
+    emit_inst_op(ctx, unary->op == AST_UNARY_MINUS ? "ANIM" : "ORIM",
+                 unary->op == AST_UNARY_MINUS ? "0" : "255");
+    emit_inst_comment(ctx, "SBB", unary->op == AST_UNARY_MINUS
+                      ? "Negate" : "Bitwise complement");
+    emit_inst_op(ctx, "LP", "1");
+    emit_inst(ctx, "LDM");
+    emit_inst(ctx, "EXAB");
+    emit_inst_op(ctx, "LP", "0");
+    emit_inst(ctx, "LDM");
+    return ctx->error[0] == '\0' ? 0 : -1;
+}
+
 static int emit_dynamic_array_access(CodegenContext *ctx,
                                      const AstIndexExpr *index,
                                      const AstExpr *value,
@@ -984,8 +1171,91 @@ static int push_loop(CodegenContext *ctx, const char *break_label,
     return 0;
 }
 
+static int emit_branch_true(CodegenContext *ctx, const AstExpr *expression,
+                            const char *label)
+{
+    if (emit_expression(ctx, expression) != 0) {
+        return -1;
+    }
+    emit_inst_op(ctx, "TSIA", "255");
+    emit_inst_op(ctx, "JPNZ", label);
+    emit_inst(ctx, "EXAB");
+    emit_inst_op(ctx, "TSIA", "255");
+    emit_inst_op(ctx, "JPNZ", label);
+    return ctx->error[0] == '\0' ? 0 : -1;
+}
+
+/* Short-circuit && and ||: the result is 0 or 1 in B:A. Operands are
+   tested one at a time, so nothing is left on the evaluation stack. */
+static int emit_logical(CodegenContext *ctx, const AstBinaryExpr *binary)
+{
+    int is_and = binary->op == AST_BINARY_LOGICAL_AND;
+    char *decided = new_label(ctx);
+    char *done = new_label(ctx);
+    int status = -1;
+
+    if (decided != NULL && done != NULL) {
+        if (is_and) {
+            status = emit_branch_false(ctx, binary->left, decided) ||
+                     emit_branch_false(ctx, binary->right, decided);
+        } else {
+            status = emit_branch_true(ctx, binary->left, decided) ||
+                     emit_branch_true(ctx, binary->right, decided);
+        }
+    }
+    if (status == 0) {
+        emit_inst_op(ctx, "LIA", is_and ? "1" : "0");
+        emit_inst_op(ctx, "JP", done);
+        emit_label(ctx, decided);
+        emit_inst_op(ctx, "LIA", is_and ? "0" : "1");
+        emit_label(ctx, done);
+        emit_inst_op(ctx, "LIB", "0");
+        status = ctx->error[0] == '\0' ? 0 : -1;
+    }
+    free(decided);
+    free(done);
+    return status;
+}
+
+static int emit_update(CodegenContext *ctx, SymtabUpdateRewrite *rewrite,
+                       int discard)
+{
+    if (!rewrite->postfix || discard) {
+        return emit_expression(ctx, &rewrite->assign.expression);
+    }
+    if (emit_expression(ctx, rewrite->lvalue) != 0 ||
+        codegen_emit_push(ctx, 2) != 0 ||
+        emit_expression(ctx, &rewrite->assign.expression) != 0) {
+        return -1;
+    }
+    return codegen_emit_pop(ctx, 2);
+}
+
+static int emit_discarded(CodegenContext *ctx, const AstExpr *expression)
+{
+    SymtabUpdateRewrite rewrite;
+    int update = symtab_update_rewrite(ctx->symbols, expression, &rewrite);
+
+    if (update < 0) {
+        return set_error(ctx, "unresolved pointer update reached code generation");
+    }
+    return update > 0 ? emit_update(ctx, &rewrite, 1)
+                      : emit_expression(ctx, expression);
+}
+
 static int emit_expression(CodegenContext *ctx, const AstExpr *expression)
 {
+    if (expression->node.kind == AST_NODE_UNARY_EXPR ||
+        expression->node.kind == AST_NODE_BINARY_EXPR) {
+        SymtabUpdateRewrite rewrite;
+        int update = symtab_update_rewrite(ctx->symbols, expression, &rewrite);
+        if (update < 0) {
+            return set_error(ctx, "unresolved pointer update reached code generation");
+        }
+        if (update > 0) {
+            return emit_update(ctx, &rewrite, 0);
+        }
+    }
     if (expression->node.kind == AST_NODE_CONSTANT_EXPR) {
         const AstConstantExpr *constant = (const AstConstantExpr *)expression;
         unsigned long value;
@@ -1118,10 +1388,21 @@ static int emit_expression(CodegenContext *ctx, const AstExpr *expression)
         }
         return ctx->error[0] == '\0' ? 0 : -1;
     }
+    if (expression->node.kind == AST_NODE_UNARY_EXPR) {
+        return emit_unary(ctx, (const AstUnaryExpr *)expression);
+    }
     if (expression->node.kind == AST_NODE_BINARY_EXPR) {
         const AstBinaryExpr *binary = (const AstBinaryExpr *)expression;
         size_t width = 2;
 
+        if (binary->op == AST_BINARY_LOGICAL_AND ||
+            binary->op == AST_BINARY_LOGICAL_OR) {
+            return emit_logical(ctx, binary);
+        }
+        if (binary->op == AST_BINARY_COMMA) {
+            return emit_discarded(ctx, binary->left) ||
+                   emit_expression(ctx, binary->right) ? -1 : 0;
+        }
         if (binary->op == AST_BINARY_ASSIGN) {
             ScalarLocation location;
             const ScalarSymbol *symbol = NULL;
@@ -1192,6 +1473,17 @@ static int emit_expression(CodegenContext *ctx, const AstExpr *expression)
         }
         if (binary->op == AST_BINARY_SUB) {
             return codegen_pop_sub(ctx, width);
+        }
+        if (binary->op == AST_BINARY_BIT_AND ||
+            binary->op == AST_BINARY_BIT_OR ||
+            binary->op == AST_BINARY_BIT_XOR) {
+            return emit_bitwise(ctx, binary->op);
+        }
+        if (binary->op == AST_BINARY_SHIFT_LEFT ||
+            binary->op == AST_BINARY_SHIFT_RIGHT ||
+            binary->op == AST_BINARY_MUL || binary->op == AST_BINARY_DIV ||
+            binary->op == AST_BINARY_MOD) {
+            return emit_shift(ctx, binary->op);
         }
         return set_error(ctx, "unsupported binary operator reached code generation");
     }
@@ -1399,7 +1691,7 @@ static int emit_statement(CodegenContext *ctx, const AstStmt *statement)
             }
         }
     } else if (statement->node.kind == AST_NODE_EXPR_STMT) {
-        return emit_expression(ctx, ((const AstExprStmt *)statement)->expression);
+        return emit_discarded(ctx, ((const AstExprStmt *)statement)->expression);
     } else if (statement->node.kind == AST_NODE_RETURN_STMT) {
         const AstExpr *value = ((const AstReturnStmt *)statement)->expression;
         if (ctx->return_label == NULL ||
@@ -1537,7 +1829,7 @@ static int emit_statement(CodegenContext *ctx, const AstStmt *statement)
             }
         }
         if (loop->init_expression != NULL &&
-            emit_expression(ctx, loop->init_expression) != 0) {
+            emit_discarded(ctx, loop->init_expression) != 0) {
             free(condition);
             free(step);
             free(done);
@@ -1561,7 +1853,7 @@ static int emit_statement(CodegenContext *ctx, const AstStmt *statement)
         }
         --ctx->loop_count;
         emit_label(ctx, step);
-        if ((loop->step != NULL && emit_expression(ctx, loop->step) != 0) ||
+        if ((loop->step != NULL && emit_discarded(ctx, loop->step) != 0) ||
             ctx->error[0] != '\0') {
             free(condition);
             free(step);
@@ -1918,7 +2210,7 @@ int codegen_program(CodegenContext *ctx, AstTranslationUnit *tu)
             if (!ctx->library_used[routine]) {
                 continue;
             }
-            for (label = 0; label < 3; ++label) {
+            for (label = 0; label < 10; ++label) {
                 const char *name = runtime_routines[routine].labels[label];
                 if (name != NULL && same_assembler_name(function->name, name)) {
                     return set_error(ctx,
