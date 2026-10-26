@@ -8,7 +8,23 @@
 typedef struct LoopLabels {
     const char *break_label;
     const char *continue_label;
+    size_t stack_depth;
+    int is_switch;
 } LoopLabels;
+
+typedef struct SwitchCaseEntry {
+    const AstStmt *statement;
+    unsigned long value;
+    char *label;
+} SwitchCaseEntry;
+
+typedef struct SwitchFrame {
+    struct SwitchFrame *previous;
+    SwitchCaseEntry *cases;
+    size_t count;
+    const AstStmt *default_statement;
+    char *default_label;
+} SwitchFrame;
 
 /* Unsigned B:A versus J:I comparisons from the legacy .lib files.
    Results are 0 or 255 in A; the caller clears B. */
@@ -140,6 +156,7 @@ struct CodegenContext {
     LoopLabels *loops;
     size_t loop_count;
     size_t loop_capacity;
+    SwitchFrame *switch_frame;
     char error[256];
 };
 
@@ -1156,19 +1173,245 @@ static int push_loop(CodegenContext *ctx, const char *break_label,
         LoopLabels *loops;
         if (capacity < ctx->loop_capacity ||
             capacity > (size_t)-1 / sizeof(*loops)) {
-            return set_error(ctx, "loop nesting exceeds supported range");
+            return set_error(ctx, "control nesting exceeds supported range");
         }
         loops = (LoopLabels *)realloc(ctx->loops, capacity * sizeof(*loops));
         if (loops == NULL) {
-            return set_error(ctx, "out of memory tracking loop labels");
+            return set_error(ctx, "out of memory tracking control labels");
         }
         ctx->loops = loops;
         ctx->loop_capacity = capacity;
     }
     ctx->loops[ctx->loop_count].break_label = break_label;
     ctx->loops[ctx->loop_count].continue_label = continue_label;
+    ctx->loops[ctx->loop_count].stack_depth = ctx->stack_depth;
+    ctx->loops[ctx->loop_count].is_switch = continue_label == NULL;
     ++ctx->loop_count;
     return 0;
+}
+
+static int collect_switch_cases(CodegenContext *ctx, const AstStmt *statement,
+                                SwitchFrame *frame)
+{
+    if (statement == NULL) {
+        return 0;
+    }
+    switch (statement->node.kind) {
+    case AST_NODE_SWITCH_STMT:
+        return 0;
+    case AST_NODE_COMPOUND_STMT: {
+        const AstCompoundStmt *block = (const AstCompoundStmt *)statement;
+        size_t index;
+        for (index = 0; index < block->item_count; ++index) {
+            const AstBlockItem *item = &block->items[index];
+            if (item->kind == AST_BLOCK_STATEMENT &&
+                collect_switch_cases(ctx, item->as.statement, frame) != 0) {
+                return -1;
+            }
+        }
+        return 0;
+    }
+    case AST_NODE_CASE_STMT: {
+        const AstCaseStmt *case_statement = (const AstCaseStmt *)statement;
+        SwitchCaseEntry *cases;
+        unsigned long value;
+        if (symtab_initializer_constant(case_statement->value, &value) != 0) {
+            return set_error(ctx, "case label is not an integer constant");
+        }
+        cases = (SwitchCaseEntry *)realloc(frame->cases,
+            (frame->count + 1) * sizeof(*cases));
+        if (cases == NULL) {
+            return set_error(ctx, "out of memory collecting switch cases");
+        }
+        frame->cases = cases;
+        frame->cases[frame->count].statement = statement;
+        frame->cases[frame->count].value = value;
+        frame->cases[frame->count].label = new_label(ctx);
+        if (frame->cases[frame->count].label == NULL) {
+            return -1;
+        }
+        ++frame->count;
+        return collect_switch_cases(ctx, case_statement->body, frame);
+    }
+    case AST_NODE_DEFAULT_STMT: {
+        const AstDefaultStmt *default_statement =
+            (const AstDefaultStmt *)statement;
+        frame->default_statement = statement;
+        frame->default_label = new_label(ctx);
+        if (frame->default_label == NULL) {
+            return -1;
+        }
+        return collect_switch_cases(ctx, default_statement->body, frame);
+    }
+    case AST_NODE_IF_STMT: {
+        const AstIfStmt *conditional = (const AstIfStmt *)statement;
+        return collect_switch_cases(ctx, conditional->then_branch, frame) != 0 ||
+               collect_switch_cases(ctx, conditional->else_branch, frame) != 0
+            ? -1 : 0;
+    }
+    case AST_NODE_WHILE_STMT:
+        return collect_switch_cases(ctx,
+            ((const AstWhileStmt *)statement)->body, frame);
+    case AST_NODE_DO_WHILE_STMT:
+        return collect_switch_cases(ctx,
+            ((const AstDoWhileStmt *)statement)->body, frame);
+    case AST_NODE_FOR_STMT:
+        return collect_switch_cases(ctx,
+            ((const AstForStmt *)statement)->body, frame);
+    case AST_NODE_LABEL_STMT:
+        return collect_switch_cases(ctx,
+            ((const AstLabelStmt *)statement)->body, frame);
+    default:
+        return 0;
+    }
+}
+
+static int emit_case_table(CodegenContext *ctx, const unsigned long *values,
+                           char *const *labels, size_t count,
+                           const char *no_match)
+{
+    size_t index;
+    emit_inst(ctx, "CASE");
+    for (index = 0; index < count; ++index) {
+        char line[128];
+        int length = snprintf(line, sizeof(line), "\t%lu\t%s\n",
+                              values[index], labels[index]);
+        if (length < 0 || (size_t)length >= sizeof(line) ||
+            append_text(ctx, line, (size_t)length) != 0) {
+            return set_error(ctx, "switch dispatch table entry is too long");
+        }
+    }
+    {
+        char line[128];
+        int length = snprintf(line, sizeof(line), "\tELSE\t%s\n", no_match);
+        if (length < 0 || (size_t)length >= sizeof(line) ||
+            append_text(ctx, line, (size_t)length) != 0) {
+            return set_error(ctx, "switch default table entry is too long");
+        }
+    }
+    emit_inst(ctx, "ENDCASE");
+    return ctx->error[0] == '\0' ? 0 : -1;
+}
+
+static void emit_pops(CodegenContext *ctx, size_t count)
+{
+    while (count-- != 0) {
+        emit_inst(ctx, "POP");
+    }
+}
+
+/* PTC pushes the address following ENDCASE, so every CASE target runs with
+   two extra stack bytes and returns there with RTN. */
+static int emit_switch_dispatch(CodegenContext *ctx, SwitchFrame *frame,
+                                const char *done, const char *body_end,
+                                int word_control)
+{
+    size_t index, group_count = 0;
+    const char *no_match = frame->default_label != NULL
+        ? frame->default_label : body_end;
+    unsigned long *values;
+    char **labels;
+    char *high_no_match;
+    int status = -1;
+    if (frame->count == 0) {
+        if (frame->default_label != NULL) {
+            emit_inst_op(ctx, "CALL", frame->default_label);
+        }
+        emit_inst_op(ctx, "JP", done);
+        return ctx->error[0] == '\0' ? 0 : -1;
+    }
+    values = (unsigned long *)malloc(frame->count * sizeof(*values));
+    labels = (char **)calloc(frame->count, sizeof(*labels));
+    if (values == NULL || labels == NULL) {
+        free(values);
+        free(labels);
+        return set_error(ctx, "out of memory emitting switch dispatch");
+    }
+    if (!word_control) {
+        for (index = 0; index < frame->count; ++index) {
+            values[index] = frame->cases[index].value;
+            labels[index] = frame->cases[index].label;
+        }
+        if (emit_case_table(ctx, values, labels, frame->count, no_match) == 0) {
+            emit_inst_op(ctx, "JP", done);
+            status = ctx->error[0] == '\0' ? 0 : -1;
+        }
+        free(values);
+        free(labels);
+        return status;
+    }
+    high_no_match = new_label(ctx);
+    if (high_no_match == NULL) {
+        free(values);
+        free(labels);
+        return -1;
+    }
+    for (index = 0; index < frame->count; ++index) {
+        unsigned long high = frame->cases[index].value >> 8;
+        size_t group;
+        for (group = 0; group < group_count && values[group] != high; ++group) {
+        }
+        if (group == group_count) {
+            values[group_count] = high;
+            labels[group_count] = new_label(ctx);
+            if (labels[group_count++] == NULL) {
+                goto word_cleanup;
+            }
+        }
+    }
+    /* Keep the low byte on the stack: B does not survive CASE. */
+    if (codegen_emit_push(ctx, 1) != 0) {
+        goto word_cleanup;
+    }
+    --ctx->stack_depth;
+    emit_inst(ctx, "EXAB");
+    if (emit_case_table(ctx, values, labels, group_count, high_no_match) != 0) {
+        goto word_cleanup;
+    }
+    for (index = 0; index < group_count; ++index) {
+        size_t item, low_count = 0;
+        unsigned long *low_values =
+            (unsigned long *)malloc(frame->count * sizeof(*low_values));
+        char **low_labels = (char **)malloc(frame->count * sizeof(*low_labels));
+        if (low_values == NULL || low_labels == NULL) {
+            free(low_values);
+            free(low_labels);
+            (void)set_error(ctx, "out of memory emitting word switch dispatch");
+            goto word_cleanup;
+        }
+        for (item = 0; item < frame->count; ++item) {
+            if ((frame->cases[item].value >> 8) == values[index]) {
+                low_values[low_count] = frame->cases[item].value & 255UL;
+                low_labels[low_count++] = frame->cases[item].label;
+            }
+        }
+        emit_label(ctx, labels[index]);
+        emit_pops(ctx, 3);
+        if (emit_case_table(ctx, low_values, low_labels, low_count,
+                            no_match) != 0) {
+            free(low_values);
+            free(low_labels);
+            goto word_cleanup;
+        }
+        emit_inst_op(ctx, "JP", done);
+        free(low_values);
+        free(low_labels);
+    }
+    emit_label(ctx, high_no_match);
+    emit_pops(ctx, 3);
+    if (frame->default_label != NULL) {
+        emit_inst_op(ctx, "CALL", frame->default_label);
+    }
+    emit_inst_op(ctx, "JP", done);
+    status = ctx->error[0] == '\0' ? 0 : -1;
+word_cleanup:
+    for (index = 0; index < group_count; ++index) {
+        free(labels[index]);
+    }
+    free(high_no_match);
+    free(values);
+    free(labels);
+    return status;
 }
 
 static int emit_branch_true(CodegenContext *ctx, const AstExpr *expression,
@@ -1701,6 +1944,24 @@ static int emit_statement(CodegenContext *ctx, const AstStmt *statement)
         if (value != NULL && symtab_type_width(ctx->return_type) == 1) {
             promote_byte(ctx, ctx->return_type->as.base.is_unsigned);
         }
+        if (ctx->stack_depth != 0) {
+            /* Drop CASE return addresses of enclosing switches; keep BA. */
+            if (value != NULL) {
+                emit_inst_op(ctx, "LP", "0");
+                emit_inst(ctx, "EXAM");
+                emit_inst(ctx, "EXAB");
+                emit_inst_op(ctx, "LP", "1");
+                emit_inst(ctx, "EXAM");
+            }
+            emit_pops(ctx, ctx->stack_depth);
+            if (value != NULL) {
+                emit_inst_op(ctx, "LP", "1");
+                emit_inst(ctx, "LDM");
+                emit_inst(ctx, "EXAB");
+                emit_inst_op(ctx, "LP", "0");
+                emit_inst(ctx, "LDM");
+            }
+        }
         emit_inst_op(ctx, "JP", ctx->return_label);
     } else if (statement->node.kind == AST_NODE_IF_STMT) {
         const AstIfStmt *conditional = (const AstIfStmt *)statement;
@@ -1865,16 +2126,114 @@ static int emit_statement(CodegenContext *ctx, const AstStmt *statement)
         free(condition);
         free(step);
         free(done);
+    } else if (statement->node.kind == AST_NODE_SWITCH_STMT) {
+        const AstSwitchStmt *selection = (const AstSwitchStmt *)statement;
+        SwitchFrame frame;
+        char *done = new_label(ctx);
+        char *body_end = new_label(ctx);
+        size_t width;
+        size_t index;
+        int status = -1;
+        memset(&frame, 0, sizeof(frame));
+        if (done == NULL || body_end == NULL) {
+            free(done);
+            free(body_end);
+            return -1;
+        }
+        if (symtab_switch_width(ctx->symbols, selection->expression, &width) != 0 ||
+            collect_switch_cases(ctx, selection->body, &frame) != 0) {
+            goto switch_cleanup;
+        }
+        if (emit_expression(ctx, selection->expression) != 0 ||
+            emit_switch_dispatch(ctx, &frame, done, body_end, width == 2) != 0) {
+            goto switch_cleanup;
+        }
+        ctx->stack_depth += 2;
+        if (push_loop(ctx, done, NULL) != 0) {
+            ctx->stack_depth -= 2;
+            goto switch_cleanup;
+        }
+        frame.previous = ctx->switch_frame;
+        ctx->switch_frame = &frame;
+        if (emit_statement(ctx, selection->body) != 0) {
+            ctx->switch_frame = frame.previous;
+            --ctx->loop_count;
+            ctx->stack_depth -= 2;
+            goto switch_cleanup;
+        }
+        ctx->switch_frame = frame.previous;
+        --ctx->loop_count;
+        emit_label(ctx, body_end);
+        emit_inst(ctx, "RTN");
+        ctx->stack_depth -= 2;
+        emit_label(ctx, done);
+        status = ctx->error[0] == '\0' ? 0 : -1;
+switch_cleanup:
+        for (index = 0; index < frame.count; ++index) {
+            free(frame.cases[index].label);
+        }
+        free(frame.cases);
+        free(frame.default_label);
+        free(done);
+        free(body_end);
+        if (status != 0 && ctx->error[0] == '\0') {
+            return set_error(ctx, "failed to emit switch statement");
+        }
+        return status;
+    } else if (statement->node.kind == AST_NODE_CASE_STMT) {
+        const AstStmt *target = statement;
+        SwitchCaseEntry *entry;
+        for (entry = ctx->switch_frame == NULL ? NULL :
+                ctx->switch_frame->cases;
+             ctx->switch_frame != NULL && entry <
+                ctx->switch_frame->cases + ctx->switch_frame->count; ++entry) {
+            if (entry->statement == target) {
+                emit_label(ctx, entry->label);
+                return emit_statement(ctx, ((const AstCaseStmt *)statement)->body);
+            }
+        }
+        return set_error(ctx, "case label has no enclosing switch dispatch");
+    } else if (statement->node.kind == AST_NODE_DEFAULT_STMT) {
+        if (ctx->switch_frame == NULL ||
+            ctx->switch_frame->default_statement != statement) {
+            return set_error(ctx, "default label has no enclosing switch dispatch");
+        }
+        emit_label(ctx, ctx->switch_frame->default_label);
+        return emit_statement(ctx,
+            ((const AstDefaultStmt *)statement)->body);
     } else if (statement->node.kind == AST_NODE_BREAK_STMT ||
                statement->node.kind == AST_NODE_CONTINUE_STMT) {
         const char *label;
-        if (ctx->loop_count == 0) {
-            return set_error(ctx, "loop transfer has no enclosing loop");
+        size_t index;
+        const LoopLabels *target = NULL;
+        if (statement->node.kind == AST_NODE_BREAK_STMT) {
+            if (ctx->loop_count == 0) {
+                return set_error(ctx, "break has no enclosing loop or switch");
+            }
+            target = &ctx->loops[ctx->loop_count - 1];
+            label = target->break_label;
+        } else {
+            label = NULL;
+            for (index = ctx->loop_count; index > 0; --index) {
+                if (ctx->loops[index - 1].continue_label != NULL) {
+                    target = &ctx->loops[index - 1];
+                    label = target->continue_label;
+                    break;
+                }
+            }
+            if (label == NULL) {
+                return set_error(ctx, "continue has no enclosing loop");
+            }
         }
-        label = statement->node.kind == AST_NODE_BREAK_STMT
-            ? ctx->loops[ctx->loop_count - 1].break_label
-            : ctx->loops[ctx->loop_count - 1].continue_label;
-        emit_inst_op(ctx, "JP", label);
+        if (ctx->stack_depth < target->stack_depth) {
+            return set_error(ctx, "control transfer has inconsistent stack depth");
+        }
+        emit_pops(ctx, ctx->stack_depth - target->stack_depth);
+        if (statement->node.kind == AST_NODE_BREAK_STMT && target->is_switch) {
+            emit_inst(ctx, "RTN");
+        } else {
+            emit_inst_op(ctx, "JP", label);
+        }
     }
     return ctx->error[0] == '\0' ? 0 : -1;
 }

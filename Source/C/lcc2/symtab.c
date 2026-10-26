@@ -51,6 +51,7 @@ struct ScalarSymbols {
     size_t local_bytes;
     size_t parameter_bytes;
     size_t loop_depth;
+    size_t switch_depth;
     AstTranslationUnit *unit;
     int returned;
     int resolved;
@@ -1436,6 +1437,21 @@ static int expression_unsigned_word(const ScalarSymbols *table,
                constant->type->as.base.base == AST_TYPE_INT &&
                constant->type->as.base.is_unsigned;
     }
+    if (expression->node.kind == AST_NODE_CAST_EXPR) {
+        const AstCastExpr *cast = (const AstCastExpr *)expression;
+        return cast->type != NULL && cast->type->kind == AST_TYPE_BASE &&
+               cast->type->as.base.base == AST_TYPE_INT &&
+               cast->type->as.base.is_unsigned;
+    }
+    if (expression->node.kind == AST_NODE_CALL_EXPR) {
+        const AstCallExpr *call = (const AstCallExpr *)expression;
+        const AstIdentExpr *identifier = (const AstIdentExpr *)call->function;
+        const AstFunctionDecl *function =
+            symtab_function(table, identifier->name);
+        return function != NULL && function->return_type->kind == AST_TYPE_BASE &&
+               function->return_type->as.base.base == AST_TYPE_INT &&
+               function->return_type->as.base.is_unsigned;
+    }
     if (expression->node.kind == AST_NODE_UNARY_EXPR) {
         const AstUnaryExpr *unary = (const AstUnaryExpr *)expression;
         return unary->op != AST_UNARY_LOGICAL_NOT &&
@@ -1457,6 +1473,80 @@ static int expression_unsigned_word(const ScalarSymbols *table,
                expression_unsigned_word(table, binary->right);
     }
     return 0;
+}
+
+static int expression_unsigned_byte(const ScalarSymbols *table,
+                                  const AstExpr *expression)
+{
+    if (expression->node.kind == AST_NODE_DEREFERENCE_EXPR) {
+        ResolvedDereference dereference;
+        return symtab_dereference_info(table,
+            (const AstDereferenceExpr *)expression, &dereference) == 0 &&
+            dereference.width == 1 && dereference.is_unsigned;
+    }
+    if (expression->node.kind == AST_NODE_MEMBER_EXPR) {
+        ResolvedMemberAccess access;
+        return symtab_member_access(table,
+            (const AstMemberExpr *)expression, &access) == 0 &&
+            access.location.width == 1 && access.location.is_unsigned;
+    }
+    if (expression->node.kind == AST_NODE_IDENT_EXPR ||
+        expression->node.kind == AST_NODE_INDEX_EXPR) {
+        const AstExpr *identifier = expression->node.kind == AST_NODE_INDEX_EXPR
+            ? ((const AstIndexExpr *)expression)->array : expression;
+        const ScalarSymbol *symbol = symtab_identifier(table, identifier);
+        return symbol != NULL && symbol->location.width == 1 &&
+               symbol->location.is_unsigned;
+    }
+    if (expression->node.kind == AST_NODE_CAST_EXPR) {
+        const AstCastExpr *cast = (const AstCastExpr *)expression;
+        return cast->type != NULL && cast->type->kind == AST_TYPE_BASE &&
+               cast->type->as.base.base == AST_TYPE_CHAR &&
+               cast->type->as.base.is_unsigned;
+    }
+    if (expression->node.kind == AST_NODE_CALL_EXPR) {
+        const AstCallExpr *call = (const AstCallExpr *)expression;
+        const AstIdentExpr *identifier = (const AstIdentExpr *)call->function;
+        const AstFunctionDecl *function =
+            symtab_function(table, identifier->name);
+        return function != NULL && function->return_type->kind == AST_TYPE_BASE &&
+               function->return_type->as.base.base == AST_TYPE_CHAR &&
+               function->return_type->as.base.is_unsigned;
+    }
+    return 0;
+}
+
+int symtab_switch_width(const ScalarSymbols *table, const AstExpr *expression,
+                        size_t *width)
+{
+    if (expression == NULL) {
+        return -1;
+    }
+    if (expression->node.kind == AST_NODE_UNARY_EXPR &&
+        ((const AstUnaryExpr *)expression)->op == AST_UNARY_LOGICAL_NOT) {
+        return -1;
+    }
+    if (expression->node.kind == AST_NODE_BINARY_EXPR) {
+        AstBinaryOp op = ((const AstBinaryExpr *)expression)->op;
+        if (op == AST_BINARY_LESS || op == AST_BINARY_LESS_EQUAL ||
+            op == AST_BINARY_GREATER || op == AST_BINARY_GREATER_EQUAL ||
+            op == AST_BINARY_EQUAL || op == AST_BINARY_NOT_EQUAL ||
+            op == AST_BINARY_LOGICAL_AND || op == AST_BINARY_LOGICAL_OR) {
+            return -1;
+        }
+    }
+    if (table == NULL || expression == NULL || width == NULL) {
+        return -1;
+    }
+    if (expression_unsigned_byte(table, expression)) {
+        *width = 1;
+        return 0;
+    }
+    if (expression_unsigned_word(table, expression)) {
+        *width = 2;
+        return 0;
+    }
+    return -1;
 }
 
 static int expression_nonnegative(const ScalarSymbols *table,
@@ -1590,10 +1680,105 @@ static int resolve_local_declaration(ScalarSymbols *table,
     return 0;
 }
 
+typedef struct SwitchLabels {
+    unsigned long *values;
+    size_t count;
+    size_t capacity;
+    unsigned char *seen;
+    size_t defaults;
+} SwitchLabels;
+
+static int collect_switch_labels(ScalarSymbols *table, const AstStmt *statement,
+                                 SwitchLabels *labels)
+{
+    if (statement == NULL) {
+        return 0;
+    }
+    switch (statement->node.kind) {
+    case AST_NODE_SWITCH_STMT:
+        return 0;
+    case AST_NODE_COMPOUND_STMT: {
+        const AstCompoundStmt *block = (const AstCompoundStmt *)statement;
+        size_t index;
+        for (index = 0; index < block->item_count; ++index) {
+            const AstBlockItem *item = &block->items[index];
+            if (item->kind == AST_BLOCK_STATEMENT &&
+                collect_switch_labels(table, item->as.statement, labels) != 0) {
+                return -1;
+            }
+        }
+        return 0;
+    }
+    case AST_NODE_CASE_STMT: {
+        const AstCaseStmt *case_statement = (const AstCaseStmt *)statement;
+        unsigned long value;
+        if (symtab_initializer_constant(case_statement->value, &value) != 0 ||
+            (!expression_nonnegative(table, case_statement->value) &&
+             !expression_unsigned_word(table, case_statement->value))) {
+            return fail(table, "case label is not a supported nonnegative integer constant",
+                        NULL);
+        }
+        if (value > 65535UL ||
+            (labels->seen[value >> 3] & (unsigned char)(1u << (value & 7))) != 0) {
+            return fail(table, "duplicate case value", NULL);
+        }
+        labels->seen[value >> 3] |= (unsigned char)(1u << (value & 7));
+        if (labels->count == labels->capacity) {
+            size_t capacity = labels->capacity == 0 ? 8 : labels->capacity * 2;
+            unsigned long *values;
+            if (capacity < labels->capacity ||
+                capacity > (size_t)-1 / sizeof(*values)) {
+                return fail(table, "too many switch case labels", NULL);
+            }
+            values = (unsigned long *)realloc(labels->values,
+                                               capacity * sizeof(*values));
+            if (values == NULL) {
+                return fail(table, "out of memory validating switch labels", NULL);
+            }
+            labels->values = values;
+            labels->capacity = capacity;
+        }
+        labels->values[labels->count++] = value;
+        return collect_switch_labels(table, case_statement->body, labels);
+    }
+    case AST_NODE_DEFAULT_STMT: {
+        const AstDefaultStmt *default_statement =
+            (const AstDefaultStmt *)statement;
+        if (++labels->defaults > 1) {
+            return fail(table, "duplicate default label", NULL);
+        }
+        return collect_switch_labels(table, default_statement->body, labels);
+    }
+    case AST_NODE_IF_STMT: {
+        const AstIfStmt *conditional = (const AstIfStmt *)statement;
+        return collect_switch_labels(table, conditional->then_branch, labels) != 0 ||
+               collect_switch_labels(table, conditional->else_branch, labels) != 0
+            ? -1 : 0;
+    }
+    case AST_NODE_WHILE_STMT:
+        return collect_switch_labels(table,
+            ((const AstWhileStmt *)statement)->body, labels);
+    case AST_NODE_DO_WHILE_STMT:
+        return collect_switch_labels(table,
+            ((const AstDoWhileStmt *)statement)->body, labels);
+    case AST_NODE_FOR_STMT:
+        return collect_switch_labels(table,
+            ((const AstForStmt *)statement)->body, labels);
+    case AST_NODE_LABEL_STMT:
+        return collect_switch_labels(table,
+            ((const AstLabelStmt *)statement)->body, labels);
+    default:
+        return 0;
+    }
+}
+
 static int resolve_statement(ScalarSymbols *table, const AstStmt *statement)
 {
     if (table->returned) {
-        return fail(table, "statements after return are not supported yet", NULL);
+        if (table->switch_depth == 0) {
+            return fail(table, "statements after return are not supported yet", NULL);
+        }
+        table->returned = 0;
     }
     switch (statement->node.kind) {
     case AST_NODE_COMPOUND_STMT: {
@@ -1756,10 +1941,121 @@ static int resolve_statement(ScalarSymbols *table, const AstStmt *statement)
         --table->scope;
         return 0;
     }
+    case AST_NODE_SWITCH_STMT: {
+        const AstSwitchStmt *selection = (const AstSwitchStmt *)statement;
+        SwitchLabels labels = {0};
+        int was_returned = table->returned;
+        size_t switch_width;
+        labels.seen = (unsigned char *)calloc(8192, 1);
+        if (labels.seen == NULL) {
+            return fail(table, "out of memory validating switch labels", NULL);
+        }
+        if (expression_contains_void_call(table, selection->expression) ||
+            resolve_expression(table, selection->expression) != 0) {
+            free(labels.values);
+            free(labels.seen);
+            return -1;
+        }
+        if (symtab_switch_width(table, selection->expression, &switch_width) != 0) {
+            free(labels.values);
+            free(labels.seen);
+            return fail(table, "switch controlling expression must be unsigned",
+                        NULL);
+        }
+        if (collect_switch_labels(table, selection->body, &labels) != 0) {
+            free(labels.values);
+            free(labels.seen);
+            return -1;
+        }
+        if (switch_width == 1 && labels.count > 255) {
+            free(labels.values);
+            free(labels.seen);
+            return fail(table, "byte switch exceeds the PASM CASE limit of 255 labels",
+                        NULL);
+        }
+        {
+            size_t index;
+            unsigned char high_seen[256] = {0};
+            unsigned int low_counts[256] = {0};
+            size_t high_count = 0;
+            for (index = 0; index < labels.count; ++index) {
+                if (labels.values[index] > 65535UL) {
+                    free(labels.values);
+                    free(labels.seen);
+                    return fail(table, "case value exceeds the target integer range",
+                                NULL);
+                }
+                if (switch_width == 1 && labels.values[index] > 255UL) {
+                    free(labels.values);
+                    free(labels.seen);
+                    return fail(table, "case value exceeds unsigned byte switch range",
+                                NULL);
+                }
+                if (switch_width == 2) {
+                    unsigned int high = (unsigned int)(labels.values[index] >> 8);
+                    if (!high_seen[high]) {
+                        high_seen[high] = 1;
+                        ++high_count;
+                    }
+                    if (++low_counts[high] > 255) {
+                        free(labels.values);
+                        free(labels.seen);
+                        return fail(table,
+                            "word switch high-byte group exceeds the PASM CASE limit of 255 labels",
+                            NULL);
+                    }
+                }
+            }
+            if (switch_width == 2 && high_count > 255) {
+                free(labels.values);
+                free(labels.seen);
+                return fail(table,
+                    "word switch exceeds the PASM high-byte CASE limit of 255 groups",
+                    NULL);
+            }
+        }
+        free(labels.values);
+        free(labels.seen);
+        ++table->switch_depth;
+        if (resolve_statement(table, selection->body) != 0) {
+            --table->switch_depth;
+            return -1;
+        }
+        --table->switch_depth;
+        table->returned = was_returned;
+        return 0;
+    }
+    case AST_NODE_CASE_STMT: {
+        int was_returned = table->returned;
+        if (table->switch_depth == 0) {
+            return fail(table, "case label used outside a switch", NULL);
+        }
+        if (resolve_statement(table, ((const AstCaseStmt *)statement)->body) != 0) {
+            return -1;
+        }
+        table->returned = was_returned;
+        return 0;
+    }
+    case AST_NODE_DEFAULT_STMT: {
+        int was_returned = table->returned;
+        if (table->switch_depth == 0) {
+            return fail(table, "default label used outside a switch", NULL);
+        }
+        if (resolve_statement(table,
+                ((const AstDefaultStmt *)statement)->body) != 0) {
+            return -1;
+        }
+        table->returned = was_returned;
+        return 0;
+    }
     case AST_NODE_BREAK_STMT:
+        if (table->loop_depth == 0 && table->switch_depth == 0) {
+            return fail(table, "break or continue used outside a loop", NULL);
+        }
+        return 0;
     case AST_NODE_CONTINUE_STMT:
         if (table->loop_depth == 0) {
-            return fail(table, "break or continue used outside a loop", NULL);
+            return fail(table, "continue used outside a loop", NULL);
         }
         return 0;
     case AST_NODE_RETURN_STMT: {

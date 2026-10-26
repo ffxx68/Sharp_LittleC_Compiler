@@ -90,7 +90,7 @@ collisions. See the project README for the integrated BASIC-caller test.
 | Types | `char`, `unsigned char`, `signed char`, `int`, `unsigned int`; `void` function returns |
 | Functions | Byte/word parameters by value, compatible prototypes, direct calls to definitions in the same translation unit; CLI `main` must be parameterless |
 | Variables | Fixed-address globals, automatic locals, and single-dimensional byte/word arrays; scalar and brace-list initialization |
-| Statements | Compound blocks, expression statements, empty statements, `if`/`else`, `while`, `do`/`while`, expression-initialized `for`, `break`, `continue`, `return` |
+| Statements | Compound blocks, expression statements, empty statements, `if`/`else`, `while`, `do`/`while`, expression-initialized `for`, `switch`/`case`/`default`, `break`, `continue`, `return` |
 | Expressions | 16-bit integer constants, character constants, scalar identifiers, constant/runtime array subscripts, direct function calls, `=`, `+`, `-`, `*`, `/`, `%`, `&`, `|`, `^`, `~`, `<<`, `>>`, unary `+`/`-`/`!`, `&&`, `\|\|`, comma, `==`, `!=`, unsigned `<`, `<=`, `>`, `>=`, parentheses |
 | Pointers and structures | Byte/word pointers (assignment, copy, null, parameters, indirect loads/stores) and `->` member access through pointers to fixed-address structures |
 | Names | Case-sensitive lookup, nested block scopes, and local-over-global shadowing |
@@ -110,7 +110,23 @@ variables, array elements, members and dereferences, but the target must not
 contain side effects (no calls, assignments or `++` inside the subscript).
 Pointer variables accept `++`, `--`, `+=` and `-=`, scaled by the pointee size.
 
-`switch`, `goto`, static/extern objects, external function calls, casts,
+Switches accept unsigned byte and unsigned word controlling expressions and
+nonnegative integer constant case labels in the corresponding range. Case
+labels fall through in source order; `break` exits the nearest loop or switch,
+and `continue` skips intervening switches to target the enclosing loop.
+Duplicate case/default labels and labels outside a switch are rejected. Signed
+controlling expressions and negative signed case labels remain unsupported until
+Task 5.3.9. Dispatch uses PASM `CASE`/`ENDCASE` tables instead of inline
+comparison chains: byte controls dispatch directly on A, while word controls
+dispatch first on the high byte and then on the low byte. Each table's explicit
+PASM `ELSE` entry routes unmatched values to the C default or switch exit.
+PASM's CASE table
+stores a one-byte value plus a 16-bit target per entry and keeps the entry
+count in the one-byte H register. Each generated table has at most 255 entries;
+word switches may contain more than 255 cases as long as there are at most 255
+high-byte groups and at most 255 cases in each group.
+
+`goto`, static/extern objects, external function calls, casts,
 `sizeof`, the conditional
 `?:` operator, floating point, other pointer arithmetic, pointer-to-pointer types,
 pointer returns and addresses of automatic locals are not implemented.

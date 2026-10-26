@@ -64,7 +64,8 @@ constant and runtime-index reads/writes are supported, alongside local expressio
 initializers, assignments (plain and compound), `++`/`--`, `+ - * / %`,
 `& | ^ ~ << >>`, `!`, `&&`, `||`, the comma operator, equality, unsigned
 relational comparisons, structures with `.`/`->` member access, conditionals, `while`, `do`/`while`, and expression-initialized
-`for` loops, including `break` and `continue`. Functions accept named byte/word
+`for` loops, `switch`/`case`/`default`, and correctly nested `break` and
+`continue`. Functions accept named byte/word
 parameters by value and support direct calls, including recursion and nested
 calls. Prototypes must match definitions; calls require a definition in the
 translation unit. The entry-point `main` remains parameterless. A `for` step
@@ -72,7 +73,7 @@ executes after its body, and `continue` targets the step. Signed relational
 comparisons, `/`, `%` and `>>` are rejected unless an operand is provably
 unsigned or nonnegative (signed semantics are deferred to roadmap 5.3.9).
 Compound/increment operands must be side-effect-free lvalues. Non-void
-functions require a return. Static/extern storage, `switch`, unions, and
+Functions require a return. Static/extern storage, unions, and
 statements after a return are not yet supported by the resolver. Byte/word pointers to globals or constant-
 index elements of global arrays in register or XRAM storage are 16-bit values;
 pointer locals and fixed-address global pointer objects support initialization,
@@ -301,6 +302,22 @@ The fixture checks `*`, `/` and `%` (truncation, zero operands, runtime zero
 divisor, mixed expressions) with results at `&E720`. Success requires
 `status="PASS"`. `/` and `%` on signed operands are rejected until signed
 semantics are added.
+
+## Switch runtime test in MAME
+
+Compile and assemble `tests\pc1403_switch.c`, then in a **disposable**
+bridge-enabled PC-1403 session load `pc1403_key.lua` and run:
+
+```lua
+dofile([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\tests\pc1403_switch.lua]])
+lcc2_switch_test([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\build\pc1403_switch.bin]])
+```
+
+The fixture checks byte and staged word dispatch, single evaluation,
+fallthrough, default selection, nested switches, `break`, and `continue`
+targeting the enclosing loop. Results are checked at `&E720`; `&E740` records
+the controlling-expression call count. Success requires `status="PASS"` after
+ten runs with BASIC register restoration and responsiveness verified.
 
 ## Compound assignment and increment/decrement runtime test in MAME
 

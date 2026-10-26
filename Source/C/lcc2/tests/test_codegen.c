@@ -1125,8 +1125,110 @@ static void test_multiply_divide(void)
     ast_arena_destroy(arena);
 }
 
+static void test_standard_switch_dispatch(void)
+{
+    AstArena *arena = ast_arena_create();
+    CodegenContext *ctx = codegen_context_create();
+    AstTranslationUnit *unit = parse(arena,
+        "unsigned char choose(void) { return 1; }"
+        "unsigned int main(void) {"
+        " unsigned char value = 0;"
+        " switch (choose()) {"
+        " case 1: value = 2;"
+        " case 2: value = 3; break;"
+        " default: value = 4;"
+        " }"
+        " { unsigned int word = 0x0102;"
+        "   switch (word) {"
+        " case 0x0102: value = 5;"
+        "   switch (value) { case 5: value = 6; break;"
+        "                  default: value = 7; }"
+        "   break;"
+        "   case 0x0103: value = 6; break;"
+        "   case 0x0204: value = 7; default: value = 8;"
+        "   }"
+        " }"
+        " return value;"
+        "}");
+    const char *assembly;
+    const char *case_one;
+    char target[32];
+    unsigned long case_value;
+
+    assert(arena != NULL && ctx != NULL);
+    assert(codegen_program(ctx, unit) == 0);
+    assembly = codegen_output(ctx);
+    assert(occurrences(assembly, "\tCASE\n") == 5);
+    assert(occurrences(assembly, "\tCALL\tchoose") == 1);
+    assert(strstr(assembly, "LIB_CP") == NULL);
+    case_one = strstr(assembly, "\t1\tLB");
+    assert(case_one != NULL);
+    assert(sscanf(case_one, "\t%lu\t%31s", &case_value, target) == 2);
+    assert(case_value == 1);
+    {
+        char label[40];
+        (void)snprintf(label, sizeof(label), "  %s:\n", target);
+        assert(strstr(assembly, label) != NULL);
+    }
+    assert(strstr(assembly, "\tELSE\tLB") != NULL);
+    assert(strstr(assembly, "\tELSE\tLB") < strstr(assembly, "\tENDCASE\n"));
+    assert(strstr(assembly, "EXAB\n\tCASE\n") != NULL);
+    assert(strstr(assembly, "EXAB\n\tCASE\n\t1\tLB") != NULL);
+    assert(codegen_stack_depth(ctx) == 0);
+    codegen_context_destroy(ctx);
+    ast_arena_destroy(arena);
+
+    arena = ast_arena_create();
+    ctx = codegen_context_create();
+    unit = parse(arena,
+        "unsigned int main(void) {"
+        " unsigned int value = 0;"
+        " while (value < 2) {"
+        "   switch (value) { case 0: value++; continue;"
+        "                   default: break; }"
+        "   value++;"
+        " }"
+        " return value;"
+        "}");
+    assert(codegen_program(ctx, unit) == 0);
+    assert(occurrences(codegen_output(ctx), "\tJP\tLB1\n") >= 2);
+    codegen_context_destroy(ctx);
+    ast_arena_destroy(arena);
+
+    {
+        static const char *invalid[] = {
+            "int main(void) { unsigned int x = 0; switch (x) {"
+                "case 1: break; case 1: break; } return 0; }",
+            "int main(void) { unsigned int x = 0; switch (x) {"
+                "default: break; default: break; } return 0; }",
+            "int main(void) { case 1: return 0; }",
+            "int main(void) { default: return 0; }",
+            "int main(void) { int x = 0; switch (x) { case 1: break; } return 0; }",
+            "int main(void) { unsigned int x = 0; switch (x == 0) {"
+                "case 1: break; } return 0; }",
+            "int main(void) { unsigned int x = 0; switch (x) {"
+                "case x: break; } return 0; }",
+            "int main(void) { unsigned char x = 0; switch (x) {"
+                "case 256: break; } return 0; }",
+            "int main(void) { unsigned int x = 0; switch (x) {"
+                "case -1: break; } return 0; }"
+        };
+        size_t index;
+        for (index = 0; index < sizeof(invalid) / sizeof(invalid[0]); ++index) {
+            AstArena *bad_arena = ast_arena_create();
+            CodegenContext *bad_ctx = codegen_context_create();
+            AstTranslationUnit *bad_unit = parse(bad_arena, invalid[index]);
+            assert(codegen_program(bad_ctx, bad_unit) != 0);
+            assert(codegen_output(bad_ctx)[0] == '\0');
+            codegen_context_destroy(bad_ctx);
+            ast_arena_destroy(bad_arena);
+        }
+    }
+}
+
 int main(void)
 {
+    test_standard_switch_dispatch();
     test_multiply_divide();
     test_logical_and_comma();
     test_update_operators();

@@ -113,5 +113,7 @@ int symtab_update_rewrite(const ScalarSymbols *table,
 int symtab_constant(const AstExpr *expression, unsigned long *value);
 int symtab_initializer_constant(const AstExpr *expression,
                                 unsigned long *value);
+int symtab_switch_width(const ScalarSymbols *table, const AstExpr *expression,
+                        size_t *width);
 
 #endif

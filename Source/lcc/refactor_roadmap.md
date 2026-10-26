@@ -1430,18 +1430,64 @@ where behavior is non-trivial, a PC-1403 runtime fixture.
 
 #### Task 5.3.4.13: Standard-C switch statement
 
-Implement `switch` as control flow, separate from legacy `CASE`/`ENDCASE`
-behavior, building on the loop/`break`/`continue` label stack and the
-existing unsigned comparison semantics. Signed controlling values are
-deferred to Task 5.3.9.
+**In progress — host tests pass, PC-1403 runtime test failing.** Switch
+resolution and emission now use the
+standard-C source-order arm layout: dispatch enters a matching label, execution
+falls through subsequent arms, and `break` exits the nearest loop or switch.
+`continue` searches past intervening switch frames for the nearest loop.
+Switch expressions are evaluated once; case/default labels are checked per
+switch, with nested switches isolated.
 
-- Implement `switch`, `case`, and `default` using standard C integer
-  controlling-expression and case-constant semantics.
-- Preserve source-order fallthrough and ensure `break` exits the nearest
-  switch or loop while `continue` still targets the enclosing loop.
-- Test duplicate/default labels, nested control flow, fallthrough, and
-  unsigned controlling values; do not rely on legacy `CASE` behavior
-  unless it is proven equivalent.
+The backend prioritizes compact PASM dispatch over inline comparison chains.
+Unsigned byte controls use one `CASE` table on A. Unsigned word controls use
+staged high-byte and low-byte `CASE` tables; the high-byte table selects a
+low-byte table. Each ETC entry stores an 8-bit match value and a 16-bit target;
+PTC loads the one-byte entry count into H, limiting each table to 255 entries.
+Word switches may exceed 255 total labels if their high-byte table has at most
+255 groups and each low-byte table has at most 255 entries. Each table carries
+an explicit PASM `ELSE` entry (syntax `ELSE<TAB>label`; `ELSE:` is rejected by
+PASM). Previously unmatched values relied on falling through to the code after
+`ENDCASE`.
+
+`CASE` is `PTC`+`ETC`: PTC pushes the address after `ENDCASE` onto the CPU
+stack, and every target (including `ELSE`) is entered with that return address
+still pushed. The current codegen therefore treats each switch body as a
+subroutine: `ctx->stack_depth += 2` inside the body, the body end and `break`
+emit `RTN` (back to the post-`ENDCASE` `JP done`), `continue` and `return`
+first `POP` the outstanding CASE bytes (`LoopLabels.stack_depth`/`is_switch`),
+and a default reached through a staged word dispatch is `CALL`ed. Word
+dispatch keeps the low byte on the stack (`PUSH` before the high-byte `CASE`,
+`POP`x3 in each group stub: 2 CASE bytes + low byte), because B is not
+preserved across `CASE`.
+
+**Open runtime failure** (`tests\pc1403_switch.c` + `pc1403_switch.lua`,
+results at `&E720`, expected
+`0B 00 16 00 01 00 21 00 2C 00 37 00 04 00 47 00`, call count at `&E740` = 1):
+- First attempts (no `ELSE`, then `ELSE` without stack handling) hung after
+  `RUN`. The best observed run produced
+  `0B 00 16 00 01 00 00 00 00 00 37 00 E1 59 00 00`: byte dispatch,
+  fallthrough, single evaluation, and nested byte switches work; the word
+  switches (`results[3]`, `results[4]`), the `while`/`continue` switch
+  (`results[6]`, `results[7]`), and the return to BASIC fail (PC observed at
+  `0x13C9`/`0x0F37`, i.e. in ROM).
+- The PTC-return-address model described above was implemented afterwards;
+  `make -C Source/C/lcc2 test` passes and the fixture assembles (926 bytes),
+  but its MAME run was not completed (bridge timed out while the harness ran).
+- Next steps: rerun the harness in a fresh
+  `mame pc1403 -debug -nomaximize -console` session; if it still fails,
+  single-step a word switch in the debugger, checking R before/after `PTC`
+  and at each group stub, and confirm whether `ETC` itself pops the PTC address on
+  a match (if so, drop the `RTN`/`POP` model and revert to `JP`-based exits).
+  The harness no longer calls `emu.pause()` at the end so memory can be
+  inspected after the run.
+
+Signed controlling expressions and negative signed case labels are rejected
+explicitly until Task 5.3.9. The resolver also rejects nonconstant case labels,
+duplicate cases/defaults, out-of-range byte cases, and case/default outside a
+switch. Targeted code-generation tests cover fallthrough, evaluation-once,
+nested switch labels, word staging, and continue routing; the CLI fixture is
+assembled by PASM. The task is complete only once the MAME runtime harness
+reports `status="PASS"`.
 
 #### Task 5.3.4.14: Operation-parity checklist and completion gates
 
@@ -1455,7 +1501,7 @@ gates are satisfied; Tasks 5.3.4.1 through 5.3.4.4 are currently marked complete
 The C compiler will additionally need behaviors not supplied by the current littleC backend:
 - `signed` arithmetic: need `SBB` (subtract with borrow) and signed comparisons
 - `struct`: access via offsets computed by the compiler
-- `switch/case`: standard C semantics; retain existing `CASE`/`ENDCASE` only if it meets those semantics, otherwise implement a comparison chain or jump table
+- `switch/case`: signed controlling expressions and negative case labels remain deferred to Task 5.3.9
 - `continue`: jump to the increment step in `for`, or to the condition in `while`
 - Standard `for`: step executed **after** the body (fix to littleC bug)
 
