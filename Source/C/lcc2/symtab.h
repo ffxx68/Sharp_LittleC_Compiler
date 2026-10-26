@@ -28,6 +28,23 @@ typedef struct ResolvedDereference {
     unsigned char is_unsigned;
 } ResolvedDereference;
 
+typedef struct ResolvedStructMember {
+    const AstStructDecl *structure;
+    const AstVarDecl *declaration;
+    const char *name;
+    const AstType *type;
+    size_t offset; /* Byte offset in the tightly packed structure. */
+    size_t width;
+} ResolvedStructMember;
+
+typedef struct ResolvedMemberAccess {
+    ResolvedStructMember member;
+    ScalarLocation location;
+    const AstExpr *pointer_expression;
+    unsigned char is_modifiable;
+    unsigned char is_indirect;
+} ResolvedMemberAccess;
+
 typedef struct ScalarSymbol {
     const AstVarDecl *declaration;
     const AstParamDecl *parameter;
@@ -37,6 +54,7 @@ typedef struct ScalarSymbol {
     size_t array_length;
     size_t scope;
     unsigned char is_array;
+    unsigned char is_aggregate;
     unsigned char active;
 } ScalarSymbol;
 
@@ -66,6 +84,14 @@ const AstFunctionDecl *symtab_function(const ScalarSymbols *table,
 size_t symtab_frame_size(const ScalarSymbols *table,
                          const AstFunctionDecl *function);
 size_t symtab_type_width(const AstType *type);
+int symtab_structure_size(const ScalarSymbols *table,
+                          const AstStructDecl *structure, size_t *size);
+int symtab_structure_member(const ScalarSymbols *table,
+                            const AstStructDecl *structure, const char *name,
+                            ResolvedStructMember *member);
+int symtab_member_access(const ScalarSymbols *table,
+                         const AstMemberExpr *expression,
+                         ResolvedMemberAccess *access);
 int symtab_constant(const AstExpr *expression, unsigned long *value);
 int symtab_initializer_constant(const AstExpr *expression,
                                 unsigned long *value);

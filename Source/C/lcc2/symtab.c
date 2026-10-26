@@ -20,6 +20,19 @@ typedef struct DereferenceBinding {
     ResolvedDereference dereference;
 } DereferenceBinding;
 
+typedef struct StructureLayout {
+    const AstStructDecl *declaration;
+    ResolvedStructMember *members;
+    size_t member_count;
+    size_t size;
+} StructureLayout;
+
+typedef struct MemberBinding {
+    const AstMemberExpr *expression;
+    const AstFunctionDecl *function;
+    ResolvedMemberAccess access;
+} MemberBinding;
+
 struct ScalarSymbols {
     ScalarSymbol *symbols;
     size_t count;
@@ -29,6 +42,10 @@ struct ScalarSymbols {
     size_t address_count;
     DereferenceBinding *dereferences;
     size_t dereference_count;
+    StructureLayout *structures;
+    size_t structure_count;
+    MemberBinding *member_bindings;
+    size_t member_binding_count;
     const AstFunctionDecl *function;
     size_t scope;
     size_t local_bytes;
@@ -67,6 +84,14 @@ void symtab_destroy(ScalarSymbols *table)
         free(table->bindings);
         free(table->addresses);
         free(table->dereferences);
+        {
+            size_t index;
+            for (index = 0; index < table->structure_count; ++index) {
+                free(table->structures[index].members);
+            }
+        }
+        free(table->structures);
+        free(table->member_bindings);
         free(table);
     }
 }
@@ -89,6 +114,12 @@ size_t symtab_type_width(const AstType *type)
                 target->as.base.base == AST_TYPE_INT) &&
                (target->qualifiers &
                 ~(AST_QUALIFIER_CONST | AST_QUALIFIER_VOLATILE)) == 0
+            ? 2 :
+               target != NULL && target->kind == AST_TYPE_STRUCT &&
+               target->as.structure.declaration != NULL &&
+               target->as.structure.declaration->is_complete &&
+               (target->qualifiers &
+                ~(AST_QUALIFIER_CONST | AST_QUALIFIER_VOLATILE)) == 0
             ? 2 : 0;
     }
     if (type->kind != AST_TYPE_BASE) {
@@ -96,6 +127,126 @@ size_t symtab_type_width(const AstType *type)
     }
     return type->as.base.base == AST_TYPE_CHAR ? 1 :
            type->as.base.base == AST_TYPE_INT ? 2 : 0;
+}
+
+static const StructureLayout *find_structure_layout(
+    const ScalarSymbols *table, const AstStructDecl *structure)
+{
+    size_t index;
+    for (index = 0; index < table->structure_count; ++index) {
+        if (table->structures[index].declaration == structure) {
+            return &table->structures[index];
+        }
+    }
+    return NULL;
+}
+
+static int resolve_structure_layout(ScalarSymbols *table,
+                                    const AstStructDecl *structure,
+                                    size_t *size)
+{
+    StructureLayout layout;
+    StructureLayout *grown;
+    size_t member_index, field_index, field_count = 0, offset = 0;
+
+    if (size == NULL || structure == NULL || !structure->is_complete ||
+        structure->member_count == 0) {
+        return fail(table,
+                    "structure object requires a complete nonempty definition",
+                    structure == NULL ? NULL : structure->tag);
+    }
+    {
+        const StructureLayout *existing =
+            find_structure_layout(table, structure);
+        if (existing != NULL) {
+            *size = existing->size;
+            return 0;
+        }
+    }
+
+    memset(&layout, 0, sizeof(layout));
+    layout.declaration = structure;
+    if (structure->members == NULL) {
+        return fail(table, "invalid structure member list", structure->tag);
+    }
+    for (member_index = 0; member_index < structure->member_count;
+         ++member_index) {
+        const AstStructMember *member = &structure->members[member_index];
+        if (member->declarator_count == 0 || member->declarators == NULL ||
+            member->declarator_count > (size_t)-1 - field_count) {
+            return fail(table, "invalid structure member declaration",
+                        structure->tag);
+        }
+        field_count += member->declarator_count;
+    }
+    if (field_count == 0 ||
+        field_count > (size_t)-1 / sizeof(*layout.members)) {
+        return fail(table, "invalid structure member count", structure->tag);
+    }
+    layout.members = (ResolvedStructMember *)calloc(field_count,
+                                                     sizeof(*layout.members));
+    if (layout.members == NULL) {
+        return fail(table, "out of memory laying out structure", structure->tag);
+    }
+
+    for (member_index = 0; member_index < structure->member_count;
+         ++member_index) {
+        const AstStructMember *member = &structure->members[member_index];
+        for (field_index = 0; field_index < member->declarator_count;
+             ++field_index) {
+            const AstVarDecl *field = member->declarators[field_index];
+            ResolvedStructMember *resolved;
+            size_t width, previous;
+
+            if (field == NULL || field->name == NULL || field->type == NULL ||
+                field->type->kind != AST_TYPE_BASE ||
+                (field->type->as.base.base != AST_TYPE_CHAR &&
+                 field->type->as.base.base != AST_TYPE_INT) ||
+                (width = symtab_type_width(field->type)) == 0) {
+                free(layout.members);
+                return fail(table,
+                            "structure fields must be byte or word scalars",
+                            structure->tag);
+            }
+            for (previous = 0; previous < layout.member_count; ++previous) {
+                if (strcmp(layout.members[previous].name, field->name) == 0) {
+                    free(layout.members);
+                    return fail(table, "duplicate structure member", field->name);
+                }
+            }
+            if (width > (size_t)-1 - offset || offset + width > 65536) {
+                free(layout.members);
+                return fail(table, "structure size exceeds target address space",
+                            structure->tag);
+            }
+            resolved = &layout.members[layout.member_count++];
+            resolved->structure = structure;
+            resolved->declaration = field;
+            resolved->name = field->name;
+            resolved->type = field->type;
+            resolved->offset = offset;
+            resolved->width = width;
+            offset += width;
+        }
+    }
+    layout.size = offset;
+    if (table->structure_count == (size_t)-1 ||
+        table->structure_count + 1 > (size_t)-1 / sizeof(*grown)) {
+        free(layout.members);
+        return fail(table, "structure count exceeds supported range",
+                    structure->tag);
+    }
+    grown = (StructureLayout *)realloc(table->structures,
+        (table->structure_count + 1) * sizeof(*grown));
+    if (grown == NULL) {
+        free(layout.members);
+        return fail(table, "out of memory recording structure layout",
+                    structure->tag);
+    }
+    table->structures = grown;
+    table->structures[table->structure_count++] = layout;
+    *size = layout.size;
+    return 0;
 }
 
 int symtab_constant(const AstExpr *expression, unsigned long *value)
@@ -227,11 +378,27 @@ static int add_variable(ScalarSymbols *table, const AstVarDecl *variable)
         symbol.is_array = 1;
         symbol.location.width = element_width;
         allocation_width = element_width * symbol.array_length;
+    } else if (variable->type != NULL &&
+               variable->type->kind == AST_TYPE_STRUCT) {
+        if (variable->initializer != NULL) {
+            return fail(table, "aggregate initializers are not supported",
+                        variable->name);
+        }
+        if (resolve_structure_layout(table,
+                variable->type->as.structure.declaration,
+                &allocation_width) != 0) {
+            return -1;
+        }
+        symbol.is_aggregate = 1;
+        symbol.location.width = allocation_width;
+    } else if (variable->type != NULL &&
+               variable->type->kind == AST_TYPE_UNION) {
+        return fail(table, "unions are not supported", variable->name);
     } else {
         symbol.location.width = symtab_type_width(variable->type);
         allocation_width = symbol.location.width;
     }
-    if (symbol.location.width == 0) {
+    if (symbol.location.width == 0 || allocation_width > 65536) {
         return fail(table, "unsupported scalar declaration", variable->name);
     }
     symbol.allocation_width = allocation_width;
@@ -246,7 +413,7 @@ static int add_variable(ScalarSymbols *table, const AstVarDecl *variable)
     symbol.function = table->function;
     symbol.scope = table->scope;
     symbol.active = 1;
-    symbol.location.is_unsigned = symbol.is_array
+    symbol.location.is_unsigned = symbol.is_aggregate ? 0 : symbol.is_array
         ? variable->type->as.array.element->as.base.is_unsigned
         : variable->type->kind == AST_TYPE_BASE
             ? variable->type->as.base.is_unsigned : 1;
@@ -262,8 +429,16 @@ static int add_variable(ScalarSymbols *table, const AstVarDecl *variable)
             return fail(table, "leaf scalar frame exceeds 32 bytes", variable->name);
         }
         symbol.location.storage = SCALAR_LOCAL;
-        symbol.location.address = -(int)table->local_bytes -
-                                  (symbol.location.width == 1 ? 2 : 1);
+        {
+            size_t address_width = symbol.location.width;
+            if (symbol.is_aggregate) {
+                const StructureLayout *layout = find_structure_layout(table,
+                    variable->type->as.structure.declaration);
+                address_width = layout->members[0].width;
+            }
+            symbol.location.address = -(int)table->local_bytes -
+                                      (address_width == 1 ? 2 : 1);
+        }
     } else {
         if (!symbol.is_array && variable->initializer != NULL &&
             (variable->initializer->kind != AST_INITIALIZER_EXPR ||
@@ -426,14 +601,24 @@ static int bind_address(ScalarSymbols *table,
 {
     AddressBinding *grown;
     ResolvedAddress address;
+    size_t pointee_width;
 
-    if (pointee_type == NULL || pointee_type->kind != AST_TYPE_BASE ||
-        location.storage == SCALAR_LOCAL ||
+    if (pointee_type != NULL && pointee_type->kind == AST_TYPE_STRUCT) {
+        if ((pointee_type->qualifiers &
+             ~(AST_QUALIFIER_CONST | AST_QUALIFIER_VOLATILE)) != 0 ||
+            resolve_structure_layout(table,
+                pointee_type->as.structure.declaration, &pointee_width) != 0) {
+            return fail(table, "address-of requires a supported complete structure",
+                        NULL);
+        }
+    } else {
+        pointee_width = symtab_type_width(pointee_type);
+    }
+    if (pointee_type == NULL || location.storage == SCALAR_LOCAL ||
         (location.storage != SCALAR_REGISTER &&
          location.storage != SCALAR_XRAM) ||
-        symtab_type_width(pointee_type) == 0 ||
-        location.width != symtab_type_width(pointee_type)) {
-        return fail(table, "address-of requires a byte or word register/XRAM object",
+        pointee_width == 0 || location.width != pointee_width) {
+        return fail(table, "address-of requires a supported register/XRAM object",
                     NULL);
     }
     if (location.storage == SCALAR_XRAM && location.address < 256) {
@@ -481,6 +666,105 @@ static int bind_dereference(ScalarSymbols *table,
 }
 
 static const AstType *expression_pointer_pointee(const ScalarSymbols *table,
+                                                 const AstExpr *expression);
+static int resolve_expression(ScalarSymbols *table, const AstExpr *expression);
+
+static int bind_member_access(ScalarSymbols *table,
+                             const AstMemberExpr *expression)
+{
+    MemberBinding *grown;
+    ResolvedMemberAccess access;
+    const ScalarSymbol *symbol = NULL;
+    const AstType *object_type;
+    const AstStructDecl *structure;
+    size_t symbol_index = 0;
+
+    if (expression->is_arrow) {
+        size_t structure_size;
+        if (expression->object == NULL ||
+            resolve_expression(table, expression->object) != 0) {
+            return fail(table, "arrow member access requires a resolved pointer",
+                        expression->field);
+        }
+        object_type = expression_pointer_pointee(table, expression->object);
+        if (object_type == NULL || object_type->kind != AST_TYPE_STRUCT) {
+            return fail(table, "arrow member access requires a pointer to structure",
+                        expression->field);
+        }
+        structure = object_type->as.structure.declaration;
+        if (resolve_structure_layout(table, structure,
+                                     &structure_size) != 0) {
+            return -1;
+        }
+        access.pointer_expression = expression->object;
+        access.is_indirect = 1;
+    } else if (expression->object != NULL &&
+               expression->object->node.kind == AST_NODE_IDENT_EXPR) {
+        const AstIdentExpr *identifier =
+            (const AstIdentExpr *)expression->object;
+        if (bind_identifier(table, expression->object, identifier->name,
+                            &symbol_index) != 0) {
+            return -1;
+        }
+        symbol = &table->symbols[symbol_index];
+        if (symbol->declaration == NULL || symbol->is_array ||
+            !symbol->is_aggregate) {
+            return fail(table, "member access requires a structure object",
+                        symbol_name(symbol));
+        }
+        object_type = symbol->declaration->type;
+        if (object_type == NULL || object_type->kind != AST_TYPE_STRUCT) {
+            return fail(table, "member access requires a structure object",
+                        symbol_name(symbol));
+        }
+        structure = object_type->as.structure.declaration;
+    } else {
+        return fail(table, "member access requires a structure object identifier",
+                    NULL);
+    }
+    memset(&access, 0, sizeof(access));
+    if (expression->is_arrow) {
+        access.pointer_expression = expression->object;
+        access.is_indirect = 1;
+    }
+    if (symtab_structure_member(table, structure, expression->field,
+                                &access.member) != 0) {
+        return fail(table, "unknown structure member", expression->field);
+    }
+    if (access.is_indirect) {
+        access.location.storage = SCALAR_REGISTER;
+        access.location.width = access.member.width;
+        access.location.is_unsigned =
+            access.member.type->as.base.is_unsigned;
+    } else {
+        if (access.member.offset > (size_t)INT_MAX ||
+            symbol->location.address > INT_MAX - (int)access.member.offset) {
+            return fail(table, "structure member address exceeds supported range",
+                        expression->field);
+        }
+        access.location = symbol->location;
+        access.location.address += (int)access.member.offset;
+        access.location.width = access.member.width;
+        access.location.is_unsigned =
+            access.member.type->as.base.is_unsigned;
+    }
+    access.is_modifiable =
+        (object_type->qualifiers & AST_QUALIFIER_CONST) == 0 &&
+        (access.member.type->qualifiers & AST_QUALIFIER_CONST) == 0;
+    grown = (MemberBinding *)realloc(table->member_bindings,
+        (table->member_binding_count + 1) * sizeof(*grown));
+    if (grown == NULL) {
+        return fail(table, "out of memory resolving structure member",
+                    expression->field);
+    }
+    table->member_bindings = grown;
+    grown[table->member_binding_count].expression = expression;
+    grown[table->member_binding_count].function = table->function;
+    grown[table->member_binding_count++].access = access;
+    return 0;
+}
+
+static const AstType *expression_pointer_pointee(const ScalarSymbols *table,
                                                  const AstExpr *expression)
 {
     if (expression == NULL) {
@@ -511,11 +795,17 @@ static int expression_is_pointer(const ScalarSymbols *table,
 
 static int compatible_pointee_type(const AstType *left, const AstType *right)
 {
-    return left != NULL && right != NULL &&
-           left->kind == AST_TYPE_BASE && right->kind == AST_TYPE_BASE &&
+    if (left == NULL || right == NULL || left->kind != right->kind ||
+        left->qualifiers != right->qualifiers) {
+        return 0;
+    }
+    if (left->kind == AST_TYPE_STRUCT) {
+        return left->as.structure.declaration ==
+               right->as.structure.declaration;
+    }
+    return left->kind == AST_TYPE_BASE &&
            left->as.base.base == right->as.base.base &&
-           left->as.base.is_unsigned == right->as.base.is_unsigned &&
-           left->qualifiers == right->qualifiers;
+           left->as.base.is_unsigned == right->as.base.is_unsigned;
 }
 
 static int compatible_pointer_value(const ScalarSymbols *table,
@@ -557,8 +847,16 @@ static int resolve_expression(ScalarSymbols *table, const AstExpr *expression)
         if (bind_identifier(table, expression, name, &symbol_index) != 0) {
             return -1;
         }
-        return table->symbols[symbol_index].is_array
-            ? fail(table, "array value requires an index", name) : 0;
+        if (table->symbols[symbol_index].is_array) {
+            return fail(table, "array value requires an index", name);
+        }
+        if (table->symbols[symbol_index].is_aggregate) {
+            return fail(table, "aggregate value is not supported yet", name);
+        }
+        return 0;
+    }
+    if (expression->node.kind == AST_NODE_MEMBER_EXPR) {
+        return bind_member_access(table, (const AstMemberExpr *)expression);
     }
     if (expression->node.kind == AST_NODE_ADDRESS_EXPR) {
         const AstAddressExpr *address = (const AstAddressExpr *)expression;
@@ -723,6 +1021,7 @@ static int resolve_expression(ScalarSymbols *table, const AstExpr *expression)
         if (binary->op == AST_BINARY_ASSIGN) {
             const ScalarSymbol *symbol = NULL;
             const AstType *target_type = NULL;
+            int member_modifiable = 1;
             int modifiable;
 
             if (binary->left->node.kind == AST_NODE_IDENT_EXPR) {
@@ -730,6 +1029,16 @@ static int resolve_expression(ScalarSymbols *table, const AstExpr *expression)
             } else if (binary->left->node.kind == AST_NODE_INDEX_EXPR) {
                 symbol = symtab_identifier(table,
                     ((const AstIndexExpr *)binary->left)->array);
+            } else if (binary->left->node.kind == AST_NODE_MEMBER_EXPR) {
+                ResolvedMemberAccess resolved;
+                if (symtab_member_access(table,
+                        (const AstMemberExpr *)binary->left,
+                        &resolved) == 0) {
+                    target_type = resolved.member.type;
+                    member_modifiable = resolved.is_modifiable;
+                } else {
+                    member_modifiable = 0;
+                }
             }
             if (symbol != NULL) {
                 target_type = symbol->is_array
@@ -746,8 +1055,10 @@ static int resolve_expression(ScalarSymbols *table, const AstExpr *expression)
             }
             modifiable = target_type != NULL &&
                 (target_type->qualifiers & AST_QUALIFIER_CONST) == 0 &&
+                member_modifiable &&
                 (binary->left->node.kind == AST_NODE_IDENT_EXPR ||
                  binary->left->node.kind == AST_NODE_INDEX_EXPR ||
+                 binary->left->node.kind == AST_NODE_MEMBER_EXPR ||
                  binary->left->node.kind == AST_NODE_DEREFERENCE_EXPR);
 
             if (!modifiable) {
@@ -794,7 +1105,14 @@ static int expression_unsigned_word(const ScalarSymbols *table,
             dereference.width == 2 && dereference.is_unsigned;
     }
     if (expression->node.kind == AST_NODE_IDENT_EXPR ||
-        expression->node.kind == AST_NODE_INDEX_EXPR) {
+        expression->node.kind == AST_NODE_INDEX_EXPR ||
+        expression->node.kind == AST_NODE_MEMBER_EXPR) {
+        if (expression->node.kind == AST_NODE_MEMBER_EXPR) {
+            ResolvedMemberAccess access;
+            return symtab_member_access(table,
+                (const AstMemberExpr *)expression, &access) == 0 &&
+                access.location.width == 2 && access.location.is_unsigned;
+        }
         const AstExpr *identifier = expression->node.kind == AST_NODE_INDEX_EXPR
             ? ((const AstIndexExpr *)expression)->array : expression;
         const ScalarSymbol *symbol = symtab_identifier(table, identifier);
@@ -833,6 +1151,12 @@ static int expression_nonnegative(const ScalarSymbols *table,
             ? ((const AstIndexExpr *)expression)->array : expression;
         const ScalarSymbol *symbol = symtab_identifier(table, identifier);
         return symbol != NULL && symbol->location.is_unsigned;
+    }
+    if (expression->node.kind == AST_NODE_MEMBER_EXPR) {
+        ResolvedMemberAccess access;
+        return symtab_member_access(table,
+            (const AstMemberExpr *)expression, &access) == 0 &&
+            access.location.is_unsigned;
     }
     if (expression->node.kind == AST_NODE_DEREFERENCE_EXPR) {
         ResolvedDereference dereference;
@@ -1246,6 +1570,13 @@ int symtab_resolve(ScalarSymbols *table, AstTranslationUnit *unit)
                 symbol->location.address += (int)table->local_bytes;
             }
         }
+        for (local = 0; local < table->member_binding_count; ++local) {
+            MemberBinding *binding = &table->member_bindings[local];
+            if (binding->function == function &&
+                binding->access.location.storage == SCALAR_LOCAL) {
+                binding->access.location.address += (int)table->local_bytes;
+            }
+        }
         table->function = NULL;
     }
     return 0;
@@ -1389,4 +1720,58 @@ size_t symtab_frame_size(const ScalarSymbols *table, const AstFunctionDecl *func
         }
     }
     return size;
+}
+
+int symtab_structure_size(const ScalarSymbols *table,
+                          const AstStructDecl *structure, size_t *size)
+{
+    const StructureLayout *layout;
+    if (table == NULL || structure == NULL || size == NULL) {
+        return -1;
+    }
+    layout = find_structure_layout(table, structure);
+    if (layout == NULL) {
+        return -1;
+    }
+    *size = layout->size;
+    return 0;
+}
+
+int symtab_structure_member(const ScalarSymbols *table,
+                            const AstStructDecl *structure, const char *name,
+                            ResolvedStructMember *member)
+{
+    const StructureLayout *layout;
+    size_t index;
+    if (table == NULL || structure == NULL || name == NULL || member == NULL) {
+        return -1;
+    }
+    layout = find_structure_layout(table, structure);
+    if (layout == NULL) {
+        return -1;
+    }
+    for (index = 0; index < layout->member_count; ++index) {
+        if (strcmp(layout->members[index].name, name) == 0) {
+            *member = layout->members[index];
+            return 0;
+        }
+    }
+    return -1;
+}
+
+int symtab_member_access(const ScalarSymbols *table,
+                         const AstMemberExpr *expression,
+                         ResolvedMemberAccess *access)
+{
+    size_t index;
+    if (table == NULL || expression == NULL || access == NULL) {
+        return -1;
+    }
+    for (index = 0; index < table->member_binding_count; ++index) {
+        if (table->member_bindings[index].expression == expression) {
+            *access = table->member_bindings[index].access;
+            return 0;
+        }
+    }
+    return -1;
 }

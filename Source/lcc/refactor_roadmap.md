@@ -1283,13 +1283,74 @@ and EXAM-clobbered assignment results for internal-RAM stores. The BASIC
 rerun required a device Reset key after the earlier CPU-state-injecting test;
 a machine soft reset alone did not restore a clean BASIC environment.
 
-#### Task 5.3.4.11: Aggregate layout and member access
+#### Task 5.3.4.11 ✅: Aggregate layout and member access (umbrella)
 
-Extend the symbol table/layout work in Task 5.3.5 to compute aggregate member
-offsets and sizes. Port member reads and writes using those compiler-computed
-offsets; keep type checking and layout outside the instruction emitter. Cover
-the supported structure member forms, including `.` and `->` where applicable,
-and explicitly reject unsupported aggregate forms.
+Split this task because compiler-owned aggregate layout, direct member access,
+and pointer-based member access have separate resolver/backend contracts.
+Keep type checking and layout outside the instruction emitter. The umbrella is
+complete only when all three subtasks and their combined tests pass. The
+initial supported subset is scalar fields of complete structures; explicitly
+reject unions, aggregate copies/initializers, arrays of aggregates, incomplete
+or recursive-by-value structures, and any other unsupported aggregate form.
+
+##### Task 5.3.4.11.1 ✅: Structure layout and member metadata
+
+- Extend the symbol table/layout work in Task 5.3.5 to compute member offsets,
+  widths, and total structure size with checked arithmetic.
+- Resolve supported complete structure declarations and reject duplicate or
+  unsupported member layouts before code generation.
+- Test computed layouts, storage bounds/overlap, and clear rejection of
+  unsupported aggregate declarations independently of the backend.
+
+Implemented resolver-owned structure metadata for tightly packed byte and
+word fields in declaration order, with checked total-size/address bounds,
+duplicate-name rejection, and queries for structure size and named member
+type/offset/width. Global fixed-address and automatic local structure objects
+reserve their full storage, while aggregate value operations, initializers,
+unions, incomplete/nested/array/pointer/float member layouts, and unsupported
+aggregate forms are rejected explicitly. Symbol-table tests verify mixed
+signed/unsigned field metadata, comma-declared members, register/XRAM/local
+storage sizing, overlap and bounds failures, and invalid layouts.
+
+##### Task 5.3.4.11.2 ✅: Direct structure member access
+
+- Resolve scalar member reads and writes through `.` using compiler-computed
+  offsets for supported global and automatic structure objects.
+- Preserve member type, signedness, storage class, and assignment-expression
+  behavior; do not perform lookup or offset calculation in the emitter.
+- Test byte/word fields and reject invalid, chained aggregate, and
+  non-modifiable member expressions. Chaining through aggregate-valued fields
+  is excluded from the current scalar-field subset.
+
+Implemented resolver-bound direct `.` accesses for scalar byte/word members
+of fixed-address global and automatic local structure objects. The backend
+uses resolved locations for reads, writes, and assignment results, preserving
+field signedness and byte promotion; const objects/fields, unknown members,
+non-structure objects, chained aggregate selection, and `->` are rejected
+explicitly. Uninitialized global structure objects are zero-initialized across
+their full layout. Resolver and codegen tests cover global/local offsets,
+loads/stores, assignment expressions, signedness, const rejection, and
+unsupported access forms.
+
+##### Task 5.3.4.11.3 ✅: Pointer structure member access
+
+- Support `->` for pointers to supported structures, using resolved pointer
+  and member metadata rather than emitter-side type/layout logic.
+- Extend only the pointer forms needed for supported member access; reject
+  unsupported pointer/aggregate combinations explicitly.
+- Test member reads and writes through pointers, including parameter and
+  storage cases supported by the resolver, with stack and target-runtime
+  checks for end-to-end fixtures.
+
+Implemented resolver-bound `->` access for complete structures through
+supported pointer expressions. Resolved metadata carries the pointer
+expression and member offset/type; code generation applies the offset before
+dispatching to internal RAM or XRAM. Resolver and codegen tests cover
+structure-pointer parameters and storage cases, while the PC-1403 fixture
+verifies byte/word member reads and writes, stack balance, register
+restoration, and BASIC responsiveness over ten calls. MAME runtime validation
+passed with outputs `EF BE 7C 00 34 12`; unsupported pointer and aggregate
+forms remain rejected.
 
 #### Task 5.3.4.12: Remaining arithmetic and standard-C extensions
 

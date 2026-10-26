@@ -819,19 +819,17 @@ static void emit_pointer_register_setup(CodegenContext *ctx, int store)
     emit_inst(ctx, "EXAB");
 }
 
-static int emit_dynamic_dereference(CodegenContext *ctx,
-                                    const AstDereferenceExpr *dereference,
-                                    const AstExpr *value,
-                                    int store)
+static int emit_dynamic_indirect_access(CodegenContext *ctx,
+                                        const AstExpr *pointer_expression,
+                                        ResolvedDereference resolved,
+                                        size_t member_offset,
+                                        const AstExpr *value,
+                                        int store)
 {
-    ResolvedDereference resolved;
     char *internal_label;
     char *done_label;
     size_t branch_stack_depth = 0;
 
-    if (symtab_dereference_info(ctx->symbols, dereference, &resolved) != 0) {
-        return set_error(ctx, "unresolved pointer dereference reached code generation");
-    }
     internal_label = new_label(ctx);
     done_label = new_label(ctx);
     if (internal_label == NULL || done_label == NULL) {
@@ -845,10 +843,22 @@ static int emit_dynamic_dereference(CodegenContext *ctx,
         free(done_label);
         return -1;
     }
-    if (emit_expression(ctx, dereference->operand) != 0) {
+    if (emit_expression(ctx, pointer_expression) != 0) {
         free(internal_label);
         free(done_label);
         return -1;
+    }
+    if (member_offset != 0) {
+        if (member_offset > 65535 ||
+            codegen_emit_push(ctx, 2) != 0 ||
+            codegen_load_constant(ctx, 2, (unsigned long)member_offset) != 0 ||
+            codegen_pop_add(ctx, 2) != 0) {
+            free(internal_label);
+            free(done_label);
+            return member_offset > 65535
+                ? set_error(ctx, "structure member offset exceeds pointer range")
+                : -1;
+        }
     }
     if (store) {
         branch_stack_depth = ctx->stack_depth;
@@ -915,6 +925,19 @@ static int emit_dynamic_dereference(CodegenContext *ctx,
         promote_byte(ctx, resolved.is_unsigned);
     }
     return ctx->error[0] == '\0' ? 0 : -1;
+}
+
+static int emit_dynamic_dereference(CodegenContext *ctx,
+                                    const AstDereferenceExpr *dereference,
+                                    const AstExpr *value,
+                                    int store)
+{
+    ResolvedDereference resolved;
+    if (symtab_dereference_info(ctx->symbols, dereference, &resolved) != 0) {
+        return set_error(ctx, "unresolved pointer dereference reached code generation");
+    }
+    return emit_dynamic_indirect_access(ctx, dereference->operand, resolved, 0,
+                                        value, store);
 }
 
 static int emit_branch_false(CodegenContext *ctx, const AstExpr *expression,
@@ -984,6 +1007,29 @@ static int emit_expression(CodegenContext *ctx, const AstExpr *expression)
         }
         if (symbol->location.width == 1) {
             promote_byte(ctx, symbol->location.is_unsigned);
+        }
+        return ctx->error[0] == '\0' ? 0 : -1;
+    }
+    if (expression->node.kind == AST_NODE_MEMBER_EXPR) {
+        ResolvedMemberAccess access;
+        if (symtab_member_access(ctx->symbols,
+                (const AstMemberExpr *)expression, &access) != 0) {
+            return set_error(ctx, "unresolved structure member reached code generation");
+        }
+        if (access.is_indirect) {
+            ResolvedDereference resolved;
+            resolved.pointee_type = access.member.type;
+            resolved.width = access.member.width;
+            resolved.is_unsigned = access.location.is_unsigned;
+            return emit_dynamic_indirect_access(ctx,
+                access.pointer_expression, resolved, access.member.offset,
+                NULL, 0);
+        }
+        if (codegen_load_scalar(ctx, access.location) != 0) {
+            return -1;
+        }
+        if (access.location.width == 1) {
+            promote_byte(ctx, access.location.is_unsigned);
         }
         return ctx->error[0] == '\0' ? 0 : -1;
     }
@@ -1084,7 +1130,24 @@ static int emit_expression(CodegenContext *ctx, const AstExpr *expression)
                     (const AstDereferenceExpr *)binary->left,
                     binary->right, 1);
             }
-            if (binary->left->node.kind == AST_NODE_INDEX_EXPR) {
+            if (binary->left->node.kind == AST_NODE_MEMBER_EXPR) {
+                ResolvedMemberAccess access;
+                if (symtab_member_access(ctx->symbols,
+                        (const AstMemberExpr *)binary->left, &access) != 0) {
+                    return set_error(ctx,
+                        "unresolved structure member assignment reached code generation");
+                }
+                if (access.is_indirect) {
+                    ResolvedDereference resolved;
+                    resolved.pointee_type = access.member.type;
+                    resolved.width = access.member.width;
+                    resolved.is_unsigned = access.location.is_unsigned;
+                    return emit_dynamic_indirect_access(ctx,
+                        access.pointer_expression, resolved,
+                        access.member.offset, binary->right, 1);
+                }
+                location = access.location;
+            } else if (binary->left->node.kind == AST_NODE_INDEX_EXPR) {
                 const AstIndexExpr *index = (const AstIndexExpr *)binary->left;
                 if (symtab_index_location(ctx->symbols, index, &location) != 0) {
                     return emit_dynamic_array_access(ctx, index, binary->right, 1);
@@ -1623,6 +1686,28 @@ static int emit_global_initializers(CodegenContext *ctx,
         symbol = symtab_declaration(ctx->symbols, variable);
         if (symbol == NULL) {
             return set_error(ctx, "unresolved global reached code generation");
+        }
+        if (symbol->is_aggregate) {
+            ScalarLocation location = symbol->location;
+            int remainder;
+            size_t byte;
+
+            location.width = 1;
+            remainder = emit_compact_zero_bytes(ctx, location, 0,
+                                                symbol->allocation_width);
+            if (remainder < 0) {
+                return -1;
+            }
+            for (byte = symbol->allocation_width - (size_t)remainder;
+                 byte < symbol->allocation_width; ++byte) {
+                location.address += (int)byte;
+                if (codegen_load_constant(ctx, 1, 0) != 0 ||
+                    codegen_store_scalar(ctx, location) != 0) {
+                    return -1;
+                }
+                location.address -= (int)byte;
+            }
+            continue;
         }
         if (symbol->is_array) {
             size_t element = 0;

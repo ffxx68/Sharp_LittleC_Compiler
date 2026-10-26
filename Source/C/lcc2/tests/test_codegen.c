@@ -468,6 +468,116 @@ static void test_array_access_and_initialization(void)
     ast_arena_destroy(arena);
 }
 
+static void test_structure_member_access(void)
+{
+    AstArena *arena = ast_arena_create();
+    CodegenContext *ctx = codegen_context_create();
+    AstTranslationUnit *unit = parse(arena,
+        "__xram __at(0xE600) struct Pair { unsigned char tag; "
+        "unsigned int value; } pair;"
+        "__xram __at(0xE500) unsigned int result;"
+        "unsigned int main(void) {"
+        " struct Local { unsigned char first; signed int second; } local;"
+        " local.first = pair.tag = 7;"
+        " local.second = pair.value = 0x1234;"
+        " result = local.second + pair.value;"
+        " return local.second; }");
+    const char *assembly;
+
+    assert(codegen_program(ctx, unit) == 0);
+    assembly = codegen_output(ctx);
+    assert(strstr(assembly, "\tLIDP\t58880\n\tSTD\n") != NULL);
+    assert(strstr(assembly, "\tLIDP\t58881\n\tSTD\n") != NULL);
+    assert(strstr(assembly, "\tLIDP\t58624\n\tSTD\n") != NULL);
+    assert(strstr(assembly, "\tLDR\n\tADIA\t") != NULL);
+    assert(strstr(assembly, "LIA\tLB(4660)") != NULL);
+    assert(codegen_stack_depth(ctx) == 0);
+
+    codegen_context_destroy(ctx);
+    ast_arena_destroy(arena);
+}
+
+static void test_structure_member_rejections(void)
+{
+    static const char *sources[] = {
+        "struct Value { char byte; } __at(8) value;"
+            "int main(void) { value.missing = 1; return 0; }",
+        "struct Value { char byte; } __at(8) value;"
+            "int main(void) { value->byte = 1; return 0; }",
+        "int main(void) { const struct Value { char byte; } value;"
+            " value.byte = 1; return 0; }",
+        "struct Value { const char byte; } __at(8) value;"
+            "int main(void) { value.byte = 1; return 0; }",
+        "struct Value { char byte; } __at(8) value;"
+            "int main(void) { value.byte.byte = 1; return 0; }"
+    };
+    size_t index;
+
+    for (index = 0; index < sizeof(sources) / sizeof(sources[0]); ++index) {
+        AstArena *arena = ast_arena_create();
+        CodegenContext *ctx = codegen_context_create();
+        AstTranslationUnit *unit = parse(arena, sources[index]);
+        assert(codegen_program(ctx, unit) != 0);
+        assert(codegen_output(ctx)[0] == '\0');
+        assert(codegen_error(ctx)[0] != '\0');
+        codegen_context_destroy(ctx);
+        ast_arena_destroy(arena);
+    }
+}
+
+static void test_pointer_structure_member_access(void)
+{
+    AstArena *arena = ast_arena_create();
+    CodegenContext *ctx = codegen_context_create();
+    AstTranslationUnit *unit = parse(arena,
+        "int modify(struct Pair { unsigned char tag; unsigned int value; } *p) {"
+        " p->value = p->tag; return p->value; }"
+        "__xram __at(0xE600) struct Object {"
+        " unsigned char tag; signed int value; } object;"
+        "int main(void) {"
+        " (&object)->value = 0x1234;"
+        " return (&object)->value; }");
+    const char *assembly;
+
+    assert(codegen_program(ctx, unit) == 0);
+    assembly = codegen_section_output(ctx, CODEGEN_FUNCTIONS);
+    assert(strstr(assembly, "modify:\t; Procedure\n") != NULL);
+    assert(strstr(assembly, "\tCALL\tmodify") == NULL);
+    assert(strstr(assembly, "\tDY\n") != NULL);
+    assert(strstr(assembly, "\tDX\n") != NULL);
+    assert(strstr(assembly, "\tADIA\t") != NULL);
+    assert(strstr(assembly, "LIA\tLB(4660)") != NULL);
+    assert(codegen_stack_depth(ctx) == 0);
+
+    codegen_context_destroy(ctx);
+    ast_arena_destroy(arena);
+}
+
+static void test_pointer_structure_member_rejections(void)
+{
+    static const char *sources[] = {
+        "int main(void) { int *ptr; return ptr->value; }",
+        "int main(void) { struct Value { char byte; } *ptr;"
+            " return ptr->missing; }",
+        "int modify(const struct Value { char byte; } *ptr) {"
+            " ptr->byte = 1; return 0; }",
+        "int modify(struct Value { char byte; } *ptr) {"
+            " return ptr->byte.byte; }"
+    };
+    size_t index;
+
+    for (index = 0; index < sizeof(sources) / sizeof(sources[0]); ++index) {
+        AstArena *arena = ast_arena_create();
+        CodegenContext *ctx = codegen_context_create();
+        AstTranslationUnit *unit = parse(arena, sources[index]);
+        assert(codegen_program(ctx, unit) != 0);
+        assert(codegen_output(ctx)[0] == '\0');
+        assert(codegen_error(ctx)[0] != '\0');
+        codegen_context_destroy(ctx);
+        ast_arena_destroy(arena);
+    }
+}
+
 static void test_dynamic_array_access(void)
 {
     AstArena *arena = ast_arena_create();
@@ -856,6 +966,10 @@ int main(void)
     test_scalar_validation();
     test_scalar_tree_walker();
     test_array_access_and_initialization();
+    test_structure_member_access();
+    test_structure_member_rejections();
+    test_pointer_structure_member_access();
+    test_pointer_structure_member_rejections();
     test_dynamic_array_access();
     test_dynamic_array_extent_independence();
     test_comparisons_and_control_flow();

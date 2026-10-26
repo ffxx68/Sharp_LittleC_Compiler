@@ -328,6 +328,205 @@ static void test_array_layout_and_binding(void)
     ast_arena_destroy(arena);
 }
 
+static void test_structure_layout(void)
+{
+    AstArena *arena = ast_arena_create();
+    ScalarSymbols *table = symtab_create();
+    AstTranslationUnit *unit = parse(arena,
+        "struct Point { unsigned char x; signed int y, z; } __at(8) point;"
+        "__xram __at(0xE600) struct Packet { unsigned int word; "
+        "unsigned char tag; } packet;"
+        "int main(void) { struct Local { char first; int second; } local;"
+        " return 0; }");
+    AstVarDecl *point = (AstVarDecl *)unit->declarations.items[0];
+    AstStructDecl *point_type = point->type->as.structure.declaration;
+    AstVarDecl *packet = (AstVarDecl *)unit->declarations.items[1];
+    AstStructDecl *packet_type = packet->type->as.structure.declaration;
+    AstFunctionDecl *function = (AstFunctionDecl *)unit->declarations.items[2];
+    AstVarDecl *local = (AstVarDecl *)function->body->items[0].as.declaration;
+    AstStructDecl *local_type = local->type->as.structure.declaration;
+    const ScalarSymbol *symbol;
+    ResolvedStructMember member;
+    size_t size;
+
+    assert(symtab_resolve(table, unit) == 0);
+    assert(symtab_structure_size(table, point_type, &size) == 0 && size == 5);
+    assert(symtab_structure_member(table, point_type, "x", &member) == 0);
+    assert(member.structure == point_type && member.declaration != NULL);
+    assert(member.type->as.base.base == AST_TYPE_CHAR);
+    assert(member.offset == 0 && member.width == 1);
+    assert(symtab_structure_member(table, point_type, "y", &member) == 0);
+    assert(member.type->as.base.base == AST_TYPE_INT);
+    assert(!member.type->as.base.is_unsigned);
+    assert(member.offset == 1 && member.width == 2);
+    assert(symtab_structure_member(table, point_type, "z", &member) == 0);
+    assert(member.offset == 3 && member.width == 2);
+    assert(symtab_structure_member(table, point_type, "missing", &member) != 0);
+    assert(symtab_structure_size(table, packet_type, &size) == 0 && size == 3);
+    symbol = symtab_declaration(table, point);
+    assert(symbol != NULL && symbol->is_aggregate);
+    assert(symbol->allocation_width == 5 && symbol->location.width == 5);
+    assert(symbol->location.storage == SCALAR_REGISTER &&
+           symbol->location.address == 8);
+    symbol = symtab_declaration(table, packet);
+    assert(symbol != NULL && symbol->is_aggregate);
+    assert(symbol->allocation_width == 3);
+    assert(symbol->location.storage == SCALAR_XRAM &&
+           symbol->location.address == 0xE600);
+    assert(symtab_structure_size(table, local_type, &size) == 0 && size == 3);
+    symbol = symtab_declaration(table, local);
+    assert(symbol != NULL && symbol->is_aggregate);
+    assert(symbol->allocation_width == 3);
+    assert(symbol->location.storage == SCALAR_LOCAL &&
+           symbol->location.address == -2);
+    assert(symtab_frame_size(table, function) == 3);
+
+    symtab_destroy(table);
+    ast_arena_destroy(arena);
+}
+
+static void test_direct_structure_member_resolution(void)
+{
+    AstArena *arena = ast_arena_create();
+    ScalarSymbols *table = symtab_create();
+    AstTranslationUnit *unit = parse(arena,
+        "struct Point { unsigned char x; signed int y; } __at(8) point;"
+        "int main(void) {"
+        " struct Local { unsigned char first; signed int second; } local;"
+        " local.first = 5; return local.second; }"
+        "int use_point(void) { point.x = 7; return point.y; }");
+    AstVarDecl *object = (AstVarDecl *)unit->declarations.items[0];
+    AstFunctionDecl *function = (AstFunctionDecl *)unit->declarations.items[1];
+    AstBinaryExpr *assignment = (AstBinaryExpr *)
+        ((AstExprStmt *)function->body->items[1].as.statement)->expression;
+    AstVarDecl *local = (AstVarDecl *)function->body->items[0].as.declaration;
+    AstMemberExpr *local_byte = (AstMemberExpr *)assignment->left;
+    AstMemberExpr *local_word = (AstMemberExpr *)
+        ((AstReturnStmt *)function->body->items[2].as.statement)->expression;
+    AstFunctionDecl *global_function =
+        (AstFunctionDecl *)unit->declarations.items[2];
+    AstBinaryExpr *global_assignment = (AstBinaryExpr *)
+        ((AstExprStmt *)global_function->body->items[0].as.statement)->expression;
+    AstMemberExpr *x_member = (AstMemberExpr *)global_assignment->left;
+    AstMemberExpr *y_member = (AstMemberExpr *)
+        ((AstReturnStmt *)global_function->body->items[1].as.statement)->expression;
+    ResolvedMemberAccess access;
+
+    assert(symtab_resolve(table, unit) == 0);
+    assert(symtab_member_access(table, x_member, &access) == 0);
+    assert(access.member.name != NULL && strcmp(access.member.name, "x") == 0);
+    assert(access.location.storage == SCALAR_REGISTER);
+    assert(access.location.address == 8 && access.location.width == 1);
+    assert(access.location.is_unsigned && access.is_modifiable);
+    assert(symtab_member_access(table, y_member, &access) == 0);
+    assert(access.location.storage == SCALAR_REGISTER);
+    assert(access.location.address == 9 && access.location.width == 2);
+    assert(!access.location.is_unsigned && access.is_modifiable);
+    assert(symtab_member_access(table, local_byte, &access) == 0);
+    assert(access.location.storage == SCALAR_LOCAL);
+    assert(access.location.address == -2 && access.location.width == 1);
+    assert(symtab_declaration(table, local)->is_aggregate);
+    assert(symtab_member_access(table, local_word, &access) == 0);
+    assert(access.location.storage == SCALAR_LOCAL);
+    assert(access.location.address == -1 && access.location.width == 2);
+    assert(symtab_identifier(table, x_member->object) != NULL);
+    assert(symtab_identifier(table, x_member->object)->declaration == object);
+
+    symtab_destroy(table);
+    ast_arena_destroy(arena);
+}
+
+static void test_pointer_structure_member_resolution(void)
+{
+    AstArena *arena = ast_arena_create();
+    ScalarSymbols *table = symtab_create();
+    AstTranslationUnit *unit = parse(arena,
+        "int inspect(struct Pair { unsigned char tag; signed int value; } *p) {"
+        " p->value = 7; return p->tag; }"
+        "struct Local { unsigned char first; unsigned int second; }"
+        " __at(8) object;"
+        "int main(void) { return (&object)->second; }");
+    AstFunctionDecl *inspect = (AstFunctionDecl *)unit->declarations.items[0];
+    AstBinaryExpr *assignment = (AstBinaryExpr *)
+        ((AstExprStmt *)inspect->body->items[0].as.statement)->expression;
+    AstMemberExpr *write = (AstMemberExpr *)assignment->left;
+    AstMemberExpr *read = (AstMemberExpr *)
+        ((AstReturnStmt *)inspect->body->items[1].as.statement)->expression;
+    AstVarDecl *global_object = (AstVarDecl *)unit->declarations.items[1];
+    AstFunctionDecl *main_function =
+        (AstFunctionDecl *)unit->declarations.items[2];
+    AstMemberExpr *address_read = (AstMemberExpr *)
+        ((AstReturnStmt *)main_function->body->items[0].as.statement)->expression;
+    ResolvedMemberAccess access;
+    const ScalarSymbol *parameter;
+
+    assert(symtab_resolve(table, unit) == 0);
+    parameter = symtab_parameter(table, inspect->parameters[0]);
+    assert(parameter != NULL && parameter->location.width == 2);
+    assert(symtab_member_access(table, write, &access) == 0);
+    assert(access.is_indirect && access.pointer_expression == write->object);
+    assert(access.member.offset == 1 && access.member.width == 2);
+    assert(access.location.is_unsigned == 0 && access.is_modifiable);
+    assert(symtab_member_access(table, read, &access) == 0);
+    assert(access.is_indirect && access.member.offset == 0);
+    assert(access.member.width == 1 && access.location.is_unsigned);
+    assert(symtab_member_access(table, address_read, &access) == 0);
+    assert(access.is_indirect && access.member.offset == 1);
+    assert(symtab_declaration(table, global_object)->is_aggregate);
+
+    symtab_destroy(table);
+    ast_arena_destroy(arena);
+}
+
+static void test_structure_rejections(void)
+{
+    static const char *sources[] = {
+        "struct Item item;",
+        "union Value { char byte; int word; } value;",
+        "struct Duplicate { char value; int value; } object;",
+        "struct PointerField { int *value; } object;",
+        "struct ArrayField { int value[2]; } object;",
+        "struct Nested { struct Inner { char value; } inner; } object;",
+        "struct Floating { float value; } object;",
+        "struct Initialized { char value; } object = {1};",
+        "struct TooLarge { char first; char second; } __at(95) object;",
+        "struct First { int value; } __at(8) first;"
+            "struct Second { char a; char b; } __at(9) second;",
+        "struct Value { char byte; int word; } __at(8) value;"
+            "int main(void) { return value; }",
+        "struct Value { char byte; } __at(8) value;"
+            "int main(void) { return value.missing; }",
+        "struct Value { char byte; } __at(8) value;"
+            "int main(void) { value->byte = 1; return 0; }",
+        "int main(void) { const struct Value { char byte; } value;"
+            " value.byte = 1; return 0; }",
+        "struct Value { const char byte; } __at(8) value;"
+            "int main(void) { value.byte = 1; return 0; }",
+        "struct Value { char byte; } __at(8) value;"
+            "int main(void) { int other; other.byte = 1; return 0; }",
+        "struct Value { char byte; } __at(8) value;"
+            "int main(void) { value.byte.byte = 1; return 0; }",
+        "int main(void) { int *ptr; return ptr->value; }",
+        "int main(void) { struct Value { char byte; } *ptr;"
+            " return ptr->missing; }",
+        "int read(const struct Value { char byte; } *ptr) {"
+            " ptr->byte = 1; return 0; }",
+        "int read(struct Value { char byte; } *ptr) {"
+            " return ptr->byte.byte; }"
+    };
+    size_t index;
+
+    for (index = 0; index < sizeof(sources) / sizeof(sources[0]); ++index) {
+        AstArena *arena = ast_arena_create();
+        ScalarSymbols *table = symtab_create();
+        AstTranslationUnit *unit = parse(arena, sources[index]);
+        assert(symtab_resolve(table, unit) != 0);
+        assert(symtab_error(table)[0] != '\0');
+        symtab_destroy(table);
+        ast_arena_destroy(arena);
+    }
+}
+
 static void test_array_rejections(void)
 {
     static const char *sources[] = {
@@ -503,6 +702,10 @@ int main(void)
     test_control_flow_resolution();
     test_parameter_layout_and_calls();
     test_array_layout_and_binding();
+    test_structure_layout();
+    test_direct_structure_member_resolution();
+    test_pointer_structure_member_resolution();
+    test_structure_rejections();
     test_array_rejections();
     test_dynamic_array_index_resolution();
     return 0;

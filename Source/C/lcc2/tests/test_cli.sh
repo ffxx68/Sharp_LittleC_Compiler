@@ -66,6 +66,9 @@ test "$(wc -c < "$dir/output.bin")" -le 1964
 test "$(wc -c < "$dir/output.bin")" -le 700
 ./lcc2.exe tests/pc1403_pointers.c -o "$dir/output.asm"
 ../../../pasm.exe "$dir/output.asm" "$dir/output.bin"
+./lcc2.exe tests/pc1403_struct_members.c -o "$dir/output.asm"
+../../../pasm.exe "$dir/output.asm" "$dir/output.bin"
+test "$(wc -c < "$dir/output.bin")" -le 1964
 ./lcc2.exe tests/pc1403_program.c -o "$dir/output.asm"
 cp "$dir/output.asm" "$dir/expected.asm"
 ./lcc2.exe tests/pc1403_program.c -o "$dir/output.asm"

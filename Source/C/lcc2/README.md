@@ -221,6 +221,26 @@ BASIC program, and the BASIC memory pointer. It pauses on success or failure.
 Use only a disposable session: this clears the current BASIC program and
 overwrites reserved test RAM.
 
+## Structure pointer-member runtime test in MAME
+
+Compile and assemble `tests\pc1403_struct_members.c`, then in a **disposable**
+bridge-enabled PC-1403 session running BASIC, load the repository-root
+`pc1403_key.lua` and run:
+
+```lua
+dofile([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\tests\pc1403_struct_members.lua]])
+lcc2_struct_member_test([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\build\pc1403_struct_members.bin]])
+```
+
+The fixture checks byte and word member reads/writes through `->` for fixed
+internal-RAM and XRAM structures, including stack balance, register
+restoration, and BASIC responsiveness across ten calls. Resolver and codegen
+tests also cover accesses through structure-pointer parameters. Success
+requires `status="PASS"`, `calls=10`, `returns=10`, and `basic_checks=10`; the
+six output bytes at `&E700` must be `EF BE 7C 00 34 12`. Use only a disposable
+session: this clears the current BASIC program and overwrites reserved test
+RAM.
+
 ## Complete-program output and integration test
 
 `codegen_program` retains explicit startup, function, data, and runtime
