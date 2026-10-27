@@ -1678,8 +1678,12 @@ Task 5.3.8.2.
 - Validate target selection and compile/assembly integration, then test
   keyboard scanning/waiting, break-key detection, and LCD clear/pixel/line
   behavior on the selected device, including ABI and caller-state preservation.
-- This endpoint migration remains pending; the existing stdio runtime check
-  does not establish coverage for the full LCD/keyboard API.
+- Supplied `lcd.h` and `key.h` declare target-specific endpoints. `key_scan`
+  uses the nonblocking `0xFF` no-key sentinel; `lcd_hline` clips at the right
+  edge and has a zero-length no-op. Both endpoints and stdio `getchar` use
+  external target modules selected only for called functions. Compiler
+  selection/assembly checks pass, and the MAME runtime fixture is present;
+  final device-level LCD/keyboard verification remains pending.
 
 ### Task 5.3.9: Signed integer semantics
 

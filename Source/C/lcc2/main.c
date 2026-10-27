@@ -153,11 +153,20 @@ int main(int argc, char **argv)
         const char *directory;
         const char *dependency;
     } runtime_modules[] = {
+        {"lcd_on", NULL, NULL},
+        {"lcd_off", NULL, NULL},
+        {"lcd_cls", NULL, NULL},
+        {"lcd_pset", NULL, "_lcd_pset_impl"},
+        {"_lcd_pset_impl", NULL, NULL},
+        {"lcd_hline", NULL, "_lcd_pset_impl"},
+        {"key_wait", NULL, NULL},
+        {"key_scan", NULL, NULL},
+        {"keybrk", NULL, NULL},
         {"strcpy", "runtime", NULL},
         {"strcat", "runtime", NULL},
         {"int2str", "runtime", NULL},
         {"puts", "runtime", "putchar"},
-        {"getchar", NULL, NULL},
+        {"getchar", NULL, "key_wait"},
         {"putchar", NULL, NULL}
     };
     char *runtimes[sizeof(runtime_modules) / sizeof(runtime_modules[0])] = {NULL};

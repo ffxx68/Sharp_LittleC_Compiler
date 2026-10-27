@@ -166,13 +166,32 @@ strings and live stack slots. Source storage must still not overlap the
 live stack itself. The output workspace and display state are shared, so the
 adapter is not reentrant.
 
-### LCD and keyboard endpoint migration: pending
+### `lcd.h` and `key.h`: PC-1403 device endpoints
 
-The nonstandard `lcd.h` and `key.h` migration is separate from stdio.
-`lcd_on`, `lcd_off`, `lcd_cls`, `lcd_pset`, `lcd_hline`, `key_wait`,
-`key_scan`, and `keybrk` are planned endpoints, **not supplied `lcc2` APIs**.
-The current stdio adapters do not establish support for this full device API.
-See roadmap Task 5.3.8.2 for their pending contracts and acceptance criteria.
+These are nonstandard hardware APIs, separate from `stdio.h`. Their
+target-specific modules are selected only for called external functions and
+require `--target PC1403`. Declarations alone add no code, and a program's own
+implementation suppresses the matching supplied module. `getchar` reuses
+`key_wait`; `lcd_hline` reuses the `lcd_pset` implementation. Calls without
+the target have no supplied implementation.
+
+`key_wait()` blocks for a key and returns its raw PC-1403 key code, not ASCII.
+`key_scan()` is nonblocking and returns `0xFF` if no key is pressed; valid
+codes are 0..83, so the sentinel is distinct, including from key code zero.
+`keybrk()` is nonblocking and returns 1 while the break key is pressed, else
+0. These functions preserve caller internal RAM and return through the normal
+`lcc2` ABI.
+
+The LCD is 120 pixels wide by 7 pixels high. Coordinates start at `(0, 0)` in
+the bottom-left corner. `lcd_on()` and `lcd_off()` enable and disable the
+display. `lcd_cls(0)` clears the pixel area and `lcd_cls(1)` fills it; other
+modes do nothing. `lcd_pset(x, y, mode)` clears a pixel for mode 0 or sets it
+for mode 1; out-of-range coordinates or modes do nothing. `lcd_hline(x, y,
+length, mode)` applies the same pixel modes from `x` through
+`x + length - 1`, clips at the right edge, and does nothing for zero length,
+invalid `y`, or invalid modes. These operations do not provide standard
+stream semantics. They preserve caller internal RAM and stack state; drawing
+helpers use private runtime scratch state and are not reentrant.
 
 ## Nonstandard compatibility and conversion helpers
 

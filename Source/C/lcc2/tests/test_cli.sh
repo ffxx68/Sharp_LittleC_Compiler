@@ -116,6 +116,8 @@ fi
 printf 'int getchar(void); int putchar(int); int main(void) { putchar(getchar()); return 0; }\n' > "$dir/source.c"
 compile "$dir/source.c" -o "$dir/output.asm"
 grep -q '^getchar:' "$dir/output.asm"
+grep -q 'CALL.*key_wait' "$dir/output.asm"
+grep -q '^key_wait:' "$dir/output.asm"
 grep -q 'LIDP.*0xFF5E' "$dir/output.asm"
 if grep -q 'PC1403_GETCHAR_' "$dir/output.asm"; then
     echo "getchar unexpectedly contains key-code translation" >&2
