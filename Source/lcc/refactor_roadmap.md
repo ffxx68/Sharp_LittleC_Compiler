@@ -1714,7 +1714,56 @@ With an AST available, implement optimizations that the old syntax-directed tran
   comparisons, logical/unary results, runtime-side-effect preservation, and
   rejection of division by zero. The full `make test` suite passes.
 
-### Task 6.2: Dead code elimination — remove `if(0)` branches, unused functions
+### Task 6.2: Dead code elimination
+
+Implement as two independently testable `lcc2` code-generation optimizations.
+Estimates below include focused regression tests and assume the current
+unsigned-integer subset; they exclude signed semantics (Task 7.1) and target
+runtime testing.
+
+#### Task 6.2.1: Constant-condition branch elimination
+
+- After the translation unit has passed normal parsing and semantic
+  resolution, use `symtab_fold_constant` to select the live branch of an
+  `if` whose condition is a side-effect-free constant. Omit the `if` and its
+  condition evaluation, emitting only the selected branch; support both
+  `if (0)` and nonzero constant conditions. Leave nonconstant conditions
+  unchanged.
+- Preserve diagnostics: dead-branch contents must still be parsed and
+  semantically validated, and an invalid construct must not become accepted
+  merely because it is unreachable. Use only the existing constant-folding
+  semantics; signed-condition behavior remains subject to Task 7.1.
+- Test zero/nonzero conditions, nested conditionals, dangling `else`, side
+  effects in nonconstant conditions, and invalid code in a dead branch.
+  Verify both emitted assembly and that runtime behavior of retained branches
+  is unchanged.
+- **Complexity: Low; estimate 0.5–1.5 engineering days.** The constant
+  evaluator and semantic-validation-before-emission path already exist; the
+  main work is careful statement emission and regression coverage.
+
+#### Task 6.2.2: Unreachable function elimination
+
+- For complete-program generation, build reachability from the required
+  `main` definition by walking direct calls in reachable function bodies.
+  Emit reachable definitions only; retain existing call behavior and
+  declarations/prototypes needed for resolution. Handle recursion and cycles
+  by marking each function before traversing its body.
+- The call-graph walk must cover calls in expressions, initializers, and all
+  supported statement forms. Where an inline-assembly statement could hide
+  a function reference, conservatively retain all definitions rather than
+  risk removing a referenced routine. If constant-condition elimination is
+  active, the walk should follow only the selected branch for foldable `if`
+  conditions.
+- Test direct and transitive reachability, unused functions, recursive and
+  mutually recursive functions, prototypes, calls in nested/control-flow
+  expressions, inline-assembly fallback, and unchanged runtime-library
+  inclusion. Check that the ordinary translation-unit code-generation API
+  retains its existing behavior unless its contract is explicitly changed.
+- **Complexity: Medium; estimate 2–4 engineering days.** The AST and direct
+  call support are in place, but a complete AST walk, conservative handling
+  of opaque assembly, and integration with complete-program section emission
+  require broader coverage than branch pruning.
+
 ### Task 6.3: Register allocation — smarter use of registers I, J, K, L, M, N
 ### Task 6.4: Strength reduction — `x * 2` → `x << 1`, `x * 3` → `(x << 1) + x`
 ### Task 6.5: Tail call optimization — useful given the very small stack (~80 bytes)
