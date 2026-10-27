@@ -1811,14 +1811,36 @@ remain in Task 7.1.
   bytes (352 bytes smaller than its 1,767-byte pre-change image). The current
   bounce image is 1.94 times the 1,509-byte Pascal image.
 
-### Task 6.3: Dead code elimination
+------
+# Phase 7 — Cleanup, docs and release
+
+The porting to C has reached a sufficient maturity, to consider
+the replacement to the legacy (Pascal-based) lcc virtually complete.
+
+Phases 8 and 9 are further optimizations, and feature enrichments.
+
+### Task 7.1: Review the user manual (`Docs/lcc2_manual.md`).
+
+Keep it simple and up-to-date with the current supported subset, and add a "known limitations" section.
+Add reference to practical demo and examples
+    
+### Task 7.3: Update README with build instructions (`make` / `cmake`).
+
+### Task 7.4: Publish release with prebuilt binaries (Windows, Linux).
+
+Verification: build + full test suite green on Windows and Linux.
+
+------
+# Phase 8 — Further optimizations
+
+### Task 8.1: Dead code elimination
 
 Implement as two independently testable `lcc2` code-generation optimizations.
 Estimates below include focused regression tests and assume the current
 unsigned-integer subset; they exclude signed semantics (Task 7.1) and target
 runtime testing.
 
-#### Task 6.3.1: Constant-condition branch elimination
+#### Task 8.1.1: Constant-condition branch elimination
 
 - After the translation unit has passed normal parsing and semantic
   resolution, use `symtab_fold_constant` to select the live branch of an
@@ -1838,7 +1860,7 @@ runtime testing.
   evaluator and semantic-validation-before-emission path already exist; the
   main work is careful statement emission and regression coverage.
 
-#### Task 6.3.2: Unreachable function elimination
+#### Task 8.1.2: Unreachable function elimination
 
 - For complete-program generation, build reachability from the required
   `main` definition by walking direct calls in reachable function bodies.
@@ -1861,15 +1883,15 @@ runtime testing.
   of opaque assembly, and integration with complete-program section emission
   require broader coverage than branch pruning.
 
-### Task 6.4: Register allocation — smarter use of registers I, J, K, L, M, N
-### Task 6.5: Strength reduction — `x * 2` → `x << 1`, `x * 3` → `(x << 1) + x`
-### Task 6.6: Tail call optimization — useful given the very small stack (~80 bytes)
-### Task 6.7: Inline expansion — inline small functions (1–3 instructions)
+### Task 8.2: Register allocation — smarter use of registers I, J, K, L, M, N
+### Task 8.3: Strength reduction — `x * 2` → `x << 1`, `x * 3` → `(x << 1) + x`
+### Task 8.4: Tail call optimization — useful given the very small stack (~80 bytes)
+### Task 8.5: Inline expansion — inline small functions (1–3 instructions)
 
 ---
-# Phase 7 — Advanced arithmetics
+# Phase 9 — Advanced arithmetics
 
-### Task 7.1: Signed integer semantics
+### Task 9.1: Signed integer semantics
 
 - Correct signedness, integer promotions/conversions, and comparisons for
   supported signed and unsigned byte/word expressions without changing
@@ -1884,7 +1906,7 @@ runtime testing.
 - Until this task is complete, signed operations beyond the currently
   supported forms must continue to fail explicitly.
 
-### Task 7.2: Floating-point support (deferred until after Task 5.3.9)
+### Task 9.2: Floating-point support (deferred until after Task 5.3.9)
 
 - Add floating-point expression, conversion, and storage behavior only after
   the standard-C library headers in Task 5.3.8 have been migrated.
@@ -1894,20 +1916,10 @@ runtime testing.
 - Until this task is complete, floating-point constructs must continue to
   fail explicitly and must not be treated as supported integer expressions.
 
-### Task 7.3: review optimizations
+### Task 9.3: review optimizations
 
-- Review the optimizations introduced with Phase 6, after new arithmetic and signed/unsigned operations have been implemented, and ensure they are correct and complete.
-
----
-# Phase 8 — Cleanup, docs and release
-
-- Task 8.1: Decide whether to retain the Pascal compiler as a reference 
-  or archive it only after the Phase 5.3.11 completion gates pass.
-- Task 8.2: Write the user manual for the new compiler (`Docs/sc61860cc_manual.md`).
-- Task 8.3: Update README with build instructions (`make` / `cmake`).
-- Task 8.4: CI scripts (GitHub Actions or similar) for automated regression tests.
-- Task 8.5: Publish release with prebuilt binaries (Windows, Linux).
-- Verification: build + full test suite green on Windows and Linux.
+- Review the optimizations introduced earlier, after new arithmetic and signed/unsigned operations have been implemented, 
+  and ensure they are correct and complete.
 
 ---
 
