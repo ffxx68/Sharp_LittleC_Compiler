@@ -406,8 +406,9 @@ Run the foundational checks with `make test`. Remove generated build files with
 - `parser.y` builds the typed AST for declarations, function bodies, statements,
   initializers, and expressions. The parser currently accepts the supported
   subset; the scalar resolver supplies the currently implemented semantic checks.
-- `symtab.h` / `symtab.c` define scalar bindings, scope resolution, and storage
-  layout. Full symbol-table support remains incremental.
+- `symtab.h` / `symtab.c` define bindings, scope resolution, and storage layout
+  for the documented language subset. Broader C name and storage semantics
+  remain intentionally out of scope; see the user manual.
 - `codegen.h` / `codegen.c` define an explicit codegen context with assembly
   output, deterministic labels, stack-depth tracking, and a limited AST walker.
 - `parser.h` exposes `lcc2_parse_string` for parser clients and tests.

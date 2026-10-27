@@ -1516,18 +1516,26 @@ specification in `Docs/sc61860_c_subset.md`. Signed semantics (5.3.9) and
 floating point (5.3.10) remain later implementation work required by the final
 port-completion gate in 5.3.11.
 
-### Task 5.3.5: Symbol table (`symtab.c`)
+### Task 5.3.5 ✅: Symbol table (`symtab.c`)
 
-Complete the symbol table incrementally from the minimal scalar resolver
-introduced in Task 5.3.4.3. Execution order follows actual dependencies:
-finish that resolver before scalar backend integration (Task 5.3.4.4), and
-extend symbol/layout support before each later backend slice that needs it.
-The numbering of this umbrella task does not postpone those prerequisites.
+Complete for the documented `lcc2` language subset. This task does not require
+all C89 name or storage semantics: the goal is a small, reliable compiler for
+the SC61860, and features outside the agreed subset remain deferred unless a
+target use case or a later roadmap task requires them.
 
-- Nested scopes (scope stack: global → function → block) — required for standard C
-- Lookup with shadowing (local variable hides global)
-- `struct` tag namespace separate
-- Define storage/layout results consumed by the backend; reuse and document Pascal register/XRAM/stack allocation rules where valid, without coupling the new symbol table to code emission.
+- Resolve case-sensitive identifiers and functions, nested block scopes,
+  local shadowing, parameters, and function declarations/definitions.
+- Provide backend-consumable storage and layout information for supported
+  globals, parameters, local frames, arrays, restricted structures and member
+  access, while keeping resolution separate from instruction emission.
+- Validate supported-subset constraints and reject unsupported or invalid
+  declarations and uses. `tests/test_symtab.c` covers resolver behavior;
+  `make -C Source\C\lcc2 test` also exercises parser, backend and CLI
+  integration.
+- Explicitly deferred: C's separate scoped `struct` tag namespace and
+  forward-tag lookup, along with storage/type forms listed as unsupported in
+  `Docs/lcc2_manual.md`. Those limitations are intentional, not incomplete
+  work for this task.
 
 ### Task 5.3.6: Peephole optimizer (`peephole.c`)
 

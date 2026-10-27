@@ -8,6 +8,13 @@ and does not compile the full language described in
 [the target C subset](sc61860_c_subset.md). Parser acceptance alone does not
 mean a construct can be compiled.
 
+The goal is a small, practical C subset suited to the SC61860's limited
+resources, not full C89 conformance. Language features are added when they
+provide useful value for target programs and can be supported reliably by the
+compiler and target runtime. Unsupported features and implementation limits
+are listed below; programs should stay within those limits rather than assume
+that a construct accepted by another C compiler will work here.
+
 The current implementation supports byte/word scalars and arrays, parameterized
 functions, direct calls, assignments, arithmetic, bitwise, shift, logical and
 comparison operators on unsigned values, byte/word pointers, structure-pointer
@@ -119,6 +126,10 @@ returns, addresses of automatic locals, whole-array or dynamic-element
 addresses, array-to-pointer decay, and pointer arithmetic other than `++`,
 `--`, `+=`, and `-=` are unsupported. Multidimensional and variable-length
 arrays and non-byte/word array elements are unsupported.
+Named structure tags do not yet have C's separate, scoped tag namespace:
+later `struct Tag` references are not resolved to an earlier definition.
+Keep a structure definition with the declaration that uses its type; do not
+rely on forward tag declarations or reuse of a tag across declarations.
 
 Signed relational comparisons, signed right shifts, and signed division and
 remainder are unsupported; integer operators otherwise use unsigned semantics.
