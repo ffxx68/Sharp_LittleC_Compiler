@@ -1542,8 +1542,27 @@ static int emit_discarded(CodegenContext *ctx, const AstExpr *expression)
     if (update < 0) {
         return set_error(ctx, "unresolved pointer update reached code generation");
     }
-    return update > 0 ? emit_update(ctx, &rewrite, 1)
-                      : emit_expression(ctx, expression);
+    if (update > 0) {
+        return emit_update(ctx, &rewrite, 1);
+    }
+    if (expression->node.kind == AST_NODE_BINARY_EXPR) {
+        const AstBinaryExpr *binary = (const AstBinaryExpr *)expression;
+        if (binary->op == AST_BINARY_ASSIGN &&
+            binary->left->node.kind == AST_NODE_IDENT_EXPR) {
+            const ScalarSymbol *symbol =
+                symtab_identifier(ctx->symbols, binary->left);
+            if (symbol == NULL || symbol->is_array) {
+                return set_error(ctx,
+                    "unresolved scalar assignment reached code generation");
+            }
+            if (emit_expression(ctx, binary->right) != 0 ||
+                codegen_store_scalar(ctx, symbol->location) != 0) {
+                return -1;
+            }
+            return ctx->error[0] == '\0' ? 0 : -1;
+        }
+    }
+    return emit_expression(ctx, expression);
 }
 
 static int emit_expression(CodegenContext *ctx, const AstExpr *expression)

@@ -71,6 +71,8 @@ printf 'typedef unsigned char byte; int main(void) { byte value; return 0; }\n' 
 compile "$dir/source.c" -o "$dir/output.asm"
 compile tests/scalars.c -o "$dir/output.asm"
 grep -q 'LIDP.*59391' "$dir/output.asm"
+compile tests/discarded_assignments.c -o "$dir/output.asm"
+../../../pasm.exe "$dir/output.asm" "$dir/output.bin"
 compile tests/calls.c -o "$dir/output.asm"
 ../../../pasm.exe "$dir/output.asm" "$dir/output.bin"
 assert_no_runtime()

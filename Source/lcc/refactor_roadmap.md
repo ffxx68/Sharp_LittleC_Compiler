@@ -1714,14 +1714,85 @@ With an AST available, implement optimizations that the old syntax-directed tran
   comparisons, logical/unary results, runtime-side-effect preservation, and
   rejection of division by zero. The full `make test` suite passes.
 
-### Task 6.2: Dead code elimination
+### Task 6.2: Reduce generated code for byte operations and expressions
+
+Target the code-size overhead in the current `lcc2` byte-expression path while
+preserving C value semantics and the existing call ABI. Keep this work within
+the current unsigned-integer subset; signed promotion and comparison behavior
+remain in Task 7.1.
+
+#### Task 6.2.1 ✅: Avoid materializing discarded assignment results
+
+- First optimize discarded assignments to directly resolved scalar identifiers
+  (register, XRAM, and local): evaluate the right-hand side once and store it
+  without reloading the assigned value. Keep assignments through fixed-index
+  arrays, structure members, or pointers on their existing paths in this step.
+- Preserve the current value-producing path wherever an assignment result is
+  consumed, including nested assignments and comma expressions. Do not change
+  side-effect ordering or evaluate an operand more than once.
+- Test discarded byte and word assignments, side-effecting right-hand sides,
+  nested assignments whose values are consumed, and assignments inside comma
+  expressions. Verify emitted sequences and stack accounting.
+- Measure the bounce image before and after this step. **Complexity: Low;
+  estimate 0.5–1 engineering day.** Discarded expressions are already
+  identified by `emit_discarded`; this first slice should remove the redundant
+  scalar reload without changing value-producing expressions.
+- Implemented the direct-identifier scalar path in `emit_discarded`, preserving
+  the value-producing path for nested assignments and leaving array/member/
+  pointer stores unchanged. Codegen tests cover register, XRAM, and local
+  byte/word destinations, side-effecting calls, consumed nested results, comma
+  expressions, and stack balance; `make test` passes. The
+  `discarded_assignments.c` MAME test passes for ten BASIC calls, checking
+  discarded stores, consumed nested/comma results, exactly-once RHS calls,
+  and BASIC memory integrity. The bounce image fell from 3,347 to 3,207 bytes
+  (140 bytes, 4.2%).
+
+#### Task 6.2.2: Generate width-aware byte expressions
+
+- Use resolved expression types to avoid unnecessary 16-bit setup, stack
+  traffic, and byte promotion when an operation can preserve byte-width
+  semantics. Insert promotions only where required by the supported C
+  conversions or result type.
+- Begin with byte loads, assignments, and unsigned byte arithmetic; preserve
+  existing word and pointer behavior. Do not introduce signed semantics, which
+  remain in Task 7.1.
+- Test byte and word operations, unsigned wraparound, mixed-width expressions,
+  assignment results, and contexts that require promotion. Compare generated
+  assembly and run the relevant target-level fixtures.
+- **Complexity: Medium; estimate 2–4 engineering days.** This requires
+  carrying resolved widths through expression emission and validating every
+  conversion boundary affected by narrower operations.
+
+#### Task 6.2.3: Specialize comparisons for byte operands
+
+- Emit direct comparisons for compatible unsigned byte operands instead of
+  routing every comparison through the 16-bit helpers. Preserve the current
+  truth-value convention and use the existing word path for wider or mixed
+  operands unless a valid narrowing conversion is established.
+- Test equality and relational boundaries, including 0, 255, mixed byte/word
+  operands, and byte values used in conditions. Signed comparisons remain in
+  Task 7.1.
+- **Complexity: Medium; estimate 1–3 engineering days.** The helper currently
+  implements 16-bit comparisons; a byte path needs explicit width and
+  conversion checks plus regression coverage.
+
+#### Task 6.2.4: Measure generated-code changes
+
+- For each optimization step, record assembled image sizes for the bounce
+  demo and representative byte/word fixtures. Keep existing codegen, CLI,
+  assembly, and runtime tests passing; report size changes separately from
+  behavior changes.
+- **Complexity: Low; estimate 0.5 engineering day**, performed alongside the
+  implementation steps.
+
+### Task 6.3: Dead code elimination
 
 Implement as two independently testable `lcc2` code-generation optimizations.
 Estimates below include focused regression tests and assume the current
 unsigned-integer subset; they exclude signed semantics (Task 7.1) and target
 runtime testing.
 
-#### Task 6.2.1: Constant-condition branch elimination
+#### Task 6.3.1: Constant-condition branch elimination
 
 - After the translation unit has passed normal parsing and semantic
   resolution, use `symtab_fold_constant` to select the live branch of an
@@ -1741,7 +1812,7 @@ runtime testing.
   evaluator and semantic-validation-before-emission path already exist; the
   main work is careful statement emission and regression coverage.
 
-#### Task 6.2.2: Unreachable function elimination
+#### Task 6.3.2: Unreachable function elimination
 
 - For complete-program generation, build reachability from the required
   `main` definition by walking direct calls in reachable function bodies.
@@ -1764,10 +1835,10 @@ runtime testing.
   of opaque assembly, and integration with complete-program section emission
   require broader coverage than branch pruning.
 
-### Task 6.3: Register allocation — smarter use of registers I, J, K, L, M, N
-### Task 6.4: Strength reduction — `x * 2` → `x << 1`, `x * 3` → `(x << 1) + x`
-### Task 6.5: Tail call optimization — useful given the very small stack (~80 bytes)
-### Task 6.6: Inline expansion — inline small functions (1–3 instructions)
+### Task 6.4: Register allocation — smarter use of registers I, J, K, L, M, N
+### Task 6.5: Strength reduction — `x * 2` → `x << 1`, `x * 3` → `(x << 1) + x`
+### Task 6.6: Tail call optimization — useful given the very small stack (~80 bytes)
+### Task 6.7: Inline expansion — inline small functions (1–3 instructions)
 
 ---
 # Phase 7 — Advanced arithmetics

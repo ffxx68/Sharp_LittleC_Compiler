@@ -313,6 +313,31 @@ ten times. Inspect `lcc2_scalar_result`: success requires `status="PASS"`,
 `calls=10`, bytes `2A 00 3B FF` at `&E600`, and `5E 12` at `&E7FF`, with
 the BASIC program unchanged. No screenshots or machine snapshots are used.
 
+## Discarded assignment runtime test in MAME
+
+Compile and assemble `tests\discarded_assignments.c`:
+
+```powershell
+.\Source\C\lcc2\lcc2.exe --target PC1403 Source\C\lcc2\tests\discarded_assignments.c -o Source\C\lcc2\build\pc1403_discarded_assignments.asm
+.\pasm.exe Source\C\lcc2\build\pc1403_discarded_assignments.asm Source\C\lcc2\build\pc1403_discarded_assignments.bin
+```
+
+In a disposable PC-1403 session with the bridge running, load
+`pc1403_key.lua`, then run:
+
+```lua
+dofile([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\tests\discarded_assignments.lua]])
+lcc2_discarded_assignments_test([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\build\pc1403_discarded_assignments.bin]])
+```
+
+The harness calls the program from BASIC ten times and checks
+`A5 34 12 A5 A5 00 A5 34 12 05` at `&E700`: standalone byte/word
+assignments store their results, a consumed nested byte assignment produces
+`0x00A5`, comma-expression assignments still execute, and the side-effect
+counter confirms exactly five RHS calls. It also checks that BASIC's program
+and memory-start pointer remain unchanged. Inspect
+`lcc2_discarded_assignments_result` for status and outputs.
+
 ## Comparison runtime test in MAME
 
 Compile and assemble `tests\comparisons.c` as above. In a **disposable**

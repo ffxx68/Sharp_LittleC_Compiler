@@ -943,6 +943,42 @@ static void test_indirect_pointer_access(void)
     ast_arena_destroy(arena);
 }
 
+static void test_discarded_scalar_assignment_omits_result_load(void)
+{
+    AstArena *arena = ast_arena_create();
+    CodegenContext *ctx = codegen_context_create();
+    AstTranslationUnit *unit = parse(arena,
+        "unsigned char __at(8) byte_value;"
+        "unsigned int __at(10) word_value;"
+        "__xram __at(0xE600) unsigned char xram_value;"
+        "unsigned char next(void) { return 7; }"
+        "void main(void) {"
+        " unsigned char local_byte; unsigned int local_word;"
+        " byte_value = next(); local_byte = next();"
+        " xram_value = next();"
+        " word_value = byte_value = next();"
+        " (byte_value = next(), word_value = next());"
+        " local_word = local_byte = next();"
+        "}");
+    const char *functions;
+    const char *call;
+    size_t call_count = 0;
+
+    assert(ctx != NULL);
+    assert(codegen_program(ctx, unit) == 0);
+    functions = codegen_section_output(ctx, CODEGEN_FUNCTIONS);
+    for (call = functions; (call = strstr(call, "CALL\tnext")) != NULL;
+         call += strlen("CALL\tnext")) {
+        ++call_count;
+    }
+    assert(call_count == 7);
+    assert(strstr(functions, "\tLP\t8\n\tLDM\n") != NULL);
+    assert(strstr(functions, "\tLIDP\t58880\n\tLDD\n") == NULL);
+    assert(codegen_stack_depth(ctx) == 0);
+    codegen_context_destroy(ctx);
+    ast_arena_destroy(arena);
+}
+
 static void test_runtime_libraries(void)
 {
     static const char *operators[] = {"==", "!=", "<", "<=", ">", ">="};
@@ -1317,6 +1353,7 @@ int main(void)
     test_address_formation();
     test_pointer_values_and_parameters();
     test_pointer_returns();
+    test_discarded_scalar_assignment_omits_result_load();
     test_indirect_pointer_access();
     test_program_sections();
     return 0;
