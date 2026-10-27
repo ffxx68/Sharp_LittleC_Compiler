@@ -182,8 +182,17 @@ the BASIC-level check above remains a separate target acceptance step.
 
 ## Standard I/O runtime test in MAME
 
-Compile `tests\pc1403_stdio.c` with `--target PC1403` and assemble it with
-PASM. In a disposable PC-1403 session, load `pc1403_key.lua`, then
+The I/O fixtures include the actual `stdio.h`: preprocess before compiling
+with `--target PC1403` and assembling with PASM. For example, from the
+repository root:
+
+```powershell
+gcc -E -P -nostdinc -I Source\C\lcc2\include Source\C\lcc2\tests\pc1403_stdio.c -o Source\C\lcc2\build\pc1403_stdio.c
+.\Source\C\lcc2\lcc2.exe --target PC1403 Source\C\lcc2\build\pc1403_stdio.c -o Source\C\lcc2\build\pc1403_stdio.asm
+.\pasm.exe Source\C\lcc2\build\pc1403_stdio.asm Source\C\lcc2\build\pc1403_stdio.bin
+```
+
+In a disposable PC-1403 session, load `pc1403_key.lua`, then
 `tests\pc1403_stdio.lua` and call `lcc2_stdio_test` with the binary's absolute
 path. The harness clears BASIC, reserves memory, runs a BASIC caller, and
 presses `1`. It checks raw key code 51, `putchar('A')` returning 65, completion,
@@ -229,6 +238,47 @@ and destination guards, pointer returns and dereferencing, stack balance,
 and register restoration. It leaves MAME unpaused. `make test` also checks
 actual-header preprocessing, signature errors, selective inclusion and
 deduplication, user-provided implementations, and assembly without a target.
+
+## Library completion test in MAME
+
+`make test` runs `tests\test_libraries.sh`, covering every supplied header
+(`stdint.h`, `compat.h`, `stdio.h`, `string.h`, `int2str.h`), repeated
+inclusion, typedef use, invalid signatures, and assembly. It verifies
+per-function selection and deduplication, the `puts` dependency on `putchar`,
+custom implementations, and target-free string/conversion routines.
+It also builds the I/O and completion fixtures using the real headers.
+
+The supported contracts, including the deliberately nonstandard no-newline
+`puts`, are in the [library reference](../../../Docs/lcc2_libraries.md).
+To build the completion fixture separately from the repository root:
+
+```powershell
+gcc -E -P -nostdinc -I Source\C\lcc2\include Source\C\lcc2\tests\pc1403_libraries.c -o Source\C\lcc2\build\pc1403_libraries.c
+.\Source\C\lcc2\lcc2.exe --target PC1403 Source\C\lcc2\build\pc1403_libraries.c -o Source\C\lcc2\build\pc1403_libraries.asm
+.\pasm.exe Source\C\lcc2\build\pc1403_libraries.asm Source\C\lcc2\build\pc1403_libraries.bin
+```
+
+In a disposable PC-1403 session, load `pc1403_key.lua`, then
+`tests\pc1403_libraries.lua` and call `lcc2_library_test` with the binary's
+absolute path. An optional second argument specifies a screenshot path.
+Inspect `lcc2_library_result`: success is `status="PASS"`, `vectors=48`,
+`returns=48`, `conversions=33`, `output_checks=15`, `basic_runs=3`, and
+`basic_responsive=true`. The harness checks decimal conversion at
+digit-count/byte/word boundaries, internal/XRAM destinations and XRAM page
+crossings, untouched conversion guards, byte truncation and word typedefs,
+empty/printable/error-prefix `puts` behavior, shared output with `putchar`,
+and conversion followed by display. It batches the 48 distinct vectors into
+three BASIC `RUN`s (16 `CALL`s per run), checks stack
+balance, register restoration and BASIC responsiveness, and leaves MAME
+unpaused. The source/destination inputs are injected after startup initializes
+globals, not before.
+
+This is an instrumented correctness test, not a speed benchmark. Keyboard
+entry of `RUN` deliberately takes about 0.8 seconds; entry, initialization,
+result and return inspection loops each wait for an emulated frame. Those
+stops add about another second per batch, before any real program execution
+cost. A roughly two-second batch response does not imply a two-second
+compiled-library call.
 
 ## Scalar functional test in MAME
 

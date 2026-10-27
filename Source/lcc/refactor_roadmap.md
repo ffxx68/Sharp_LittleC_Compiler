@@ -1586,15 +1586,22 @@ deferred to Task 5.3.9 rather than treated as a compatibility requirement.
   helpers. `Docs/lcc2_manual.md` documents the language and links to this
   separate reference.
 
-#### Task 5.3.8.1: Standard-C library subset and compatibility helpers
+#### Task 5.3.8.1 ✅: Standard-C library subset and compatibility helpers
+
+Complete for the explicitly supported subset and accepted device deviations,
+not the full standard-C library. Library contracts and migration examples are
+in `Docs/lcc2_libraries.md`. The separate LCD/key endpoint work remains in
+Task 5.3.8.2.
 
 - Provide minimal `stdint.h` (`uint8_t`, `uint16_t`) and `compat.h` (`byte`,
   `word`) using frontend-supported typedefs. `compat.h` is a legacy
   convenience header, not a standard-C header.
-- Develop the supported `stdio.h` subset (`getchar`, `putchar`, and later
-  `puts`) with target-independent declarations and externally supplied
-  implementations. Document supported character, return-value, and error
-  semantics; do not imply full hosted-C stdio support.
+- Supplied `stdio.h` declares `getchar`, `putchar`, and `puts` independently
+  of the target. Their implementations are external modules. The accepted
+  `puts` contract is deliberately nonstandard: append through NUL without
+  newline, return 0 on success or -1 on the first output error, retaining
+  any written prefix. Empty strings succeed without a write. This milestone
+  does not imply full hosted-C stdio or standard `puts` newline behavior.
 - Current foundation: `getchar`/`putchar` declarations and the external
   PC-1403 runtime are implemented as separate, call-selected modules: only
   externally called stdio functions add their runtime, once; declarations
@@ -1611,6 +1618,11 @@ deferred to Task 5.3.9 rather than treated as a compatibility requirement.
   The append-only MAME fixture verified `ABC`, the complete 24-character line,
   return values, full/control-byte rejection, stack balance, register
   restoration, and BASIC responsiveness; scrolling/newline support is deferred.
+  `putchar` preserves caller IRAM 8..95 around display preparation and ROM
+  output using an 88-byte runtime workspace; otherwise a ROM call could
+  destroy the source of a multi-character `puts` operation.
+  `puts` selects only its adapter and required `putchar` dependency, once;
+  a program-defined `putchar` suppresses the target implementation.
 - String subset implemented: `string.h` exposes only standard two-argument
   `strcpy` and `strcat`, returning the destination pointer. Their separate
   device-independent SC61860 runtime modules are selected only for called
@@ -1626,16 +1638,28 @@ deferred to Task 5.3.9 rather than treated as a compatibility requirement.
   exercise empty/260-byte strings, high bytes, page crossings, internal/XRAM
   combinations, destination-pointer returns, source/destination guards,
   stack/register preservation and BASIC responsiveness without pausing.
-- Keep `int2str.h` as a separately documented, nonstandard unsigned-integer
-  conversion helper; its migration remains pending, not part of string.h
-  or stdio.
-- Replace legacy `puts.h` usage with the supported `stdio.h` API; distinguish
-  standard `puts` behavior from the legacy ROM-based display operation.
-- Cover header preprocessing, typedef use, function signatures, portable
-  string/conversion results, and assembly of programs using the supported
-  library subset. Retain the `pc1403_stdio.c` / `pc1403_stdio.lua` runtime
-  check for raw key input, character output, return values, stack balance,
-  register restoration, and BASIC responsiveness.
+- Supplied `int2str.h` declares the separate nonstandard helper
+  `void int2str(unsigned int number, char *destination)`. Its independent,
+  call-selected runtime converts 0..65535 to decimal ASCII plus NUL without
+  leading zeros, ROM dependencies or static scratch storage. The caller
+  provides six writable bytes in internal RAM or XRAM. It is not part of
+  string.h or stdio.
+- Legacy conversion/display migration is documented and exercised by the
+  `pc1403_libraries.c` fixture: replace legacy `puts.h` with `stdio.h`,
+  pass `&buffer[0]` rather than an integer address, and check the output
+  result. Root headers and Pascal examples remain unchanged.
+- `tests/test_libraries.sh` preprocesses all five supplied headers twice,
+  checks typedefs/signatures, independent selection, required dependencies,
+  deduplication, user implementations and assembly. The completion harness
+  passes 48 distinct vectors in three BASIC `RUN`s: 33 conversion cases and
+  15 output cases, including empty/full/control-prefix behavior, page
+  crossings, internal/XRAM storage, shared `puts`/`putchar` state and the
+  conversion/display example. Stack balance, register restoration and BASIC
+  responsiveness are required; MAME remains unpaused.
+- The header-using `pc1403_stdio.c` / `pc1403_stdio.lua`, append-only,
+  input-only and string fixtures retain coverage for raw key input,
+  character output, return values and caller-state preservation. Device
+  verification is in PC-1403 MAME; physical-device verification is not claimed.
 
 #### Task 5.3.8.2: Device-specific endpoints — LCD and keyboard
 

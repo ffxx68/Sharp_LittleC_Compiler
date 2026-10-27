@@ -22,12 +22,15 @@ gcc -E -P -nostdinc -I Source\C\lcc2\include .\program.c -o .\program.preprocess
 
 Add `--target PC1403` to the `lcc2` invocation when using the supplied
 device-dependent I/O implementations. Without a target, no device runtime is
-appended; device-independent string routines remain available.
+appended; device-independent string and conversion routines remain available.
 
 The command-line driver appends each external library module only when its
 function is called in generated code, once per module. Header declarations
 alone add nothing. A user-defined implementation does not select the supplied
 module. Selection is based on emitted calls, not whole-program reachability.
+The append-only `puts` adapter also needs `putchar`; only this required
+dependency is added, unless the program defines its own `putchar`. Calling
+`puts` does not add input, string-copy, or conversion routines.
 The routines use the compiler's normal byte/word/pointer call ABI. There is
 no general external-object linker.
 
@@ -101,17 +104,36 @@ the rest of the standard string library are outside this migration.
 ```c
 int getchar(void);
 int putchar(int character);
+int puts(const char *text);
 ```
 
-The declarations are target-independent; the supplied implementations require
-`--target PC1403`. Including the header does not include both routines:
-input-only programs add no output routine or LCD buffer.
+The declarations are target-independent. The supplied `getchar` and `putchar`
+implementations require `--target PC1403`. The separate `runtime\puts.asm`
+adapter uses `putchar` through the same ABI and can also use a program-defined
+`putchar`, including without `--target`. Without a target or such an
+implementation, its output dependency is unresolved at assembly time.
+Including the header alone adds nothing; input-only programs add no output
+routine or LCD buffer.
 
 The current PC-1403 adapter is not a conforming standard-C stream:
 `getchar` returns raw hardware key codes, and `putchar` supports only
 append-only printable output. Their exact contracts and accepted deviations
-are in the target-specific section below. `puts` and full hosted-C stdio
-support are not supplied.
+are in the target-specific section below. Full hosted-C stdio is not supplied.
+
+**Accepted nonstandard `puts`: no trailing newline.** The current milestone
+explicitly uses append-only output, not standard C's string-plus-newline
+behavior. `puts` writes bytes through the string's NUL, excluding NUL, via
+`putchar`, then returns 0. An empty string succeeds without writing anything,
+including on a full line. The first `putchar` error stops the operation and
+returns -1 (`0xFFFF`); any successfully written prefix remains on the line.
+No remaining bytes are processed, and no rollback occurs.
+
+On PC-1403, strings consisting of supported printable bytes fit only within
+the remaining 24 columns. Full-line, newline/control, and non-ASCII bytes
+produce the same errors as `putchar`. For example, `puts` on the brace-list
+string `{65, 66, 10, 67, 0}` appends `AB`, returns -1 at the newline, and
+never writes `C`. Do not assume standard `puts` newline behavior when
+porting code.
 
 ## Target-specific library functions and adapters
 
@@ -138,7 +160,11 @@ not full stream semantics.
 The runtime owns a 25-byte buffer and a length byte, initialized by loading
 the binary. The line persists across program calls, including repeated BASIC
 calls to the same loaded program. Reload the binary to start with an empty
-output buffer.
+output buffer. A separate 88-byte workspace preserves caller internal RAM
+8..95 across display-buffer preparation and the ROM call, including source
+strings and live stack slots. Source storage must still not overlap the
+live stack itself. The output workspace and display state are shared, so the
+adapter is not reentrant.
 
 ### LCD and keyboard endpoint migration: pending
 
@@ -155,10 +181,53 @@ These helpers are neither standard-C interfaces nor hardware endpoints.
 | Header | Current support |
 |--------|-----------------|
 | `compat.h` | `byte` is `unsigned char`; `word` is `unsigned int`. Typedefs only, no runtime module. |
-| `int2str.h` | Migration pending. The legacy unsigned-integer conversion helper is not part of `string.h` or stdio. |
+| `int2str.h` | Standalone unsigned-word to decimal conversion; not part of `string.h` or stdio. |
 
-Legacy `puts.h` is also not a standard `puts` implementation; migrating its
-uses to the supported stdio API remains pending under Task 5.3.8.1.
+### `int2str.h`: unsigned decimal conversion
+
+```c
+void int2str(unsigned int number, char *destination);
+```
+
+Convert 0..65535 to decimal ASCII with no leading zeros or sign, followed by
+NUL. Zero becomes `{48, 0}` (`0`); 65535 needs five digits plus NUL.
+The caller supplies at least **six writable bytes** in internal RAM or XRAM,
+avoiding live stack and code storage. There is no capacity check or
+allocation, and bytes after the NUL are unchanged. The function has no return
+value; negative/signed conversion is not provided.
+
+Its separate `runtime\int2str.asm` module is selected only when externally
+called, with or without `--target`. It uses no device ROM calls, static
+scratch buffer, or other library module.
+
+### Migrating legacy conversion/display calls
+
+Keep the legacy root headers for the Pascal compiler. For `lcc2`, include
+`int2str.h` for conversion and replace `puts.h` with `stdio.h`. Pass a
+character pointer instead of an integer holding an address:
+
+```c
+#include "stdint.h"
+#include "int2str.h"
+#include "stdio.h"
+
+__xram __at(0xE700) char buffer[6];
+__xram __at(0xE708) int display_result;
+
+void main(void)
+{
+    uint16_t number = 65535;
+    int2str(number, &buffer[0]);
+    display_result = puts(&buffer[0]);
+}
+```
+
+Preprocess with the supplied include directory and compile with
+`--target PC1403` for the supplied output backend. Unlike the legacy ROM
+display operation, this `puts` appends to the existing line, returns an
+explicit success/error result, and never adds newline. The runtime fixture
+covers this conversion-to-display migration. Legacy examples outside the
+`lcc2` tree continue to use their original headers and compiler.
 
 ## Runtime verification
 
@@ -173,3 +242,10 @@ The MAME fixture covers 17 vectors: empty/260-byte strings, high bytes, page
 crossings, all internal/XRAM combinations, unchanged source and destination
 guards, pointer returns and dereferencing, and caller-state preservation.
 The I/O and string harnesses leave MAME unpaused.
+
+The [library-completion checks](../Source/C/lcc2/README.md#library-completion-test-in-mame)
+preprocess all supplied headers twice to check guards, compile typedef uses
+and signature errors, and verify independent modules plus the `puts` output
+dependency. Runtime vectors cover unsigned decimal boundaries, internal/XRAM
+destinations, page crossings, output success/error prefixes, shared
+`puts`/`putchar` state, and the conversion/display example.
