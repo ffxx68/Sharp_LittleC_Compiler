@@ -1689,7 +1689,41 @@ Task 5.3.8.2.
   visually. Device verification is in PC-1403 MAME; physical-device
   verification is not claimed.
 
-### Task 5.3.9: Signed integer semantics
+### Task 5.3.9 ✅: Port completion gates
+
+- The Pascal reference compiler remains buildable and its existing regression tests continue to pass.
+- Every implemented backend capability required by the supported C subset has a contract, codegen, or functional test appropriate to its behavior.
+- Unsupported constructs fail with a clear diagnostic; they must not silently generate partial or success-shaped output.
+- Complete Task 5.3.9's signed-integer slice and Task 5.3.10's floating-point slice, and do not retire or archive the Pascal compiler until the C compiler satisfies the final acceptance criteria and repository workflows have migrated.
+
+---
+# Phase 6 — Advanced optimizations (post-porting)
+
+With an AST available, implement optimizations that the old syntax-directed translator could not do:
+
+### Task 6.1 ✅: Constant folding — evaluate constant expressions at compile time
+
+- Fold side-effect-free constant subtrees for the currently supported
+  16-bit unsigned target operations, including arithmetic, bitwise, shifts,
+  comparisons, and logical operators. Preserve the target's 255 comparison
+  truth value and 0/1 logical truth value; never fold assignments, calls,
+  increments, or division by zero. Signed arithmetic semantics remain in
+  Task 7.1.
+- Implemented in the C compiler's expression walker with shared constant
+  evaluation in `symtab.c`. Tests cover wraparound, arithmetic, shifts,
+  comparisons, logical/unary results, runtime-side-effect preservation, and
+  rejection of division by zero. The full `make test` suite passes.
+
+### Task 6.2: Dead code elimination — remove `if(0)` branches, unused functions
+### Task 6.3: Register allocation — smarter use of registers I, J, K, L, M, N
+### Task 6.4: Strength reduction — `x * 2` → `x << 1`, `x * 3` → `(x << 1) + x`
+### Task 6.5: Tail call optimization — useful given the very small stack (~80 bytes)
+### Task 6.6: Inline expansion — inline small functions (1–3 instructions)
+
+---
+# Phase 7 — Advanced arithmetics
+
+### Task 7.1: Signed integer semantics
 
 - Correct signedness, integer promotions/conversions, and comparisons for
   supported signed and unsigned byte/word expressions without changing
@@ -1704,44 +1738,29 @@ Task 5.3.8.2.
 - Until this task is complete, signed operations beyond the currently
   supported forms must continue to fail explicitly.
 
-### Task 5.3.10: Floating-point support (deferred until after Task 5.3.9)
+### Task 7.2: Floating-point support (deferred until after Task 5.3.9)
 
 - Add floating-point expression, conversion, and storage behavior only after
   the standard-C library headers in Task 5.3.8 have been migrated.
-- Establish the supported precision/ABI and runtime-library requirements
+- Establish the supported precision/ABI and target-specific runtime-library requirements
   before implementation; test constants, arithmetic, comparisons, calls, and
-  target execution.
+  target execution. 
 - Until this task is complete, floating-point constructs must continue to
   fail explicitly and must not be treated as supported integer expressions.
 
-### Task 5.3.11: Port completion gates
+### Task 7.3: review optimizations
 
-- The Pascal reference compiler remains buildable and its existing regression tests continue to pass.
-- Every implemented backend capability required by the supported C subset has a contract, codegen, or functional test appropriate to its behavior.
-- Unsupported constructs fail with a clear diagnostic; they must not silently generate partial or success-shaped output.
-- Complete Task 5.3.9's signed-integer slice and Task 5.3.10's floating-point slice, and do not retire or archive the Pascal compiler until the C compiler satisfies the final acceptance criteria and repository workflows have migrated.
+- Review the optimizations introduced with Phase 6, after new arithmetic and signed/unsigned operations have been implemented, and ensure they are correct and complete.
 
 ---
-# Phase 6 — Advanced optimizations (post-porting)
+# Phase 8 — Cleanup, docs and release
 
-With an AST available, implement optimizations that the old syntax-directed translator could not do:
-
-- Task 6.1: Constant folding — evaluate constant expressions at compile time
-- Task 6.2: Dead code elimination — remove `if(0)` branches, unused functions
-- Task 6.3: Register allocation — smarter use of registers I, J, K, L, M, N
-- Task 6.4: Strength reduction — `x * 2` → `x << 1`, `x * 3` → `(x << 1) + x`
-- Task 6.5: Tail call optimization — useful given the very small stack (~80 bytes)
-- Task 6.6: Inline expansion — inline small functions (1–3 instructions)
-
----
-# Phase 7 — Cleanup, docs and release
-
-- Task 7.1: Decide whether to retain the Pascal compiler as a reference 
+- Task 8.1: Decide whether to retain the Pascal compiler as a reference 
   or archive it only after the Phase 5.3.11 completion gates pass.
-- Task 7.2: Write the user manual for the new compiler (`Docs/sc61860cc_manual.md`).
-- Task 7.3: Update README with build instructions (`make` / `cmake`).
-- Task 7.4: CI scripts (GitHub Actions or similar) for automated regression tests.
-- Task 7.5: Publish release with prebuilt binaries (Windows, Linux).
+- Task 8.2: Write the user manual for the new compiler (`Docs/sc61860cc_manual.md`).
+- Task 8.3: Update README with build instructions (`make` / `cmake`).
+- Task 8.4: CI scripts (GitHub Actions or similar) for automated regression tests.
+- Task 8.5: Publish release with prebuilt binaries (Windows, Linux).
 - Verification: build + full test suite green on Windows and Linux.
 
 ---

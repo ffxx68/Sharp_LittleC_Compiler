@@ -18,28 +18,8 @@ static void test_word_return_addition(void)
 {
     static const char expected[] =
         "sum:\t; Procedure\n"
-        "\tLIA\tLB(1)\t; Load word constant LB\n"
-        "\tLIB\tHB(1)\t; Load word constant HB\n"
-        "\tPUSH ; word (A, then B)\n"
-        "\tEXAB\n"
-        "\tPUSH\n"
-        "\tLIA\tLB(2)\t; Load word constant LB\n"
-        "\tLIB\tHB(2)\t; Load word constant HB\n"
-        "\tLP\t0\n"
-        "\tEXAM\n"
-        "\tEXAB\n"
-        "\tLP\t1\n"
-        "\tEXAM\n"
-        "\tPOP\n"
-        "\tEXAB\n"
-        "\tPOP\n"
-        "\tLP\t0\n"
-        "\tADB\t; Addition\n"
-        "\tLP\t1\n"
-        "\tLDM\n"
-        "\tEXAB\n"
-        "\tLP\t0\n"
-        "\tLDM\n"
+        "\tLIA\tLB(3)\t; Load word constant LB\n"
+        "\tLIB\tHB(3)\t; Load word constant HB\n"
         "\tJP\tLB0\n"
         "  LB0:\n"
         "\tRTN\n"
@@ -54,6 +34,28 @@ static void test_word_return_addition(void)
     assert(strcmp(codegen_output(ctx), expected) == 0);
     assert(codegen_stack_depth(ctx) == 0);
     assert(codegen_error(ctx)[0] == '\0');
+    codegen_context_destroy(ctx);
+    ast_arena_destroy(arena);
+}
+
+static void test_constant_folding_preserves_runtime_effects(void)
+{
+    AstArena *arena = ast_arena_create();
+    CodegenContext *ctx = codegen_context_create();
+    AstTranslationUnit *unit;
+    const char *assembly;
+
+    assert(arena != NULL && ctx != NULL);
+    unit = parse(arena,
+        "unsigned int bump(void) { return 1; }"
+        "unsigned int main(void) { return bump() + 2 * 3; }");
+    assert(codegen_translation_unit(ctx, unit) == 0);
+    assembly = codegen_output(ctx);
+    assert(strstr(assembly, "CALL\tbump") != NULL);
+    assert(strstr(assembly, "LIA\tLB(6)\t; Load word constant LB") != NULL);
+    assert(strstr(assembly, "LIB_MUL16") == NULL);
+    assert(strstr(assembly, "ADB\t; Addition") != NULL);
+    assert(codegen_stack_depth(ctx) == 0);
     codegen_context_destroy(ctx);
     ast_arena_destroy(arena);
 }
@@ -994,7 +996,9 @@ static void test_runtime_libraries(void)
         AstArena *arena = ast_arena_create();
         CodegenContext *ctx = codegen_context_create();
         AstTranslationUnit *unit = parse(arena,
-            "void cpq1(void) {} unsigned int main(void) { return 1 == 2; }");
+            "void cpq1(void) {} unsigned int main(void) {"
+            " unsigned int left = 1; unsigned int right = 2;"
+            " return left == right; }");
         assert(codegen_program(ctx, unit) != 0);
         assert(strstr(codegen_error(ctx), "runtime library label") != NULL);
         codegen_context_destroy(ctx);
@@ -1287,6 +1291,7 @@ int main(void)
     test_shift_operators();
     test_bitwise_and_unary_operators();
     test_word_return_addition();
+    test_constant_folding_preserves_runtime_effects();
     test_stack_and_constants();
     test_byte_arithmetic_sequences();
     test_word_subtraction_sequence();

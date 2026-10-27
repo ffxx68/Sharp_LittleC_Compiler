@@ -1548,6 +1548,8 @@ static int emit_discarded(CodegenContext *ctx, const AstExpr *expression)
 
 static int emit_expression(CodegenContext *ctx, const AstExpr *expression)
 {
+    unsigned long folded_value;
+
     if (expression->node.kind == AST_NODE_UNARY_EXPR ||
         expression->node.kind == AST_NODE_BINARY_EXPR) {
         SymtabUpdateRewrite rewrite;
@@ -1558,6 +1560,9 @@ static int emit_expression(CodegenContext *ctx, const AstExpr *expression)
         if (update > 0) {
             return emit_update(ctx, &rewrite, 0);
         }
+    }
+    if (symtab_fold_constant(expression, &folded_value) == 0) {
+        return codegen_load_constant(ctx, 2, folded_value);
     }
     if (expression->node.kind == AST_NODE_CONSTANT_EXPR) {
         const AstConstantExpr *constant = (const AstConstantExpr *)expression;

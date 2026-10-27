@@ -643,6 +643,72 @@ static void test_global_initializers(void)
     ast_arena_destroy(arena);
 }
 
+static void test_constant_folding_values(void)
+{
+    static const struct {
+        const char *expression;
+        unsigned long value;
+    } cases[] = {
+        {"65535 + 1", 0},
+        {"7 * 9", 63},
+        {"100 / 7", 14},
+        {"100 % 7", 2},
+        {"1 << 16", 0},
+        {"65535 >> 4", 4095},
+        {"5 < 6", 255},
+        {"5 == 6", 0},
+        {"0 && 7", 0},
+        {"0 || 7", 1},
+        {"!0", 1},
+        {"~0", 65535},
+        {"-1", 65535}
+    };
+    size_t index;
+
+    for (index = 0; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+        char source[128];
+        AstArena *arena = ast_arena_create();
+        AstTranslationUnit *unit;
+        AstFunctionDecl *function;
+        AstReturnStmt *return_statement;
+        unsigned long actual = 0;
+
+        assert(arena != NULL);
+        assert(snprintf(source, sizeof(source), "int main(void) { return %s; }",
+                        cases[index].expression) > 0);
+        unit = parse(arena, source);
+        function = (AstFunctionDecl *)unit->declarations.items[0];
+        return_statement =
+            (AstReturnStmt *)function->body->items[0].as.statement;
+        assert(symtab_fold_constant(return_statement->expression, &actual) == 0);
+        assert(actual == cases[index].value);
+        ast_arena_destroy(arena);
+    }
+
+    {
+        AstArena *arena = ast_arena_create();
+        AstTranslationUnit *unit = parse(arena,
+            "int main(void) { int value = 0; return value + 1; }");
+        AstFunctionDecl *function = (AstFunctionDecl *)unit->declarations.items[0];
+        AstReturnStmt *return_statement =
+            (AstReturnStmt *)function->body->items[1].as.statement;
+        unsigned long actual;
+        assert(symtab_fold_constant(return_statement->expression, &actual) != 0);
+        ast_arena_destroy(arena);
+    }
+    {
+        AstArena *arena = ast_arena_create();
+        AstTranslationUnit *unit = parse(arena,
+            "int main(void) { return 1 / 0; }");
+        AstFunctionDecl *function = (AstFunctionDecl *)unit->declarations.items[0];
+        AstReturnStmt *return_statement =
+            (AstReturnStmt *)function->body->items[0].as.statement;
+        unsigned long actual;
+        assert(symtab_fold_constant(return_statement->expression, &actual) != 0);
+        ast_arena_destroy(arena);
+    }
+}
+
 static void test_storage_namespaces(void)
 {
     AstArena *arena = ast_arena_create();
@@ -941,6 +1007,7 @@ int main(void)
     test_pointer_returns();
     test_dereference_resolution();
     test_global_initializers();
+    test_constant_folding_values();
     test_storage_namespaces();
     test_frame_limit();
     test_control_flow_resolution();

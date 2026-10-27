@@ -283,6 +283,85 @@ int symtab_constant(const AstExpr *expression, unsigned long *value)
     return -1;
 }
 
+int symtab_fold_constant(const AstExpr *expression, unsigned long *value)
+{
+    unsigned long left, right;
+
+    if (expression == NULL || value == NULL) {
+        return -1;
+    }
+    if (expression->node.kind == AST_NODE_CONSTANT_EXPR) {
+        const AstConstantExpr *constant = (const AstConstantExpr *)expression;
+        if (constant->constant_kind == AST_CONSTANT_INTEGER &&
+            constant->value.integer >= 0 && constant->value.integer <= 65535) {
+            *value = (unsigned long)constant->value.integer;
+            return 0;
+        }
+        if (constant->constant_kind == AST_CONSTANT_CHARACTER &&
+            constant->value.character <= 65535) {
+            *value = constant->value.character;
+            return 0;
+        }
+        return -1;
+    }
+    if (expression->node.kind == AST_NODE_UNARY_EXPR) {
+        const AstUnaryExpr *unary = (const AstUnaryExpr *)expression;
+        if (symtab_fold_constant(unary->operand, &left) != 0) {
+            return -1;
+        }
+        switch (unary->op) {
+        case AST_UNARY_PLUS: *value = left; return 0;
+        case AST_UNARY_MINUS: *value = (0UL - left) & 65535UL; return 0;
+        case AST_UNARY_LOGICAL_NOT: *value = left == 0; return 0;
+        case AST_UNARY_BITWISE_NOT: *value = ~left & 65535UL; return 0;
+        default: return -1;
+        }
+    }
+    if (expression->node.kind != AST_NODE_BINARY_EXPR) {
+        return -1;
+    }
+
+    {
+        const AstBinaryExpr *binary = (const AstBinaryExpr *)expression;
+        if (symtab_fold_constant(binary->left, &left) != 0 ||
+            symtab_fold_constant(binary->right, &right) != 0) {
+            return -1;
+        }
+        switch (binary->op) {
+        case AST_BINARY_MUL: *value = (left * right) & 65535UL; break;
+        case AST_BINARY_DIV:
+            if (right == 0) return -1;
+            *value = left / right;
+            break;
+        case AST_BINARY_MOD:
+            if (right == 0) return -1;
+            *value = left % right;
+            break;
+        case AST_BINARY_ADD: *value = (left + right) & 65535UL; break;
+        case AST_BINARY_SUB: *value = (left - right) & 65535UL; break;
+        case AST_BINARY_SHIFT_LEFT:
+            *value = right >= 16 ? 0 : (left << right) & 65535UL;
+            break;
+        case AST_BINARY_SHIFT_RIGHT:
+            *value = right >= 16 ? 0 : left >> right;
+            break;
+        case AST_BINARY_LESS: *value = left < right ? 255 : 0; break;
+        case AST_BINARY_LESS_EQUAL: *value = left <= right ? 255 : 0; break;
+        case AST_BINARY_GREATER: *value = left > right ? 255 : 0; break;
+        case AST_BINARY_GREATER_EQUAL: *value = left >= right ? 255 : 0; break;
+        case AST_BINARY_EQUAL: *value = left == right ? 255 : 0; break;
+        case AST_BINARY_NOT_EQUAL: *value = left != right ? 255 : 0; break;
+        case AST_BINARY_BIT_AND: *value = left & right; break;
+        case AST_BINARY_BIT_OR: *value = left | right; break;
+        case AST_BINARY_BIT_XOR: *value = left ^ right; break;
+        case AST_BINARY_LOGICAL_AND: *value = left != 0 && right != 0; break;
+        case AST_BINARY_LOGICAL_OR: *value = left != 0 || right != 0; break;
+        default: return -1;
+        }
+    }
+    return 0;
+}
+
 int symtab_initializer_constant(const AstExpr *expression,
                                 unsigned long *value)
 {
