@@ -8,7 +8,7 @@
 
 static void print_usage(FILE *stream)
 {
-    fprintf(stream, "Usage: lcc2 source.c -o output.asm\n"
+    fprintf(stream, "Usage: lcc2 [--target PC1403] source.c -o output.asm\n"
                     "       lcc2 --help | --version\n");
 }
 
@@ -64,10 +64,88 @@ static char *read_source(const char *path)
     return source;
 }
 
+static char *read_runtime(const char *directory, const char *routine)
+{
+    char path[512];
+    FILE *file;
+    char *runtime = NULL;
+    size_t length = 0;
+    char chunk[4096];
+    size_t count;
+    const char *formats[] = {
+        "%s/%s.asm",
+        "Source/C/lcc2/%s/%s.asm"
+    };
+    size_t format_index;
+
+    for (format_index = 0;
+         format_index < sizeof(formats) / sizeof(formats[0]);
+         ++format_index) {
+        (void)snprintf(path, sizeof(path), formats[format_index], directory, routine);
+        file = fopen(path, "rb");
+        if (file != NULL) {
+            break;
+        }
+    }
+    if (file == NULL) {
+        fprintf(stderr, "lcc2: cannot find runtime '%s' in '%s'\n",
+                routine, directory);
+        return NULL;
+    }
+    while ((count = fread(chunk, 1, sizeof(chunk), file)) != 0) {
+        char *grown;
+        if (memchr(chunk, '\0', count) != NULL ||
+            length > (size_t)-1 - count - 1 ||
+            (grown = realloc(runtime, length + count + 1)) == NULL) {
+            fprintf(stderr, "lcc2: invalid or oversized runtime '%s'\n",
+                    path);
+            free(runtime);
+            fclose(file);
+            return NULL;
+        }
+        runtime = grown;
+        memcpy(runtime + length, chunk, count);
+        length += count;
+        runtime[length] = '\0';
+    }
+    {
+        int failed = ferror(file);
+        if (fclose(file) != 0) {
+            failed = 1;
+        }
+        if (failed) {
+            fprintf(stderr, "lcc2: cannot read runtime '%s'\n", path);
+            free(runtime);
+            return NULL;
+        }
+    }
+    if (runtime == NULL) {
+        runtime = calloc(1, 1);
+        if (runtime == NULL) {
+            fprintf(stderr, "lcc2: out of memory reading runtime '%s'\n",
+                    path);
+        }
+    }
+    return runtime;
+}
+
 int main(int argc, char **argv)
 {
     const char *input = NULL, *output = NULL;
+    const char *target = NULL;
+    static const struct {
+        const char *name;
+        const char *directory;
+    } runtime_modules[] = {
+        {"strcpy", "runtime"},
+        {"strcat", "runtime"},
+        {"getchar", NULL},
+        {"putchar", NULL}
+    };
+    char *runtimes[sizeof(runtime_modules) / sizeof(runtime_modules[0])] = {NULL};
+    char target_directory[64];
     char *source;
+    size_t runtime_index;
     AstArena *arena;
     AstTranslationUnit *unit = NULL;
     CodegenContext *ctx;
@@ -85,7 +163,11 @@ int main(int argc, char **argv)
     }
 
     for (index = 1; index < argc; ++index) {
-        if (strcmp(argv[index], "-o") == 0 && output == NULL && index + 1 < argc) {
+        if (strcmp(argv[index], "--target") == 0 && target == NULL &&
+            index + 1 < argc) {
+            target = argv[++index];
+        } else if (strcmp(argv[index], "-o") == 0 && output == NULL &&
+                   index + 1 < argc) {
             output = argv[++index];
         } else if (argv[index][0] != '-' && input == NULL) {
             input = argv[index];
@@ -98,6 +180,14 @@ int main(int argc, char **argv)
         print_usage(stderr);
         return 2;
     }
+    if (target != NULL && strcmp(target, "PC1403") != 0) {
+        fprintf(stderr, "lcc2: unsupported target '%s'\n", target);
+        return 2;
+    }
+    if (target != NULL) {
+        (void)snprintf(target_directory, sizeof(target_directory),
+                       "targets/%s", target);
+    }
     source = read_source(input);
     if (source == NULL) {
         return 1;
@@ -106,7 +196,10 @@ int main(int argc, char **argv)
     ctx = codegen_context_create();
     if (arena == NULL || ctx == NULL) {
         fprintf(stderr, "lcc2: out of memory\n");
-        goto cleanup;
+        free(source);
+        ast_arena_destroy(arena);
+        codegen_context_destroy(ctx);
+        return 1;
     }
     if (lcc2_parse_string(arena, source, &unit) != 0) {
         fprintf(stderr, "lcc2: cannot parse '%s'\n", input);
@@ -116,6 +209,24 @@ int main(int argc, char **argv)
         fprintf(stderr, "lcc2: %s\n", codegen_error(ctx));
         goto cleanup;
     }
+    for (runtime_index = 0;
+         runtime_index < sizeof(runtime_modules) / sizeof(runtime_modules[0]);
+         ++runtime_index) {
+        const char *directory = runtime_modules[runtime_index].directory;
+        if (directory == NULL) {
+            if (target == NULL) {
+                continue;
+            }
+            directory = target_directory;
+        }
+        if (codegen_external_function_used(ctx, runtime_modules[runtime_index].name)) {
+            runtimes[runtime_index] =
+                read_runtime(directory, runtime_modules[runtime_index].name);
+            if (runtimes[runtime_index] == NULL) {
+                goto cleanup;
+            }
+        }
+    }
     file = fopen(output, "wb");
     if (file == NULL) {
         fprintf(stderr, "lcc2: cannot open '%s': %s\n", output, strerror(errno));
@@ -123,6 +234,13 @@ int main(int argc, char **argv)
     }
     {
         int failed = fputs(codegen_output(ctx), file) == EOF;
+        for (runtime_index = 0;
+             !failed && runtime_index < sizeof(runtime_modules) / sizeof(runtime_modules[0]);
+             ++runtime_index) {
+            if (runtimes[runtime_index] != NULL) {
+                failed = fputs(runtimes[runtime_index], file) == EOF;
+            }
+        }
         if (fclose(file) != 0) {
             failed = 1;
         }
@@ -139,6 +257,11 @@ int main(int argc, char **argv)
 cleanup:
     codegen_context_destroy(ctx);
     ast_arena_destroy(arena);
+    for (runtime_index = 0;
+         runtime_index < sizeof(runtime_modules) / sizeof(runtime_modules[0]);
+         ++runtime_index) {
+        free(runtimes[runtime_index]);
+    }
     free(source);
     return status;
 }

@@ -832,6 +832,29 @@ static const AstType *expression_pointer_pointee(const ScalarSymbols *table,
         return type != NULL && type->kind == AST_TYPE_POINTER
             ? type->as.pointer.target : NULL;
     }
+    if (expression->node.kind == AST_NODE_CALL_EXPR) {
+        const AstCallExpr *call = (const AstCallExpr *)expression;
+        const AstFunctionDecl *function;
+        if (call->function == NULL ||
+            call->function->node.kind != AST_NODE_IDENT_EXPR) {
+            return NULL;
+        }
+        function = symtab_function(table,
+            ((const AstIdentExpr *)call->function)->name);
+        return function != NULL &&
+               function->return_type->kind == AST_TYPE_POINTER
+            ? function->return_type->as.pointer.target : NULL;
+    }
+    if (expression->node.kind == AST_NODE_BINARY_EXPR &&
+        ((const AstBinaryExpr *)expression)->op == AST_BINARY_ASSIGN) {
+        return expression_pointer_pointee(table,
+            ((const AstBinaryExpr *)expression)->left);
+    }
+    if (expression->node.kind == AST_NODE_UNARY_EXPR &&
+        ((const AstUnaryExpr *)expression)->op >= AST_UNARY_PRE_INCREMENT) {
+        return expression_pointer_pointee(table,
+            ((const AstUnaryExpr *)expression)->operand);
+    }
     return NULL;
 }
 
@@ -1053,8 +1076,15 @@ static int compatible_pointer_value(const ScalarSymbols *table,
                                     const AstExpr *value)
 {
     const AstType *pointee = expression_pointer_pointee(table, value);
-    return target_type != NULL && target_type->kind == AST_TYPE_POINTER &&
-           compatible_pointee_type(target_type->as.pointer.target, pointee);
+    AstType qualified;
+    if (target_type == NULL || target_type->kind != AST_TYPE_POINTER ||
+        pointee == NULL) {
+        return 0;
+    }
+    qualified = *pointee;
+    qualified.qualifiers |= target_type->as.pointer.target->qualifiers &
+                            AST_QUALIFIER_CONST;
+    return compatible_pointee_type(target_type->as.pointer.target, &qualified);
 }
 
 static int is_null_pointer_constant(const AstExpr *expression)
@@ -2070,8 +2100,16 @@ static int resolve_statement(ScalarSymbols *table, const AstStmt *statement)
         if (value != NULL && resolve_expression(table, value) != 0) {
             return -1;
         }
-        if (expression_is_pointer(table, value)) {
-            return fail(table, "pointer return values are not supported yet", NULL);
+        if (table->function->return_type->kind == AST_TYPE_POINTER) {
+            if (!compatible_pointer_value(table, table->function->return_type,
+                                          value) &&
+                !is_null_pointer_constant(value)) {
+                return fail(table, "return expression has incompatible pointer type",
+                            table->function->name);
+            }
+        } else if (expression_is_pointer(table, value)) {
+            return fail(table, "pointer return requires a pointer function type",
+                        table->function->name);
         }
         table->returned = 1;
         return 0;
@@ -2131,13 +2169,19 @@ int symtab_resolve(ScalarSymbols *table, AstTranslationUnit *unit)
             name = ((const AstVarDecl *)declaration)->name;
         } else if (declaration->node.kind == AST_NODE_FUNCTION_DECL) {
             name = ((const AstFunctionDecl *)declaration)->name;
+        } else if (declaration->node.kind == AST_NODE_TYPEDEF_DECL) {
+            name = ((const AstTypedefDecl *)declaration)->alias;
         } else {
             return fail(table, "unsupported translation unit construct", NULL);
         }
         for (previous = 0; previous < index; ++previous) {
             const AstDecl *other = unit->declarations.items[previous];
-            const char *other_name = other->node.kind == AST_NODE_VARIABLE_DECL ?
-                ((const AstVarDecl *)other)->name : ((const AstFunctionDecl *)other)->name;
+            const char *other_name =
+                other->node.kind == AST_NODE_VARIABLE_DECL ?
+                    ((const AstVarDecl *)other)->name :
+                other->node.kind == AST_NODE_FUNCTION_DECL ?
+                    ((const AstFunctionDecl *)other)->name :
+                    ((const AstTypedefDecl *)other)->alias;
             if (strcmp(name, other_name) == 0) {
                 if (declaration->node.kind != AST_NODE_FUNCTION_DECL ||
                     other->node.kind != AST_NODE_FUNCTION_DECL) {
@@ -2158,6 +2202,9 @@ int symtab_resolve(ScalarSymbols *table, AstTranslationUnit *unit)
         const AstDecl *declaration = unit->declarations.items[index];
         const AstFunctionDecl *function;
         size_t local;
+        if (declaration->node.kind == AST_NODE_TYPEDEF_DECL) {
+            continue;
+        }
         if (declaration->node.kind == AST_NODE_VARIABLE_DECL) {
             if (add_variable(table, (const AstVarDecl *)declaration) != 0) {
                 return -1;
@@ -2167,7 +2214,6 @@ int symtab_resolve(ScalarSymbols *table, AstTranslationUnit *unit)
         function = (const AstFunctionDecl *)declaration;
         if ((!function->is_prototype && function->body == NULL) ||
             function->storage != AST_STORAGE_NONE ||
-            function->return_type->kind == AST_TYPE_POINTER ||
             (symtab_type_width(function->return_type) == 0 &&
              (function->return_type->kind != AST_TYPE_BASE ||
               function->return_type->as.base.base != AST_TYPE_VOID))) {

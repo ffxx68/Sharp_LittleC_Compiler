@@ -21,6 +21,8 @@ CodegenContext *codegen_context_create(void);
 void codegen_context_destroy(CodegenContext *ctx);
 const char *codegen_output(const CodegenContext *ctx);
 const char *codegen_runtime_output(const CodegenContext *ctx);
+int codegen_external_function_used(const CodegenContext *ctx,
+                                   const char *name);
 const char *codegen_section_output(const CodegenContext *ctx,
                                    CodegenSection section);
 int codegen_require_runtime(CodegenContext *ctx, const char *routine);

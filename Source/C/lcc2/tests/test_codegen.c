@@ -318,7 +318,6 @@ static void test_invalid_programs(void)
         "#pragma pc(57392)\nvoid main(void) {}",
         "int value; void main(void) {}",
         "int main(void) { return 1 ? 2 : 3; }",
-        "typedef unsigned char byte; int main(void) { byte value; return 0; }",
         "enum color { RED, GREEN, BLUE } shade; int main(void) { return 0; }",
         "__xram __at(32) unsigned char value;"
         "void main(void) { &value; }"
@@ -331,6 +330,17 @@ static void test_invalid_programs(void)
         assert(codegen_program(ctx, unit) != 0);
         assert(codegen_output(ctx)[0] == '\0');
         assert(codegen_error(ctx)[0] != '\0');
+        codegen_context_destroy(ctx);
+        ast_arena_destroy(arena);
+    }
+    {
+        AstArena *arena = ast_arena_create();
+        CodegenContext *ctx = codegen_context_create();
+        AstTranslationUnit *unit = parse(
+            arena,
+            "typedef unsigned char byte; int main(void) { byte value; return 0; }");
+        assert(codegen_program(ctx, unit) == 0);
+        assert(strstr(codegen_output(ctx), "main:") != NULL);
         codegen_context_destroy(ctx);
         ast_arena_destroy(arena);
     }
@@ -854,6 +864,39 @@ static void test_pointer_values_and_parameters(void)
     ast_arena_destroy(arena);
 }
 
+static void test_pointer_returns(void)
+{
+    AstArena *arena = ast_arena_create();
+    CodegenContext *ctx = codegen_context_create();
+    AstTranslationUnit *unit = parse(arena,
+        "__xram __at(0xE600) char value;"
+        "char *external(char *destination, const char *source);"
+        "char *identity(char *p) { return p; }"
+        "const char *readonly(const char *p) { return p; }"
+        "char *empty(void) { return 0; }"
+        "char *relay(char *p) { char *copy = identity(p); return copy; }"
+        "char *assigned(char *p) { return p = identity(p); }"
+        "char *advanced(char *p) { return p++; }"
+        "void main(void) { char *p = relay(&value);"
+        " const char *q = readonly(p);"
+        " p = external(assigned(p), q); p = advanced(p);"
+        " *identity(p) = 65; *external(p, q) = 66; p = empty(); }");
+    const char *functions;
+
+    assert(codegen_program(ctx, unit) == 0);
+    functions = codegen_section_output(ctx, CODEGEN_FUNCTIONS);
+    assert(strstr(functions, "\tCALL\tidentity\t; Function call\n") != NULL);
+    assert(strstr(functions, "\tCALL\trelay\t; Function call\n") != NULL);
+    assert(strstr(functions, "\tCALL\texternal\t; Function call\n"
+                            "\tLP\t0\n\tEXAM\n\tLDR\n\tADIA\t4\n"
+                            "\tSTR\n\tEXAM\n") != NULL);
+    assert(codegen_external_function_used(ctx, "external"));
+    assert(!codegen_external_function_used(ctx, "identity"));
+    assert(codegen_stack_depth(ctx) == 0);
+    codegen_context_destroy(ctx);
+    ast_arena_destroy(arena);
+}
+
 static void test_indirect_pointer_access(void)
 {
     AstArena *arena = ast_arena_create();
@@ -1268,6 +1311,7 @@ int main(void)
     test_runtime_libraries();
     test_address_formation();
     test_pointer_values_and_parameters();
+    test_pointer_returns();
     test_indirect_pointer_access();
     test_program_sections();
     return 0;

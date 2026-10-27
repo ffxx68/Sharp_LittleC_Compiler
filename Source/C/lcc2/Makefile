@@ -73,6 +73,7 @@ test: all $(TEST_TARGET) $(LEXER_TEST_TARGET) $(PARSER_TEST_TARGET) $(SYMTAB_TES
 	./$(TARGET) --help
 	./$(TARGET) --version
 	sh tests/test_cli.sh
+	sh tests/test_strings.sh
 
 clean:
 	rm -rf $(BUILD_DIR) $(TARGET)

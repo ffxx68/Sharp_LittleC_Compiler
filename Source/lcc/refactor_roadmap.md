@@ -1566,18 +1566,98 @@ fallthrough and `break`, structures and members, and pointer reads/writes,
 alongside the scalar, array, arithmetic, and logical subsets. The AST parser
 accepts some syntax beyond the backend contract; ternary expressions are
 regression-tested as parsed ASTs and rejected by code generation. Ternary
-evaluation, `enum` objects, and `typedef` declarations remain unsupported per
+evaluation, `enum` objects, and block-scoped typedef declarations remain unsupported per
 `Docs/lcc2_manual.md`; CLI regression cases ensure representative uses fail
 without replacing prior output. Signed comparisons and arithmetic remain
 deferred to Task 5.3.9 rather than treated as a compatibility requirement.
 
-### Task 5.3.8: Migrate library headers
+### Task 5.3.8: Migrate libraries — standard C and device-specific APIs
 
-- Rewrite `lcd.h`, `key.h`, `puts.h`, `int2str.h`, `string.h` in standard C syntax
-- Add minimal `<stdint.h>`: `typedef unsigned char uint8_t; typedef unsigned int uint16_t;`
-- Provide `compat.h` with convenience typedefs: `typedef unsigned char byte; typedef unsigned int word;`
+- Keep the legacy Pascal-compiler headers at the repository root intact; provide
+  C headers for `lcc2` under `Source/C/lcc2/include/`.
+- Shared infrastructure: external function prototypes use the normal call ABI;
+  the optional `--target PC1403` selects external target runtime libraries.
+  Keep device selection, ROM addresses, and hardware implementations out of
+  codegen. Without `--target`, do not append device-specific runtime code.
+- Separate portable library contracts from hardware endpoints and document any
+  target-specific departures from standard C behavior.
+- Keep library contracts in `Docs/lcc2_libraries.md`, split into standard
+  subsets, target-specific functions/adapters, and nonstandard compatibility
+  helpers. `Docs/lcc2_manual.md` documents the language and links to this
+  separate reference.
 
-### Task 5.3.9: Signed integer semantics (deferred until after Task 5.3.8)
+#### Task 5.3.8.1: Standard-C library subset and compatibility helpers
+
+- Provide minimal `stdint.h` (`uint8_t`, `uint16_t`) and `compat.h` (`byte`,
+  `word`) using frontend-supported typedefs. `compat.h` is a legacy
+  convenience header, not a standard-C header.
+- Develop the supported `stdio.h` subset (`getchar`, `putchar`, and later
+  `puts`) with target-independent declarations and externally supplied
+  implementations. Document supported character, return-value, and error
+  semantics; do not imply full hosted-C stdio support.
+- Current foundation: `getchar`/`putchar` declarations and the external
+  PC-1403 runtime are implemented as separate, call-selected modules: only
+  externally called stdio functions add their runtime, once; declarations
+  alone and user-defined implementations do not select target modules.
+  `getchar` deliberately returns raw hardware
+  key codes, not ASCII, so its current contract is a documented nonstandard
+  deviation; do not add a key-to-ASCII translation table.
+- Accepted current output contract: PC-1403 `putchar` appends printable ASCII
+  bytes to one 24-character line and returns the byte written. A full line or
+  unsupported byte (including newline) returns -1 without changing the line.
+  No scrolling, wrapping, newline processing, or public reset API is provided.
+  The runtime buffer persists across program calls and starts empty on binary
+  load. These are documented milestone limitations, not full stream semantics.
+  The append-only MAME fixture verified `ABC`, the complete 24-character line,
+  return values, full/control-byte rejection, stack balance, register
+  restoration, and BASIC responsiveness; scrolling/newline support is deferred.
+- String subset implemented: `string.h` exposes only standard two-argument
+  `strcpy` and `strcat`, returning the destination pointer. Their separate
+  device-independent SC61860 runtime modules are selected only for called
+  external functions, once, even without `--target`; neither pulls in the
+  other. Supported pointer returns and addition of pointee `const` enable
+  these signatures. Legacy root headers remain unchanged; the old
+  three-argument `strcpy` is not the new API. No other standard string
+  functions are in scope. The caller owns termination, capacity and
+  nonoverlap; there are no bounds checks or truncation.
+- String coverage: actual-header preprocessing, pointer use,
+  signature rejection, selective inclusion/deduplication, user-defined
+  implementations and assembly; `pc1403_strings.c` / `pc1403_strings.lua`
+  exercise empty/260-byte strings, high bytes, page crossings, internal/XRAM
+  combinations, destination-pointer returns, source/destination guards,
+  stack/register preservation and BASIC responsiveness without pausing.
+- Keep `int2str.h` as a separately documented, nonstandard unsigned-integer
+  conversion helper; its migration remains pending, not part of string.h
+  or stdio.
+- Replace legacy `puts.h` usage with the supported `stdio.h` API; distinguish
+  standard `puts` behavior from the legacy ROM-based display operation.
+- Cover header preprocessing, typedef use, function signatures, portable
+  string/conversion results, and assembly of programs using the supported
+  library subset. Retain the `pc1403_stdio.c` / `pc1403_stdio.lua` runtime
+  check for raw key input, character output, return values, stack balance,
+  register restoration, and BASIC responsiveness.
+
+#### Task 5.3.8.2: Device-specific endpoints — LCD and keyboard
+
+- Migrate `lcd.h` and `key.h` as explicitly nonstandard device APIs, separate
+  from `stdio.h` and portable string/conversion helpers.
+- Define the LCD operations (`lcd_on`, `lcd_off`, `lcd_cls`, `lcd_pset`,
+  `lcd_hline`) and keyboard operations (`key_wait`, `key_scan`, `keybrk`)
+  with explicit C signatures and documented hardware-specific semantics.
+- Keep PC-1403 implementations, key-code definitions, LCD geometry, ROM
+  calls, and memory-mapped I/O in external target libraries. Shared stdio
+  adapters may reuse these endpoints without embedding hardware knowledge
+  in codegen.
+- Raw keyboard endpoints return device key codes; blocking/nonblocking and
+  no-key behavior must be explicit. LCD endpoints expose device operations,
+  not standard stream semantics.
+- Validate target selection and compile/assembly integration, then test
+  keyboard scanning/waiting, break-key detection, and LCD clear/pixel/line
+  behavior on the selected device, including ABI and caller-state preservation.
+- This endpoint migration remains pending; the existing stdio runtime check
+  does not establish coverage for the full LCD/keyboard API.
+
+### Task 5.3.9: Signed integer semantics
 
 - Correct signedness, integer promotions/conversions, and comparisons for
   supported signed and unsigned byte/word expressions without changing
@@ -1624,7 +1704,8 @@ With an AST available, implement optimizations that the old syntax-directed tran
 ---
 # Phase 7 — Cleanup, docs and release
 
-- Task 7.1: Decide whether to retain the Pascal compiler as a reference or archive it only after the Phase 5.3.11 completion gates pass.
+- Task 7.1: Decide whether to retain the Pascal compiler as a reference 
+  or archive it only after the Phase 5.3.11 completion gates pass.
 - Task 7.2: Write the user manual for the new compiler (`Docs/sc61860cc_manual.md`).
 - Task 7.3: Update README with build instructions (`make` / `cmake`).
 - Task 7.4: CI scripts (GitHub Actions or similar) for automated regression tests.

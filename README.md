@@ -264,4 +264,4 @@ For detailed test cases, a verification harness and current status, see the dedi
 
 #### 🔄 LCC2 (Compiler) - UNDER DEVELOPMENT
 The new C compiler, `lcc2`, is under development alongside the Pascal `lcc`.
-See the [lcc2 project](Source/C/lcc2/README.md) and its [user manual](Docs/lcc2_manual.md) for the currently supported subset and usage.
+See the [lcc2 project](Source/C/lcc2/README.md), its [language manual](Docs/lcc2_manual.md), and the [library reference](Docs/lcc2_libraries.md) for the currently supported subset and usage.

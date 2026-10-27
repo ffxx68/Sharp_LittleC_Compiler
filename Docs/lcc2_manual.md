@@ -29,9 +29,11 @@ compiler can prove nonnegative). Signed relational comparisons, signed `>>`,
 and signed `/` and `%` are rejected with a diagnostic. Full signed semantics
 are planned for roadmap Task 5.3.9.
 
-See the [project README](../Source/C/lcc2/README.md) for implementation details
-and test harnesses, and the [roadmap](../Source/lcc/refactor_roadmap.md) for
-planned features.
+See the [library reference](lcc2_libraries.md) for standard-library subsets,
+target-specific functions, and compatibility helpers; the
+[project README](../Source/C/lcc2/README.md) for implementation details and
+test harnesses; and the [roadmap](../Source/lcc/refactor_roadmap.md) for planned
+features.
 
 ## Build and command line
 
@@ -45,7 +47,7 @@ make -C Source\C\lcc2
 Compile a source file into PASM assembly:
 
 ```powershell
-.\Source\C\lcc2\lcc2.exe .\program.c -o .\program.asm
+.\Source\C\lcc2\lcc2.exe --target PC1403 .\program.c -o .\program.asm
 ```
 
 Assemble it separately using the existing Pascal PASM:
@@ -53,6 +55,13 @@ Assemble it separately using the existing Pascal PASM:
 ```powershell
 .\pasm.exe .\program.asm .\program.bin
 ```
+
+`--target` is optional. When provided, it selects external target runtime
+assembly, maintained outside the code generator and appended by the
+command-line driver. Without a target, no device-specific runtime is appended;
+device-independent library routines remain available. Header preprocessing,
+per-function module inclusion, library contracts, and target-specific
+limitations are documented in the [library reference](lcc2_libraries.md).
 
 `lcc2` does not produce a binary directly or deploy it to the target.
 `--help` and `--version` are also available. Success returns exit code 0;
@@ -95,9 +104,9 @@ collisions. See the project README for the integrated BASIC-caller test.
 | Feature | Current support |
 |---------|-----------------|
 | Types | 8-bit `char`, `unsigned char`, `signed char`; 16-bit `int`, `unsigned int`, `signed int`; `void` function returns; `const` objects |
-| Functions | Byte/word parameters by value, compatible prototypes, direct calls to definitions in the same translation unit, including nested and recursive calls; CLI `main` must be parameterless |
+| Functions | Byte/word and supported pointer parameters/returns, compatible prototypes, direct calls including external declarations, nested and recursive calls; CLI `main` must be parameterless |
 | Variables and arrays | Fixed-address globals, automatic locals, and single-dimensional byte/word arrays; scalar and array brace-list initialization |
-| Structures and pointers | Restricted structures and byte/word pointers, including assignment, copying, null values, parameters, indirect loads/stores, and `->` member access through pointers |
+| Structures and pointers | Restricted structures and byte/word pointers, including assignment, copying, null values, parameters/returns, indirect loads/stores, and `->` member access through pointers |
 | Statements | Compound blocks, expression and empty statements, `if`/`else`, `while`, `do`/`while`, expression-initialized `for`, `switch`/`case`/`default`, `break`, `continue`, `return`, and labels |
 | Expressions | 16-bit integer and character constants, identifiers, array subscripts, direct calls, arithmetic, bitwise, shifts, logical and comparison operators, assignment and compound assignment, `++`/`--`, unary operators, comma, and parentheses |
 | Names | Case-sensitive lookup, nested block scopes, and local-over-global shadowing |
@@ -113,16 +122,18 @@ byte/word stack convention described below.
 
 **Unsupported (relative to standard C89):** `short`, `long`, `double`,
 floating-point operations, `volatile`, `auto`, `register`, `static` and
-`extern` storage, `typedef` declarations, `enum`, `union`, `goto`, casts,
-`sizeof`, the conditional `?:` operator, string literals, and external
-function calls. `lcc2` is not a full C89 implementation; preprocessing must be
-run separately with `lcpp`.
+`extern` storage, block-scoped typedef declarations, `enum`, `union`, `goto`,
+casts, `sizeof`, the conditional `?:` operator, and string literals.
+Translation-unit typedefs for the supported types and declared external
+function calls are supported; only known library implementations are appended
+automatically, not arbitrary external objects. `lcc2` is not a full C89
+implementation; preprocessing must be run separately.
 
 Structures support byte/word members and member access, but nested structures,
 array or pointer members, bit-fields, aggregate initialization, structure
 assignment, and passing or returning structures are unsupported. Pointer
-support is limited: pointer-to-pointer types, function pointers, pointer
-returns, addresses of automatic locals, whole-array or dynamic-element
+support is limited: pointer-to-pointer types, function pointers,
+addresses of automatic locals, whole-array or dynamic-element
 addresses, array-to-pointer decay, and pointer arithmetic other than `++`,
 `--`, `+=`, and `-=` are unsupported. Multidimensional and variable-length
 arrays and non-byte/word array elements are unsupported.
@@ -206,6 +217,10 @@ arithmetic wraps modulo 65536. Integer constants must fit in 16 bits
 Signed overflow and reads of uninitialized locals are not diagnosed.
 Signed relational comparisons, signed `>>`, `/` and `%`, and casts remain
 outside the implemented subset.
+
+Supported pointers are 16-bit values returned in B:A. Pointer-returning calls
+may be stored, forwarded, or dereferenced. Converting to a matching
+`const`-qualified pointee is supported; discarding pointee `const` is rejected.
 
 ### Variable placement
 

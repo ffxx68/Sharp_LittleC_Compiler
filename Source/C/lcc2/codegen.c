@@ -150,6 +150,9 @@ struct CodegenContext {
     char *internal_fill_loop;
     char *xram_fill_label;
     char *xram_fill_loop;
+    char **external_functions;
+    size_t external_function_count;
+    size_t external_function_capacity;
     ScalarSymbols *symbols;
     AstTranslationUnit *resolved_unit;
     char *return_label;
@@ -267,6 +270,13 @@ void codegen_context_destroy(CodegenContext *ctx)
         free(ctx->internal_fill_loop);
         free(ctx->xram_fill_label);
         free(ctx->xram_fill_loop);
+        {
+            size_t index;
+            for (index = 0; index < ctx->external_function_count; ++index) {
+                free(ctx->external_functions[index]);
+            }
+        }
+        free(ctx->external_functions);
         free(ctx);
     }
 }
@@ -279,6 +289,21 @@ const char *codegen_output(const CodegenContext *ctx)
 const char *codegen_runtime_output(const CodegenContext *ctx)
 {
     return ctx == NULL || ctx->runtime_output == NULL ? "" : ctx->runtime_output;
+}
+
+int codegen_external_function_used(const CodegenContext *ctx,
+                                   const char *name)
+{
+    size_t index;
+    if (ctx == NULL || name == NULL) {
+        return 0;
+    }
+    for (index = 0; index < ctx->external_function_count; ++index) {
+        if (strcmp(ctx->external_functions[index], name) == 0) {
+            return 1;
+        }
+    }
+    return 0;
 }
 
 const char *codegen_section_output(const CodegenContext *ctx,
@@ -747,6 +772,40 @@ static void promote_byte(CodegenContext *ctx, int is_unsigned)
     emit_inst_op(ctx, "LIB", "255");
     emit_label(ctx, done);
     free(done);
+}
+
+static int record_external_function(CodegenContext *ctx, const char *name)
+{
+    size_t index;
+    char **grown;
+    char *copy;
+
+    if (codegen_external_function_used(ctx, name)) {
+        return 0;
+    }
+    if (ctx->external_function_count == ctx->external_function_capacity) {
+        size_t capacity = ctx->external_function_capacity == 0
+            ? 4 : ctx->external_function_capacity * 2;
+        if (capacity < ctx->external_function_capacity ||
+            capacity > (size_t)-1 / sizeof(*grown)) {
+            return set_error(ctx, "external function list size overflow");
+        }
+        grown = (char **)realloc(ctx->external_functions,
+                                 capacity * sizeof(*grown));
+        if (grown == NULL) {
+            return set_error(ctx, "out of memory tracking external functions");
+        }
+        ctx->external_functions = grown;
+        ctx->external_function_capacity = capacity;
+    }
+    copy = (char *)malloc(strlen(name) + 1);
+    if (copy == NULL) {
+        return set_error(ctx, "out of memory tracking external functions");
+    }
+    strcpy(copy, name);
+    index = ctx->external_function_count++;
+    ctx->external_functions[index] = copy;
+    return 0;
 }
 
 static int emit_expression(CodegenContext *ctx, const AstExpr *expression);
@@ -1580,8 +1639,12 @@ static int emit_expression(CodegenContext *ctx, const AstExpr *expression)
         const AstFunctionDecl *function =
             symtab_function(ctx->symbols, identifier->name);
         size_t index, argument_bytes = 0, result_width;
-        if (function == NULL || function->is_prototype) {
+        if (function == NULL) {
             return set_error(ctx, "unresolved function call reached code generation");
+        }
+        if (function->is_prototype &&
+            record_external_function(ctx, function->name) != 0) {
+            return -1;
         }
         for (index = 0; index < call->arguments.count; ++index) {
             size_t width = symtab_type_width(function->parameters[index]->type);

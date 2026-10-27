@@ -5,7 +5,9 @@ incrementally alongside the existing Pascal compiler, which remains the
 behavioral reference.
 
 See the [user manual](../../../Docs/lcc2_manual.md) for language support,
-command-line usage, and deployment instructions.
+command-line usage, and deployment instructions, and the
+[library reference](../../../Docs/lcc2_libraries.md) for standard subsets,
+target-specific contracts, and compatibility helpers.
 
 ## Build
 
@@ -35,12 +37,17 @@ standalone test target included in `make test`.
 From the repository root in PowerShell:
 
 ```powershell
-.\Source\C\lcc2\lcc2.exe Source\C\lcc2\tests\pc1403_smoke.c -o Source\C\lcc2\build\pc1403_smoke.asm
+.\Source\C\lcc2\lcc2.exe --target PC1403 Source\C\lcc2\tests\pc1403_smoke.c -o Source\C\lcc2\build\pc1403_smoke.asm
 .\pasm.exe Source\C\lcc2\build\pc1403_smoke.asm Source\C\lcc2\build\pc1403_smoke.bin
 ```
 
-The CLI requires one source path and `-o` followed by an ASM path. It parses
-the source directly; use `lcpp` separately if preprocessing is needed.
+The CLI accepts one source path and `-o` followed by an ASM path;
+`--target PC1403` is optional and selects external device runtime modules.
+The code generator emits target-independent calls for declared external
+functions. The driver includes only called library modules, once each.
+See the [library reference](../../../Docs/lcc2_libraries.md) for header usage,
+device-independent versus target-specific module selection, and function
+contracts. The source is parsed directly; preprocess separately when needed.
 Compilation errors leave an existing output file untouched. Do not use the
 same file for input and output.
 
@@ -54,9 +61,9 @@ Comparison expressions call the legacy `LIB_CP*16` helpers. Required helpers
 are deduplicated in the context and embedded after generated functions from
 a built-in catalog; no external `.lib` files are needed. Unknown helper
 requests and function names colliding with included runtime labels fail.
-Direct calls to
-defined functions use byte/word parameters by value; unresolved external calls
-and other unsupported backend constructs are rejected.
+Direct calls use byte/word parameters and results, including supported pointers.
+Declared external calls use the same ABI; only catalogued library modules are
+appended automatically. There is no general external-object linker.
 Function labels must not collide in PASM's case-insensitive namespace;
 `SREG` is reserved when preservation is enabled, and `LB` followed by digits
 is reserved for compiler labels.
@@ -74,8 +81,9 @@ relational comparisons, structures with `.`/`->` member access, conditionals, `w
 `for` loops, `switch`/`case`/`default`, and correctly nested `break` and
 `continue`. Functions accept named byte/word
 parameters by value and support direct calls, including recursion and nested
-calls. Prototypes must match definitions; calls require a definition in the
-translation unit. The entry-point `main` remains parameterless. A `for` step
+calls. Prototypes must match definitions; external calls require a compatible
+prototype and an implementation at assembly time. The entry-point `main`
+remains parameterless. A `for` step
 executes after its body, and `continue` targets the step. Signed relational
 comparisons, `/`, `%` and `>>` are rejected unless an operand is provably
 unsigned or nonnegative (signed semantics are deferred to roadmap 5.3.9).
@@ -84,13 +92,16 @@ Functions require a return. Static/extern storage, unions, and
 statements after a return are not yet supported by the resolver. Byte/word pointers to globals or constant-
 index elements of global arrays in register or XRAM storage are 16-bit values;
 pointer locals and fixed-address global pointer objects support initialization,
-assignment, copying, null values, and by-value function parameters. Indirect
+assignment, copying, null values, by-value function parameters, and returns.
+Pointer-returning calls can be assigned, passed to another call, returned,
+or dereferenced. Converting a mutable pointer to a matching `const` pointee
+is supported; discarding pointee `const` is rejected. Indirect
 byte/word loads and stores are supported for pointers to register and XRAM
 objects, including pointers received as parameters. The high byte distinguishes
 register addresses from XRAM addresses, so address-of on XRAM objects below 256
 is rejected. Global pointer initialization is limited to null constants.
 Addresses of automatic locals, whole arrays, dynamic array elements, and
-functions are unsupported, as are pointer-to-pointer types and pointer returns.
+functions are unsupported, as are pointer-to-pointer types.
 Pointer arithmetic is limited to `++ -- += -=` on plain pointer variables,
 scaled by the pointee size.
 Array extents must be positive
@@ -168,6 +179,56 @@ It deliberately overwrites internal RAM, CPU state, and external RAM at
 `&E000`; do not run it in a session containing work you need to preserve.
 This harness checks the call/return ABI, not BASIC prompt responsiveness;
 the BASIC-level check above remains a separate target acceptance step.
+
+## Standard I/O runtime test in MAME
+
+Compile `tests\pc1403_stdio.c` with `--target PC1403` and assemble it with
+PASM. In a disposable PC-1403 session, load `pc1403_key.lua`, then
+`tests\pc1403_stdio.lua` and call `lcc2_stdio_test` with the binary's absolute
+path. The harness clears BASIC, reserves memory, runs a BASIC caller, and
+presses `1`. It checks raw key code 51, `putchar('A')` returning 65, completion,
+stack balance, register restoration, and BASIC responsiveness.
+Inspect `lcc2_stdio_result` for the outcome. The session remains running after
+the test.
+
+For append-only output, compile and assemble `tests\pc1403_stdio_append.c`
+and pass `true` as the second argument to `lcc2_stdio_test`. It checks `ABC`
+after three calls, then `ABCDEFGHIJKLMNOPQRSTUVWX` at the 24-character
+limit, all character return values, and -1 for a full line or a control byte.
+An optional third argument names a screenshot path captured before returning
+to BASIC. See the [PC-1403 output contract](../../../Docs/lcc2_libraries.md#pc-1403-putchar-append-only-lcd-output)
+for accepted limitations and buffer lifetime.
+
+For input-only verification, compile and assemble `tests\pc1403_getchar.c`.
+Load `pc1403_key.lua`, then `tests\pc1403_getchar.lua`, and call
+`lcc2_getchar_test` with the binary's absolute path. Inspect
+`lcc2_getchar_result`. The harness executes BASIC `RUN`, verifies that input
+blocks, presses `1`, `2`, `1`, and checks raw word results 51, 50, 51,
+stack balance, register restoration, and BASIC responsiveness without pausing.
+The fixture includes only the input runtime, not `putchar` or its LCD buffer.
+
+## String runtime test in MAME
+
+The supported functions and caller requirements are documented in the
+[string library reference](../../../Docs/lcc2_libraries.md#stringh-copying-and-concatenation).
+Build the header-using fixture from the repository root:
+
+```powershell
+gcc -E -P -nostdinc -I Source\C\lcc2\include Source\C\lcc2\tests\pc1403_strings.c -o Source\C\lcc2\build\pc1403_strings.c
+.\Source\C\lcc2\lcc2.exe Source\C\lcc2\build\pc1403_strings.c -o Source\C\lcc2\build\pc1403_strings.asm
+.\pasm.exe Source\C\lcc2\build\pc1403_strings.asm Source\C\lcc2\build\pc1403_strings.bin
+```
+
+In a disposable PC-1403 MAME session, load `pc1403_key.lua`, then
+`tests\pc1403_strings.lua`, and call `lcc2_string_test` with the binary's
+absolute path. Inspect `lcc2_string_result`: success is `status="PASS"`,
+`vectors=17`, `returns=17`, and `basic_responsive=true`. The harness executes
+BASIC `RUN` for every vector and checks empty strings, 260-byte results,
+high bytes, page crossings, all internal/XRAM combinations, unchanged source
+and destination guards, pointer returns and dereferencing, stack balance,
+and register restoration. It leaves MAME unpaused. `make test` also checks
+actual-header preprocessing, signature errors, selective inclusion and
+deduplication, user-provided implementations, and assembly without a target.
 
 ## Scalar functional test in MAME
 

@@ -95,7 +95,17 @@ static void test_rejections(void)
             " int main(void) { return take(&value); }",
         "unsigned char __at(8) value; int take(unsigned char *p) { return 0; }"
             " int main(void) { return take(&value[0]); }",
-        "unsigned char __at(8) value; unsigned char *take(void) { return &value; }",
+        "unsigned char __at(8) value; int *take(void) { return &value; }",
+        "char *take(void) { return 1; }",
+        "char *take(const char *p) { return p; }",
+        "char *take(void); int main(void) { return take(); }",
+        "char *take(void); void main(void) { int *p = take(); }",
+        "char *take(void); int main(void) { return take() + 1; }",
+        "char *take(void); int main(void) { return take() == 0; }",
+        "int take(char *p) { return p = p; }",
+        "int take(char *p) { return p++; }",
+        "char *take(char *p);"
+            " void reject(const char *p) { take(p); }",
         "void main(void) { return 1; }",
         "int main(void) { return; }",
         "int main(void) {}",
@@ -215,6 +225,31 @@ static void test_pointer_values_and_parameters(void)
         (AstVarDecl *)unit->declarations.items[4])->location.address == 0xE5FF);
     assert(symtab_declaration(table,
         (AstVarDecl *)unit->declarations.items[4])->location.width == 2);
+    symtab_destroy(table);
+    ast_arena_destroy(arena);
+}
+
+static void test_pointer_returns(void)
+{
+    AstArena *arena = ast_arena_create();
+    ScalarSymbols *table = symtab_create();
+    AstTranslationUnit *unit = parse(arena,
+        "char __at(8) value;"
+        "char *external(char *destination, const char *source);"
+        "char *identity(char *p) { return p; }"
+        "const char *readonly(const char *p) { return p; }"
+        "char *empty(void) { return 0; }"
+        "char *address(void) { return &value; }"
+        "char *relay(char *p) { return identity(p); }"
+        "char *assigned(char *p) { return p = identity(p); }"
+        "char *advanced(char *p) { return p++; }"
+        "void main(void) {"
+        " char *p = relay(&value); const char *q = readonly(p);"
+        " p = external(identity(p), readonly(p));"
+        " q = readonly(identity(p)); p = assigned(p); p = advanced(p);"
+        " *identity(p) = 65;"
+        " *external(p, q) = 66; p = empty(); p = address(); }");
+    assert(symtab_resolve(table, unit) == 0);
     symtab_destroy(table);
     ast_arena_destroy(arena);
 }
@@ -903,6 +938,7 @@ int main(void)
     test_rejections();
     test_address_resolution();
     test_pointer_values_and_parameters();
+    test_pointer_returns();
     test_dereference_resolution();
     test_global_initializers();
     test_storage_namespaces();
