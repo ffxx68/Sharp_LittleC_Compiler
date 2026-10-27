@@ -1714,7 +1714,7 @@ With an AST available, implement optimizations that the old syntax-directed tran
   comparisons, logical/unary results, runtime-side-effect preservation, and
   rejection of division by zero. The full `make test` suite passes.
 
-### Task 6.2: Reduce generated code for byte operations and expressions
+### Task 6.2 ✅: Reduce generated code for byte operations and expressions
 
 Target the code-size overhead in the current `lcc2` byte-expression path while
 preserving C value semantics and the existing call ABI. Keep this work within
@@ -1798,7 +1798,7 @@ remain in Task 7.1.
   equivalent word fixture (114 bytes, 27.6% smaller); these are standalone
   comparison measurements, not a bounce-image change.
 
-#### Task 6.2.4: Measure generated-code changes
+#### Task 6.2.4 ✅: Measure generated-code changes
 
 - For each optimization step, record assembled image sizes for the bounce
   demo and representative byte/word fixtures. Keep existing codegen, CLI,
@@ -1806,6 +1806,22 @@ remain in Task 7.1.
   behavior changes.
 - **Complexity: Low; estimate 0.5 engineering day**, performed alongside the
   implementation steps.
+- Rebuilt and assembled the current lcc2 bounce demo and the legacy Pascal
+  bounce demo with PASM. The lcc2 image is 3,191 bytes, down 156 bytes (4.7%)
+  from the 3,347-byte global-state version before Task 6.2; the Pascal image
+  is 1,509 bytes, making the current lcc2 image 2.11 times as large.
+- Representative fixture measurements:
+
+  | Measurement | Reference | Result | Change |
+  | --- | ---: | ---: | ---: |
+  | Bounce (pre-6.2 vs current) | 3,347 B | 3,191 B | -156 B (-4.7%) |
+  | Discarded unsigned-byte assignment result | 277 B | 273 B | -4 B |
+  | Six byte vs equivalent word comparisons | 413 B | 299 B | -114 B (-27.6%) |
+
+- The bounce comparison optimization alone removes a further 16 bytes from
+  the 3,207-byte image after Task 6.2.1. `make test`, PASM assembly, and the
+  130-call MAME comparison run pass. Measurements are image sizes; they do not
+  imply additional runtime behavior changes.
 
 ### Task 6.3: Dead code elimination
 
