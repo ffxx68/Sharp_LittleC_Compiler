@@ -57,9 +57,10 @@ integer constant or `+`/`-` expression. The default startup saves/restores
 registers using the Pascal wrapper and explicitly returns to the caller.
 `#pragma nosave` disables preservation, but still emits the final `RTN`.
 `#pragma pc` is explicitly rejected until its output semantics are implemented.
-Comparison expressions call the legacy `LIB_CP*16` helpers. Required helpers
-are deduplicated in the context and embedded after generated functions from
-a built-in catalog; no external `.lib` files are needed. Unknown helper
+Comparisons between proven unsigned-byte operands use direct byte comparisons;
+wider and mixed-width comparisons call the legacy `LIB_CP*16` helpers.
+Required helpers are deduplicated in the context and embedded after generated
+functions from a built-in catalog; no external `.lib` files are needed. Unknown helper
 requests and function names colliding with included runtime labels fail.
 Direct calls use byte/word parameters and results, including supported pointers.
 Declared external calls use the same ABI; only catalogued library modules are
@@ -331,11 +332,11 @@ lcc2_discarded_assignments_test([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc
 ```
 
 The harness calls the program from BASIC ten times and checks
-`A5 34 12 A5 A5 00 A5 34 12 05` at `&E700`: standalone byte/word
-assignments store their results, a consumed nested byte assignment produces
-`0x00A5`, comma-expression assignments still execute, and the side-effect
-counter confirms exactly five RHS calls. It also checks that BASIC's program
-and memory-start pointer remain unchanged. Inspect
+`A5 34 12 A5 A5 00 A5 34 12 06 34 34 00` at `&E700`: standalone
+byte/word assignments store their results, consumed nested assignments produce
+the converted byte values (`0x00A5` and `0x0034`), comma-expression assignments
+still execute, and the side-effect counter confirms exactly six RHS calls.
+It also checks that BASIC's program and memory-start pointer remain unchanged. Inspect
 `lcc2_discarded_assignments_result` for status and outputs.
 
 ## Comparison runtime test in MAME

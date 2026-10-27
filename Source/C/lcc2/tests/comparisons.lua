@@ -22,6 +22,10 @@ function lcc2_comparison_test(binary_path)
         {255, 256}, {256, 255}, {0x1201, 0x1202}, {0x1202, 0x1201},
         {0x01ff, 0x0200}, {0x0200, 0x01ff}, {32767, 32768}, {32768, 32767}
     }
+    local byte_vectors = {
+        {0, 0}, {0, 1}, {1, 0}, {255, 255}, {254, 255},
+        {255, 254}, {0, 255}, {255, 0}, {1, 255}, {255, 1}
+    }
     local saved = {11, 17, 34, 51, 68, 85, 102, 119, 136, 153, 170, 187}
     for i, byte in ipairs({0x78, 0xe0, 0x30, 0x79, 0xe0, 0x03}) do
         space:write_u8(caller + i - 1, byte)
@@ -48,11 +52,16 @@ function lcc2_comparison_test(binary_path)
             assert(frames < 1200, "runtime comparison timeout")
             local pc = cpu.state.PC.value
             local vector = vectors[(lcc2_comparison_result.calls % #vectors) + 1]
+            local byte_vector =
+                byte_vectors[(lcc2_comparison_result.calls % #byte_vectors) + 1]
             if stage == "input" and pc == trap then
                 assert(cpu.state.R.value == 94, "startup stack imbalance")
                 write_word(0xf000, vector[1])
                 write_word(0xf002, vector[2])
+                space:write_u8(0xf020, byte_vector[1])
+                space:write_u8(0xf021, byte_vector[2])
                 for i = 0, 5 do space:write_u8(0xf010 + i, 0x55) end
+                for i = 0, 5 do space:write_u8(0xf022 + i, 0x55) end
                 for i, byte in ipairs(original) do space:write_u8(trap + i - 1, byte) end
                 stage = "return"
             elseif stage == "return" and pc == sentinel then
@@ -63,6 +72,20 @@ function lcc2_comparison_test(binary_path)
                     assert(actual == (truth and 255 or 0),
                         string.format("comparison %d: %04X vs %04X got %02X",
                             i, a, b, actual))
+                end
+                local byte_expected = {
+                    byte_vector[1] == byte_vector[2],
+                    byte_vector[1] ~= byte_vector[2],
+                    byte_vector[1] < byte_vector[2],
+                    byte_vector[1] <= byte_vector[2],
+                    byte_vector[1] > byte_vector[2],
+                    byte_vector[1] >= byte_vector[2]
+                }
+                for i, truth in ipairs(byte_expected) do
+                    local actual = space:read_u8(0xf021 + i)
+                    assert(actual == (truth and 255 or 0),
+                        string.format("byte comparison %d: %02X vs %02X got %02X",
+                            i, byte_vector[1], byte_vector[2], actual))
                 end
                 assert(cpu.state.R.value == 96, "caller stack imbalance")
                 for i, byte in ipairs(saved) do

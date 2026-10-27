@@ -38,13 +38,13 @@ function lcc2_discarded_assignments_test(binary_path)
                 space:write_u8(origin + index - 1, binary:byte(index))
             end
             for call = 1, 10 do
-                for address = 0xe700, 0xe709 do
+                for address = 0xe700, 0xe70c do
                     space:write_u8(address, 0)
                 end
                 keyline("RUN")
                 emu.wait(0.5)
-                local actual = dump(0xe700, 10)
-                assert(actual == "A5 34 12 A5 A5 00 A5 34 12 05",
+                local actual = dump(0xe700, 13)
+                assert(actual == "A5 34 12 A5 A5 00 A5 34 12 06 34 34 00",
                     "assignment outputs or RHS call count: " .. actual)
                 assert(space:read_u8(0xff01) +
                     256 * space:read_u8(0xff02) == basic_start,

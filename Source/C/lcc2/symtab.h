@@ -116,5 +116,7 @@ int symtab_initializer_constant(const AstExpr *expression,
                                 unsigned long *value);
 int symtab_switch_width(const ScalarSymbols *table, const AstExpr *expression,
                         size_t *width);
+int symtab_is_unsigned_byte(const ScalarSymbols *table,
+                            const AstExpr *expression);
 
 #endif

@@ -686,6 +686,46 @@ static void test_comparisons_and_control_flow(void)
     ast_arena_destroy(arena);
 }
 
+static void test_unsigned_byte_comparisons(void)
+{
+    AstArena *arena = ast_arena_create();
+    CodegenContext *ctx = codegen_context_create();
+    AstTranslationUnit *unit = parse(arena,
+        "__xram __at(0xF000) unsigned char left;"
+        "__xram __at(0xF001) unsigned char right;"
+        "unsigned int main(void) {"
+        " if (left == right) return 1;"
+        " if (left != right) return 2;"
+        " if (left < right) return 3;"
+        " if (left <= right) return 4;"
+        " if (left > right) return 5;"
+        " if (left >= right) return 6;"
+        " return 0; }");
+    const char *assembly;
+
+    assert(arena != NULL && ctx != NULL);
+    assert(codegen_translation_unit(ctx, unit) == 0);
+    assert(codegen_stack_depth(ctx) == 0);
+    assembly = codegen_output(ctx);
+    assert(strstr(assembly, "CALL\tLIB_CP") == NULL);
+    assert(strstr(assembly, "\tCPMA\n") != NULL);
+    assert(strstr(assembly, "JRCP") != NULL);
+    codegen_context_destroy(ctx);
+    ast_arena_destroy(arena);
+
+    arena = ast_arena_create();
+    ctx = codegen_context_create();
+    unit = parse(arena,
+        "__xram __at(0xF000) unsigned char byte_value;"
+        "__xram __at(0xF002) unsigned int word_value;"
+        "unsigned int main(void) { return byte_value < word_value; }");
+    assert(codegen_translation_unit(ctx, unit) == 0);
+    assert(strstr(codegen_output(ctx), "CALL\tLIB_CPS16") != NULL);
+    assert(codegen_stack_depth(ctx) == 0);
+    codegen_context_destroy(ctx);
+    ast_arena_destroy(arena);
+}
+
 static void test_function_calls_parameters_and_frames(void)
 {
     AstArena *arena = ast_arena_create();
@@ -974,6 +1014,42 @@ static void test_discarded_scalar_assignment_omits_result_load(void)
     assert(call_count == 7);
     assert(strstr(functions, "\tLP\t8\n\tLDM\n") != NULL);
     assert(strstr(functions, "\tLIDP\t58880\n\tLDD\n") == NULL);
+    assert(codegen_stack_depth(ctx) == 0);
+    codegen_context_destroy(ctx);
+    ast_arena_destroy(arena);
+}
+
+static void test_unsigned_byte_xram_assignment_reuses_value(void)
+{
+    AstArena *arena = ast_arena_create();
+    CodegenContext *ctx = codegen_context_create();
+    AstTranslationUnit *unit = parse(arena,
+        "__xram __at(0xE600) unsigned char byte_value;"
+        "__xram __at(0xE602) unsigned int word_value;"
+        "unsigned char next_byte(void) { return 0xA5; }"
+        "unsigned int next_word(void) { return 0x12A5; }"
+        "void main(void) { word_value = byte_value = next_byte();"
+        " word_value = byte_value = next_word(); }");
+    const char *functions;
+
+    assert(ctx != NULL);
+    assert(codegen_program(ctx, unit) == 0);
+    functions = codegen_section_output(ctx, CODEGEN_FUNCTIONS);
+    assert(strstr(functions,
+        "\tCALL\tnext_byte\t; Function call\n"
+        "\tLIB\t0\n\tLIDP\t58880\n\tSTD\n\tLIDP\t58882\n") != NULL);
+    assert(strstr(functions,
+        "\tCALL\tnext_byte\t; Function call\n"
+        "\tLIB\t0\n\tLIDP\t58880\n\tSTD\n"
+        "\tLIDP\t58880\n\tLDD\n") == NULL);
+    assert(strstr(functions,
+        "\tCALL\tnext_word\t; Function call\n"
+        "\tLIB\t0\n\tLIDP\t58880\n\tSTD\n"
+        "\tLIDP\t58882\n\tSTD\n") != NULL);
+    assert(strstr(functions,
+        "\tCALL\tnext_word\t; Function call\n"
+        "\tLIB\t0\n\tLIDP\t58880\n\tSTD\n"
+        "\tLIDP\t58880\n\tLDD\n") == NULL);
     assert(codegen_stack_depth(ctx) == 0);
     codegen_context_destroy(ctx);
     ast_arena_destroy(arena);
@@ -1348,12 +1424,14 @@ int main(void)
     test_dynamic_array_access();
     test_dynamic_array_extent_independence();
     test_comparisons_and_control_flow();
+    test_unsigned_byte_comparisons();
     test_function_calls_parameters_and_frames();
     test_runtime_libraries();
     test_address_formation();
     test_pointer_values_and_parameters();
     test_pointer_returns();
     test_discarded_scalar_assignment_omits_result_load();
+    test_unsigned_byte_xram_assignment_reuses_value();
     test_indirect_pointer_access();
     test_program_sections();
     return 0;

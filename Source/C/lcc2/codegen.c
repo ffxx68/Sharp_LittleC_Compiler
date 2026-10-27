@@ -843,6 +843,79 @@ static int emit_comparison(CodegenContext *ctx, AstBinaryOp op)
     return ctx->error[0] == '\0' ? 0 : -1;
 }
 
+static int emit_unsigned_byte_comparison(CodegenContext *ctx, AstBinaryOp op)
+{
+    char *matched = new_label(ctx);
+    char *not_matched = new_label(ctx);
+    char *done = new_label(ctx);
+
+    if (ctx->stack_depth < 1) {
+        free(matched);
+        free(not_matched);
+        free(done);
+        return set_error(ctx, "evaluation stack underflow");
+    }
+    if (matched == NULL || not_matched == NULL || done == NULL) {
+        free(matched);
+        free(not_matched);
+        free(done);
+        return -1;
+    }
+
+    emit_inst_op(ctx, "LP", "0");
+    emit_inst(ctx, "EXAM");
+    emit_inst(ctx, "POP");
+    --ctx->stack_depth;
+    emit_inst_op(ctx, "LP", "0");
+    emit_inst(ctx, "CPMA");
+
+    switch (op) {
+    case AST_BINARY_EQUAL:
+        emit_inst_op(ctx, "JRNZP", not_matched);
+        emit_inst_op(ctx, "JP", matched);
+        break;
+    case AST_BINARY_NOT_EQUAL:
+        emit_inst_op(ctx, "JRNZP", matched);
+        emit_inst_op(ctx, "JP", not_matched);
+        break;
+    case AST_BINARY_LESS:
+        emit_inst_op(ctx, "JRCP", not_matched);
+        emit_inst_op(ctx, "JRNZP", matched);
+        emit_inst_op(ctx, "JP", not_matched);
+        break;
+    case AST_BINARY_LESS_EQUAL:
+        emit_inst_op(ctx, "JRCP", not_matched);
+        emit_inst_op(ctx, "JP", matched);
+        break;
+    case AST_BINARY_GREATER:
+        emit_inst_op(ctx, "JRCP", matched);
+        emit_inst_op(ctx, "JP", not_matched);
+        break;
+    case AST_BINARY_GREATER_EQUAL:
+        emit_inst_op(ctx, "JRCP", matched);
+        emit_inst_op(ctx, "JRNZP", not_matched);
+        emit_inst_op(ctx, "JP", matched);
+        break;
+    default:
+        free(matched);
+        free(not_matched);
+        free(done);
+        return set_error(ctx, "invalid unsigned byte comparison operator");
+    }
+
+    emit_label(ctx, not_matched);
+    emit_inst_op(ctx, "LIA", "0");
+    emit_inst_op(ctx, "JP", done);
+    emit_label(ctx, matched);
+    emit_inst_op(ctx, "LIA", "255");
+    emit_label(ctx, done);
+    emit_inst_op(ctx, "LIB", "0");
+    free(matched);
+    free(not_matched);
+    free(done);
+    return ctx->error[0] == '\0' ? 0 : -1;
+}
+
 /* Left operand is on the evaluation stack, right operand in B:A. */
 static int emit_bitwise(CodegenContext *ctx, AstBinaryOp op)
 {
@@ -1737,6 +1810,9 @@ static int emit_expression(CodegenContext *ctx, const AstExpr *expression)
         if (binary->op == AST_BINARY_ASSIGN) {
             ScalarLocation location;
             const ScalarSymbol *symbol = NULL;
+            size_t value_width;
+            int unsigned_xram_byte;
+            int rhs_is_unsigned_byte;
             if (binary->left->node.kind == AST_NODE_DEREFERENCE_EXPR) {
                 return emit_dynamic_dereference(ctx,
                     (const AstDereferenceExpr *)binary->left,
@@ -1771,9 +1847,26 @@ static int emit_expression(CodegenContext *ctx, const AstExpr *expression)
                 }
                 location = symbol->location;
             }
-            if (emit_expression(ctx, binary->right) != 0 ||
-                codegen_store_scalar(ctx, location) != 0 ||
-                codegen_load_scalar(ctx, location) != 0) {
+            unsigned_xram_byte =
+                location.storage == SCALAR_XRAM && location.width == 1 &&
+                location.is_unsigned;
+            rhs_is_unsigned_byte =
+                symtab_switch_width(ctx->symbols, binary->right,
+                                    &value_width) == 0 &&
+                value_width == 1;
+            if (emit_expression(ctx, binary->right) != 0) {
+                return -1;
+            }
+            if (unsigned_xram_byte && !rhs_is_unsigned_byte) {
+                emit_inst_op(ctx, "LIB", "0");
+            }
+            if (codegen_store_scalar(ctx, location) != 0) {
+                return -1;
+            }
+            if (unsigned_xram_byte) {
+                return ctx->error[0] == '\0' ? 0 : -1;
+            }
+            if (codegen_load_scalar(ctx, location) != 0) {
                 return -1;
             }
             if (location.width == 1) {
@@ -1787,10 +1880,16 @@ static int emit_expression(CodegenContext *ctx, const AstExpr *expression)
             binary->op == AST_BINARY_LESS_EQUAL ||
             binary->op == AST_BINARY_GREATER ||
             binary->op == AST_BINARY_GREATER_EQUAL) {
+            int unsigned_byte_comparison =
+               symtab_is_unsigned_byte(ctx->symbols, binary->left) &&
+               symtab_is_unsigned_byte(ctx->symbols, binary->right);
             if (emit_expression(ctx, binary->left) != 0 ||
-                codegen_emit_push(ctx, width) != 0 ||
-                emit_expression(ctx, binary->right) != 0) {
-                return -1;
+               codegen_emit_push(ctx, unsigned_byte_comparison ? 1 : width) != 0 ||
+               emit_expression(ctx, binary->right) != 0) {
+               return -1;
+            }
+            if (unsigned_byte_comparison) {
+               return emit_unsigned_byte_comparison(ctx, binary->op);
             }
             return emit_comparison(ctx, binary->op);
         }

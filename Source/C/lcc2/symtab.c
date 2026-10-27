@@ -1625,6 +1625,13 @@ static int expression_unsigned_byte(const ScalarSymbols *table,
     return 0;
 }
 
+int symtab_is_unsigned_byte(const ScalarSymbols *table,
+                            const AstExpr *expression)
+{
+    return table != NULL && expression != NULL &&
+           expression_unsigned_byte(table, expression);
+}
+
 int symtab_switch_width(const ScalarSymbols *table, const AstExpr *expression,
                         size_t *width)
 {

@@ -1747,23 +1747,35 @@ remain in Task 7.1.
   and BASIC memory integrity. The bounce image fell from 3,347 to 3,207 bytes
   (140 bytes, 4.2%).
 
-#### Task 6.2.2: Generate width-aware byte expressions
+#### Task 6.2.2 ✅: Generate width-aware byte expressions
 
-- Use resolved expression types to avoid unnecessary 16-bit setup, stack
-  traffic, and byte promotion when an operation can preserve byte-width
-  semantics. Insert promotions only where required by the supported C
-  conversions or result type.
-- Begin with byte loads, assignments, and unsigned byte arithmetic; preserve
-  existing word and pointer behavior. Do not introduce signed semantics, which
-  remain in Task 7.1.
+- For value-producing assignment to an unsigned XRAM byte, reuse the converted
+  B:A result instead of reloading the stored byte. If the RHS is not already a
+  known unsigned byte, clear B after evaluating it to apply the assignment's
+  conversion before storing.
+- Keep other destinations and indirect stores on their existing paths in this
+  slice. Then expand to other byte operations only where resolved types and C
+  integer promotions prove the narrower sequence equivalent. Preserve
+  word/pointer behavior and do not introduce signed semantics, which remain in
+  Task 7.1.
 - Test byte and word operations, unsigned wraparound, mixed-width expressions,
   assignment results, and contexts that require promotion. Compare generated
   assembly and run the relevant target-level fixtures.
-- **Complexity: Medium; estimate 2–4 engineering days.** This requires
-  carrying resolved widths through expression emission and validating every
-  conversion boundary affected by narrower operations.
+- First conservative slice implemented in `codegen.c`: a known unsigned-byte
+  RHS assigned to an unsigned XRAM byte keeps its zero-extended B:A result,
+  avoiding the redundant reload. Codegen coverage and the
+  `discarded_assignments.c` MAME test pass (ten BASIC calls); its image shrank
+  from 244 to 238 bytes. The bounce image remains 3,207 bytes because it has no
+  matching value-producing XRAM byte assignment.
+- Second slice extends this to wider or signed RHS values: clear B after
+  evaluation to retain the converted unsigned-byte result, then store without
+  reloading. Keep further expression classes deferred until their promotion
+  and conversion semantics are separately proven. The updated runtime fixture
+  now covers narrowing `0x12A5` to an unsigned byte and using the resulting
+  `0x00A5` assignment value; MAME passes ten BASIC calls. The same fixture
+  shrank from 277 to 273 bytes (4 bytes), while bounce remains unchanged.
 
-#### Task 6.2.3: Specialize comparisons for byte operands
+#### Task 6.2.3 ✅: Specialize comparisons for byte operands
 
 - Emit direct comparisons for compatible unsigned byte operands instead of
   routing every comparison through the 16-bit helpers. Preserve the current
@@ -1775,6 +1787,16 @@ remain in Task 7.1.
 - **Complexity: Medium; estimate 1–3 engineering days.** The helper currently
   implements 16-bit comparisons; a byte path needs explicit width and
   conversion checks plus regression coverage.
+- Implemented direct compare/branch sequences only when both operands are
+  resolved as unsigned bytes. All six operators preserve the established
+  `0`/`255` result, while mixed-width and other comparisons retain the
+  16-bit-helper path. Codegen tests assert both paths. The PC-1403 MAME
+  comparison fixture passes 130 calls, covering the six byte operators at
+  `0`, `1`, `254`, and `255` boundaries alongside the existing word vectors;
+  stack balance and register restoration pass. `make test` and assembly pass.
+  A six-operator byte fixture assembles to 299 bytes versus 413 bytes for the
+  equivalent word fixture (114 bytes, 27.6% smaller); these are standalone
+  comparison measurements, not a bounce-image change.
 
 #### Task 6.2.4: Measure generated-code changes
 

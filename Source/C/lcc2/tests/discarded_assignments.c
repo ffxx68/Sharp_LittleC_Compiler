@@ -7,6 +7,8 @@ __xram __at(0xE704) unsigned int nested_word;
 __xram __at(0xE706) unsigned char comma_byte;
 __xram __at(0xE707) unsigned int comma_word;
 __xram __at(0xE709) unsigned char call_count;
+__xram __at(0xE70A) unsigned char wide_byte;
+__xram __at(0xE70B) unsigned int wide_word;
 
 unsigned char next_byte(void)
 {
@@ -26,4 +28,5 @@ void main(void)
     discarded_word = next_word();
     nested_word = nested_byte = next_byte();
     (comma_byte = next_byte(), comma_word = next_word());
+    wide_word = wide_byte = next_word();
 }
