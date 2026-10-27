@@ -87,23 +87,44 @@ collisions. See the project README for the integrated BASIC-caller test.
 
 | Feature | Current support |
 |---------|-----------------|
-| Types | `char`, `unsigned char`, `signed char`, `int`, `unsigned int`; `void` function returns |
-| Functions | Byte/word parameters by value, compatible prototypes, direct calls to definitions in the same translation unit; CLI `main` must be parameterless |
-| Variables | Fixed-address globals, automatic locals, and single-dimensional byte/word arrays; scalar and brace-list initialization |
-| Statements | Compound blocks, expression statements, empty statements, `if`/`else`, `while`, `do`/`while`, expression-initialized `for`, `switch`/`case`/`default`, `break`, `continue`, `return` |
-| Expressions | 16-bit integer constants, character constants, scalar identifiers, constant/runtime array subscripts, direct function calls, `=`, `+`, `-`, `*`, `/`, `%`, `&`, `|`, `^`, `~`, `<<`, `>>`, unary `+`/`-`/`!`, `&&`, `\|\|`, comma, `==`, `!=`, unsigned `<`, `<=`, `>`, `>=`, parentheses |
-| Pointers and structures | Byte/word pointers (assignment, copy, null, parameters, indirect loads/stores) and `->` member access through pointers to fixed-address structures |
+| Types | 8-bit `char`, `unsigned char`, `signed char`; 16-bit `int`, `unsigned int`, `signed int`; `void` function returns; `const` objects |
+| Functions | Byte/word parameters by value, compatible prototypes, direct calls to definitions in the same translation unit, including nested and recursive calls; CLI `main` must be parameterless |
+| Variables and arrays | Fixed-address globals, automatic locals, and single-dimensional byte/word arrays; scalar and array brace-list initialization |
+| Structures and pointers | Restricted structures and byte/word pointers, including assignment, copying, null values, parameters, indirect loads/stores, and `->` member access through pointers |
+| Statements | Compound blocks, expression and empty statements, `if`/`else`, `while`, `do`/`while`, expression-initialized `for`, `switch`/`case`/`default`, `break`, `continue`, `return`, and labels |
+| Expressions | 16-bit integer and character constants, identifiers, array subscripts, direct calls, arithmetic, bitwise, shifts, logical and comparison operators, assignment and compound assignment, `++`/`--`, unary operators, comma, and parentheses |
 | Names | Case-sensitive lookup, nested block scopes, and local-over-global shadowing |
-| `const` | Const-qualified scalar objects and array elements cannot be assigned after initialization |
+| Placement extensions | `__at`, `__xram`, `#pragma org`, and `#pragma nosave` |
 
 Declarations precede statements within a block. Non-void functions require a
 return expression; void functions may use `return;` or an empty body.
 Statements after an unconditional return are currently rejected. A `for` step
 executes after the body, and `continue` in a `for` loop targets that step.
-Signed relational comparisons are rejected. Function definitions require
-named scalar parameters; prototypes may omit parameter names. Calls are
-left-to-right and may be nested or recursive. Argument and return values use
-the byte/word stack convention described below.
+Function definitions require named scalar parameters; prototypes may omit
+parameter names. Calls are left-to-right. Argument and return values use the
+byte/word stack convention described below.
+
+**Unsupported (relative to standard C89):** `short`, `long`, `double`,
+floating-point operations, `volatile`, `auto`, `register`, `static` and
+`extern` storage, `typedef` declarations, `enum`, `union`, `goto`, casts,
+`sizeof`, the conditional `?:` operator, string literals, and external
+function calls. `lcc2` is not a full C89 implementation; preprocessing must be
+run separately with `lcpp`.
+
+Structures support byte/word members and member access, but nested structures,
+array or pointer members, bit-fields, aggregate initialization, structure
+assignment, and passing or returning structures are unsupported. Pointer
+support is limited: pointer-to-pointer types, function pointers, pointer
+returns, addresses of automatic locals, whole-array or dynamic-element
+addresses, array-to-pointer decay, and pointer arithmetic other than `++`,
+`--`, `+=`, and `-=` are unsupported. Multidimensional and variable-length
+arrays and non-byte/word array elements are unsupported.
+
+Signed relational comparisons, signed right shifts, and signed division and
+remainder are unsupported; integer operators otherwise use unsigned semantics.
+Signed overflow and uninitialized local reads are not diagnosed. Runtime array
+bounds are not checked, so out-of-range runtime accesses have undefined
+behavior.
 
 Compound assignment (`+= -= *= /= %= <<= >>= &= ^= |=`) and `++`/`--` work on
 variables, array elements, members and dereferences, but the target must not
@@ -126,10 +147,6 @@ count in the one-byte H register. Each generated table has at most 255 entries;
 word switches may contain more than 255 cases as long as there are at most 255
 high-byte groups and at most 255 cases in each group.
 
-`goto`, static/extern objects, external function calls, casts,
-`sizeof`, the conditional
-`?:` operator, floating point, other pointer arithmetic, pointer-to-pointer types,
-pointer returns and addresses of automatic locals are not implemented.
 Global scalar initializers are integer and character constant expressions
 using `+ - * / % & | ^ ~ << >> !` and unary `+`/`-` (constant results are
 truncated modulo 65536); scalar list and floating-point initializers are

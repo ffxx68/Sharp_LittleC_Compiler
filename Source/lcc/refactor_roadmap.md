@@ -1430,9 +1430,10 @@ where behavior is non-trivial, a PC-1403 runtime fixture.
 
 #### Task 5.3.4.13: Standard-C switch statement
 
-**In progress — host tests pass, PC-1403 runtime test failing.** Switch
-resolution and emission now use the
-standard-C source-order arm layout: dispatch enters a matching label, execution
+**In progress — host tests pass, PC-1403 runtime test failing.** 
+
+Switchresolution and emission now use the standard-C source-order arm layout: 
+dispatch enters a matching label, execution
 falls through subsequent arms, and `break` exits the nearest loop or switch.
 `continue` searches past intervening switch frames for the nearest loop.
 Switch expressions are evaluated once; case/default labels are checked per
@@ -1463,6 +1464,7 @@ preserved across `CASE`.
 **Open runtime failure** (`tests\pc1403_switch.c` + `pc1403_switch.lua`,
 results at `&E720`, expected
 `0B 00 16 00 01 00 21 00 2C 00 37 00 04 00 47 00`, call count at `&E740` = 1):
+
 - First attempts (no `ELSE`, then `ELSE` without stack handling) hung after
   `RUN`. The best observed run produced
   `0B 00 16 00 01 00 00 00 00 00 37 00 E1 59 00 00`: byte dispatch,
