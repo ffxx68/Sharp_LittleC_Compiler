@@ -908,18 +908,24 @@ static void test_runtime_libraries(void)
         CodegenContext *ctx = codegen_context_create();
         char source[256], label[40];
         AstTranslationUnit *unit;
+        const char *assembly, *runtime;
         (void)snprintf(source, sizeof(source),
             "unsigned int main(void) {"
             " unsigned int x = 1; x = x %s 2; return x %s 3; }",
             operators[index], operators[index]);
         unit = parse(arena, source);
         assert(codegen_program(ctx, unit) == 0);
+        assembly = codegen_output(ctx);
+        runtime = codegen_runtime_output(ctx);
         (void)snprintf(label, sizeof(label), "%s:", routines[index]);
-        assert(occurrences(codegen_runtime_output(ctx), label) == 1);
-        assert(occurrences(codegen_output(ctx), label) == 1);
-        assert(strstr(codegen_output(ctx), label) >
-               strstr(codegen_output(ctx), "main:\t; Procedure"));
-        assert(strstr(codegen_runtime_output(ctx), ".include") == NULL);
+        assert(occurrences(runtime, label) == 1);
+        assert(occurrences(assembly, label) == 1);
+        assert(strstr(assembly, label) >
+               strstr(assembly, "main:\t; Procedure"));
+        assert(strstr(runtime, ".include") == NULL);
+        assert(strlen(assembly) >= strlen(runtime));
+        assert(strcmp(assembly + strlen(assembly) - strlen(runtime),
+                      runtime) == 0);
         assert(codegen_stack_depth(ctx) == 0);
         codegen_context_destroy(ctx);
         ast_arena_destroy(arena);

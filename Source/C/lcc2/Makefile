@@ -4,11 +4,12 @@ BISON ?= bison
 CFLAGS ?= -Wall -Wextra -Werror -O2 -std=c99
 BUILD_DIR := build
 TARGET := lcc2.exe
-OBJECTS := $(BUILD_DIR)/main.o $(BUILD_DIR)/ast.o $(BUILD_DIR)/symtab.o $(BUILD_DIR)/codegen.o $(BUILD_DIR)/parser.o $(BUILD_DIR)/lexer.o
+OBJECTS := $(BUILD_DIR)/main.o $(BUILD_DIR)/ast.o $(BUILD_DIR)/symtab.o $(BUILD_DIR)/codegen.o $(BUILD_DIR)/peephole.o $(BUILD_DIR)/parser.o $(BUILD_DIR)/lexer.o
 TEST_TARGET := $(BUILD_DIR)/test_ast.exe
 LEXER_TEST_TARGET := $(BUILD_DIR)/test_lexer.exe
 PARSER_TEST_TARGET := $(BUILD_DIR)/test_parser.exe
 CODEGEN_TEST_TARGET := $(BUILD_DIR)/test_codegen.exe
+PEEPHOLE_TEST_TARGET := $(BUILD_DIR)/test_peephole.exe
 SYMTAB_TEST_TARGET := $(BUILD_DIR)/test_symtab.exe
 
 .PHONY: all check-tools test clean
@@ -23,7 +24,7 @@ check-tools:
 $(TARGET): $(OBJECTS)
 	$(CC) $(CFLAGS) -o $@ $(OBJECTS)
 
-$(BUILD_DIR)/%.o: %.c ast.h codegen.h parser.h symtab.h | $(BUILD_DIR)
+$(BUILD_DIR)/%.o: %.c ast.h codegen.h parser.h symtab.h peephole.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 $(BUILD_DIR)/lexer.c: lexer.l lexer_tokens.h | $(BUILD_DIR)
@@ -56,15 +57,19 @@ $(PARSER_TEST_TARGET): tests/test_parser.c $(BUILD_DIR)/parser.c $(BUILD_DIR)/le
 $(SYMTAB_TEST_TARGET): tests/test_symtab.c symtab.c symtab.h ast.c $(BUILD_DIR)/parser.c $(BUILD_DIR)/lexer.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -I$(BUILD_DIR) -I. -o $@ tests/test_symtab.c symtab.c ast.c $(BUILD_DIR)/parser.c $(BUILD_DIR)/lexer.c
 
-$(CODEGEN_TEST_TARGET): tests/test_codegen.c codegen.c codegen.h symtab.c symtab.h ast.c $(BUILD_DIR)/parser.c $(BUILD_DIR)/lexer.c | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -I$(BUILD_DIR) -I. -o $@ tests/test_codegen.c codegen.c symtab.c ast.c $(BUILD_DIR)/parser.c $(BUILD_DIR)/lexer.c
+$(CODEGEN_TEST_TARGET): tests/test_codegen.c codegen.c codegen.h peephole.c peephole.h symtab.c symtab.h ast.c $(BUILD_DIR)/parser.c $(BUILD_DIR)/lexer.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -I$(BUILD_DIR) -I. -o $@ tests/test_codegen.c codegen.c peephole.c symtab.c ast.c $(BUILD_DIR)/parser.c $(BUILD_DIR)/lexer.c
 
-test: all $(TEST_TARGET) $(LEXER_TEST_TARGET) $(PARSER_TEST_TARGET) $(SYMTAB_TEST_TARGET) $(CODEGEN_TEST_TARGET)
+$(PEEPHOLE_TEST_TARGET): tests/test_peephole.c peephole.c peephole.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -I. -o $@ tests/test_peephole.c peephole.c
+
+test: all $(TEST_TARGET) $(LEXER_TEST_TARGET) $(PARSER_TEST_TARGET) $(SYMTAB_TEST_TARGET) $(CODEGEN_TEST_TARGET) $(PEEPHOLE_TEST_TARGET)
 	./$(TEST_TARGET)
 	./$(LEXER_TEST_TARGET)
 	./$(PARSER_TEST_TARGET)
 	./$(SYMTAB_TEST_TARGET)
 	./$(CODEGEN_TEST_TARGET)
+	./$(PEEPHOLE_TEST_TARGET)
 	./$(TARGET) --help
 	./$(TARGET) --version
 	sh tests/test_cli.sh

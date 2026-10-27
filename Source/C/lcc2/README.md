@@ -23,6 +23,13 @@ scalar access, stack operations, add/sub/comparison operations, labels,
 structured control flow, and parameterized functions with direct calls. The
 resolver validates the supported subset before emission.
 
+Complete-program output is passed through `peephole.c`, which applies the
+legacy optimizer patterns to startup, data, and function assembly while
+preserving unmatched lines. Runtime-library definitions are appended after
+optimization, and codegen tests verify each comparison helper's runtime text is
+preserved byte-for-byte in the final output. The optimizer patterns have a
+standalone test target included in `make test`.
+
 ## Compile and run the PC-1403 smoke program
 
 From the repository root in PowerShell:

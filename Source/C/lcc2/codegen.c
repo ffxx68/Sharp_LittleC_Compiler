@@ -1,4 +1,5 @@
 #include "codegen.h"
+#include "peephole.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -2578,9 +2579,25 @@ int codegen_program(CodegenContext *ctx, AstTranslationUnit *tu)
             }
         }
     }
-    for (index = CODEGEN_STARTUP; index <= CODEGEN_RUNTIME; ++index) {
+    for (index = CODEGEN_STARTUP; index < CODEGEN_RUNTIME; ++index) {
         const char *section = codegen_section_output(ctx, (CodegenSection)index);
         if (append_text(ctx, section, strlen(section)) != 0) {
+            return -1;
+        }
+    }
+    {
+        char *optimized = peephole_optimize(codegen_output(ctx));
+        if (optimized == NULL) {
+            return set_error(ctx, "out of memory while optimizing assembly");
+        }
+        free(ctx->output);
+        ctx->output = optimized;
+        ctx->output_length = strlen(optimized);
+        ctx->output_capacity = ctx->output_length + 1;
+    }
+    {
+        const char *runtime = codegen_section_output(ctx, CODEGEN_RUNTIME);
+        if (append_text(ctx, runtime, strlen(runtime)) != 0) {
             return -1;
         }
     }

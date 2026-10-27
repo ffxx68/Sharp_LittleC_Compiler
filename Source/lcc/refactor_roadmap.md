@@ -1537,17 +1537,28 @@ target use case or a later roadmap task requires them.
   `Docs/lcc2_manual.md`. Those limitations are intentional, not incomplete
   work for this task.
 
-### Task 5.3.6: Peephole optimizer (`peephole.c`)
+### Task 5.3.6 ✅: Peephole optimizer (`peephole.c`)
 
-Port and test the transformations extracted in Phase 5.2. Keep the transformation set and order aligned with `Backend.pas`; moving from text to structured instructions is an implementation detail, not a reason to change optimizer behavior.
+Added `peephole.c` and integrated it into complete-program generation. 
+It parses assembly lines into instruction records while retaining original text for unchanged lines, 
+then runs the `Backend.pas` passes in order: legacy constant inc/dec folds, `LIA`/`EXAB`, redundant `PUSH`/`LIB`/`POP`, 
+double `EXAB`, and the `INCA`/`DECA` patterns. 
+Runtime-library definitions are appended after optimization and remain unchanged; 
+`test_runtime_libraries` verifies each comparison helper appears byte-for-byte as its original runtime section 
+at the end of generated output. `tests/test_peephole.c` covers each rewrite and representative near-matches; 
+`make -C Source\C\lcc2 test` passes, including assembled CLI regression fixtures.
 
 ### Task 5.3.7: Regression and compatibility tests
 
 Strategy with three levels:
 
-1. Backend contract tests: verify each implemented operation against the supported C subset, including emitted instructions, stack effects, runtime dependencies, and rejection of unsupported forms.
-2. C semantics tests: compile programs using standard-C behavior and verify the assembled or emulated result. Output need not match Pascal ASM when precedence, `for`, `switch`, or other language semantics differ.
-3. Optional compatibility tests: compare selected existing demos with minimal syntax changes (`byte` → `unsigned char`, etc.) when preserving a specific legacy behavior is an explicit goal; document intentional differences.
+1. Backend contract tests: verify each implemented operation against the supported C subset, 
+   including emitted instructions, stack effects, runtime dependencies, and rejection of unsupported forms.
+2. C semantics tests: compile programs using standard-C behavior and verify the assembled or emulated result. 
+   Output need not match Pascal ASM when precedence, `for`, `switch`, or other language semantics differ.
+3. Optional compatibility tests: compare selected existing demos with minimal syntax changes 
+   (`byte` → `unsigned char`, etc.) when preserving a specific legacy behavior is an explicit goal; 
+   document intentional differences.
 
 Tests for new constructs should include:
 
