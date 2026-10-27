@@ -1571,7 +1571,7 @@ evaluation, `enum` objects, and block-scoped typedef declarations remain unsuppo
 without replacing prior output. Signed comparisons and arithmetic remain
 deferred to Task 5.3.9 rather than treated as a compatibility requirement.
 
-### Task 5.3.8: Migrate libraries — standard C and device-specific APIs
+### Task 5.3.8 ✅: Migrate libraries — standard C and device-specific APIs
 
 - Keep the legacy Pascal-compiler headers at the repository root intact; provide
   C headers for `lcc2` under `Source/C/lcc2/include/`.
