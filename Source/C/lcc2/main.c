@@ -153,11 +153,12 @@ int main(int argc, char **argv)
         const char *directory;
         const char *dependency;
     } runtime_modules[] = {
-        {"lcd_on", NULL, NULL},
-        {"lcd_off", NULL, NULL},
-        {"lcd_cls", NULL, NULL},
+        {"lcd_on", NULL, "_lcd_saved_iram"},
+        {"lcd_off", NULL, "_lcd_saved_iram"},
+        {"lcd_cls", NULL, "_lcd_saved_iram"},
         {"lcd_pset", NULL, "_lcd_pset_impl"},
-        {"_lcd_pset_impl", NULL, NULL},
+        {"_lcd_pset_impl", NULL, "_lcd_saved_iram"},
+        {"_lcd_saved_iram", NULL, NULL},
         {"lcd_hline", NULL, "_lcd_pset_impl"},
         {"key_wait", NULL, NULL},
         {"key_scan", NULL, NULL},
@@ -243,23 +244,35 @@ int main(int argc, char **argv)
         needed[runtime_index] =
             codegen_external_function_used(ctx, runtime_modules[runtime_index].name);
     }
-    for (runtime_index = 0;
-         runtime_index < sizeof(runtime_modules) / sizeof(runtime_modules[0]);
-         ++runtime_index) {
-        const char *dependency = runtime_modules[runtime_index].dependency;
-        size_t dependency_index;
-        if (!needed[runtime_index] || dependency == NULL ||
-            function_defined(unit, dependency)) {
-            continue;
-        }
-        for (dependency_index = 0;
-             dependency_index < sizeof(runtime_modules) / sizeof(runtime_modules[0]);
-             ++dependency_index) {
-            if (strcmp(runtime_modules[dependency_index].name, dependency) == 0) {
-                needed[dependency_index] = 1;
-                break;
+    {
+        int dependencies_changed;
+        do {
+            dependencies_changed = 0;
+            for (runtime_index = 0;
+                 runtime_index <
+                     sizeof(runtime_modules) / sizeof(runtime_modules[0]);
+                 ++runtime_index) {
+                const char *dependency =
+                    runtime_modules[runtime_index].dependency;
+                size_t dependency_index;
+                if (!needed[runtime_index] || dependency == NULL ||
+                    function_defined(unit, dependency)) {
+                    continue;
+                }
+                for (dependency_index = 0;
+                     dependency_index <
+                         sizeof(runtime_modules) / sizeof(runtime_modules[0]);
+                     ++dependency_index) {
+                    if (strcmp(runtime_modules[dependency_index].name,
+                               dependency) == 0 &&
+                        !needed[dependency_index]) {
+                        needed[dependency_index] = 1;
+                        dependencies_changed = 1;
+                        break;
+                    }
+                }
             }
-        }
+        } while (dependencies_changed);
     }
     for (runtime_index = 0;
          runtime_index < sizeof(runtime_modules) / sizeof(runtime_modules[0]);

@@ -1784,9 +1784,6 @@ remain in Task 7.1.
 - Test equality and relational boundaries, including 0, 255, mixed byte/word
   operands, and byte values used in conditions. Signed comparisons remain in
   Task 7.1.
-- **Complexity: Medium; estimate 1–3 engineering days.** The helper currently
-  implements 16-bit comparisons; a byte path needs explicit width and
-  conversion checks plus regression coverage.
 - Implemented direct compare/branch sequences only when both operands are
   resolved as unsigned bytes. All six operators preserve the established
   `0`/`255` result, while mixed-width and other comparisons retain the
@@ -1804,24 +1801,15 @@ remain in Task 7.1.
   demo and representative byte/word fixtures. Keep existing codegen, CLI,
   assembly, and runtime tests passing; report size changes separately from
   behavior changes.
-- **Complexity: Low; estimate 0.5 engineering day**, performed alongside the
-  implementation steps.
-- Rebuilt and assembled the current lcc2 bounce demo and the legacy Pascal
-  bounce demo with PASM. The lcc2 image is 3,191 bytes, down 156 bytes (4.7%)
-  from the 3,347-byte global-state version before Task 6.2; the Pascal image
-  is 1,509 bytes, making the current lcc2 image 2.11 times as large.
-- Representative fixture measurements:
-
-  | Measurement | Reference | Result | Change |
-  | --- | ---: | ---: | ---: |
-  | Bounce (pre-6.2 vs current) | 3,347 B | 3,191 B | -156 B (-4.7%) |
-  | Discarded unsigned-byte assignment result | 277 B | 273 B | -4 B |
-  | Six byte vs equivalent word comparisons | 413 B | 299 B | -114 B (-27.6%) |
-
-- The bounce comparison optimization alone removes a further 16 bytes from
-  the 3,207-byte image after Task 6.2.1. `make test`, PASM assembly, and the
-  130-call MAME comparison run pass. Measurements are image sizes; they do not
-  imply additional runtime behavior changes.
+- Rebuilt and assembled the lcc2 bounce demo and the legacy Pascal bounce demo
+  with PASM. At the end of the Task 6.2 backend work, the lcc2 image was 3,191
+  bytes, down 156 bytes (4.7%) from the 3,347-byte global-state version before
+  Task 6.2; the Pascal image is 1,509 bytes.
+- A subsequent PC-1403 LCD runtime change shares the endpoints' 88-byte
+  caller-register save area. The current bounce image is 2,927 bytes (264
+  bytes smaller than 3,191), and the all-endpoint device fixture is 1,415
+  bytes (352 bytes smaller than its 1,767-byte pre-change image). The current
+  bounce image is 1.94 times the 1,509-byte Pascal image.
 
 ### Task 6.3: Dead code elimination
 

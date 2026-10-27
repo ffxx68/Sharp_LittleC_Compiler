@@ -190,8 +190,9 @@ for mode 1; out-of-range coordinates or modes do nothing. `lcd_hline(x, y,
 length, mode)` applies the same pixel modes from `x` through
 `x + length - 1`, clips at the right edge, and does nothing for zero length,
 invalid `y`, or invalid modes. These operations do not provide standard
-stream semantics. They preserve caller internal RAM and stack state; drawing
-helpers use private runtime scratch state and are not reentrant.
+stream semantics. They preserve caller internal RAM and stack state; the LCD
+endpoints share one 88-byte runtime save area and use private scratch state.
+The LCD endpoints are not reentrant.
 
 ## Nonstandard compatibility and conversion helpers
 

@@ -138,10 +138,21 @@ for routine in lcd_on lcd_off lcd_cls lcd_pset lcd_hline key_wait key_scan keybr
     assert_count "$routine" 1
 done
 assert_count PC1403_LCD_PSET_IMPL 1
-../../../pasm.exe build/pc1403_device.asm build/pc1403_device.bin
+    assert_count PC1403_LCD_SAVED_IRAM 1
+    ../../../pasm.exe build/pc1403_device.asm build/pc1403_device.bin
 
-printf '#include "key.h"\nunsigned char key_scan(void) { return 0xFF; }\nvoid main(void) { key_scan(); }\n' > "$dir/source.c"
-compile
+    printf '#include "lcd.h"\nvoid main(void) { lcd_on(); }\n' > "$dir/source.c"
+    compile
+    assert_count lcd_on 1
+    assert_count PC1403_LCD_SAVED_IRAM 1
+    if grep -q '^PC1403_LCD_PSET_IMPL:' "$dir/output.asm"; then
+        echo "lcd_on pulled in the pixel implementation" >&2
+        exit 1
+    fi
+    ../../../pasm.exe "$dir/output.asm" "$dir/output.bin"
+
+    printf '#include "key.h"\nunsigned char key_scan(void) { return 0xFF; }\nvoid main(void) { key_scan(); }\n' > "$dir/source.c"
+    compile
 assert_count key_scan 1
 if grep -q '^PC1403_KEY_SCAN_' "$dir/output.asm"; then
     echo "User key_scan selected the supplied target runtime" >&2
