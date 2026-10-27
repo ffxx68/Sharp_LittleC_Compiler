@@ -140,7 +140,9 @@ controlling expressions and negative signed case labels remain unsupported until
 Task 5.3.9. Dispatch uses PASM `CASE`/`ENDCASE` tables instead of inline
 comparison chains: byte controls dispatch directly on A, while word controls
 dispatch first on the high byte and then on the low byte. Each table's explicit
-PASM `ELSE` entry routes unmatched values to the C default or switch exit.
+PASM `ELSE` entry routes unmatched values to the C default or switch exit
+(forward-referenced `ELSE` targets require the corrected `pasm.exe` shipped
+with this repository).
 PASM's CASE table
 stores a one-byte value plus a 16-bit target per entry and keeps the entry
 count in the one-byte H register. Each generated table has at most 255 entries;

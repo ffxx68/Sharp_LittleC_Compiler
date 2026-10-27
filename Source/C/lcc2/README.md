@@ -317,7 +317,9 @@ The fixture checks byte and staged word dispatch, single evaluation,
 fallthrough, default selection, nested switches, `break`, and `continue`
 targeting the enclosing loop. Results are checked at `&E720`; `&E740` records
 the controlling-expression call count. Success requires `status="PASS"` after
-ten runs with BASIC register restoration and responsiveness verified.
+ten runs with BASIC register restoration and responsiveness verified. Assemble
+with the repository's root `pasm.exe`; older builds mis-patch forward-referenced
+`ELSE` entries in `CASE` tables.
 
 ## Compound assignment and increment/decrement runtime test in MAME
 

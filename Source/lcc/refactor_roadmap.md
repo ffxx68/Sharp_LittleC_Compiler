@@ -1428,11 +1428,9 @@ where behavior is non-trivial, a PC-1403 runtime fixture.
 - Verified on PC-1403 with fixtures `pc1403_update_ops`, `pc1403_incdec`,
   `pc1403_update_arrays` and `pc1403_update_members`.
 
-#### Task 5.3.4.13: Standard-C switch statement
+#### Task 5.3.4.13 ✅: Standard-C switch statement
 
-**In progress — host tests pass, PC-1403 runtime test failing.** 
-
-Switchresolution and emission now use the standard-C source-order arm layout: 
+Switch resolution and emission use the standard-C source-order arm layout:
 dispatch enters a matching label, execution
 falls through subsequent arms, and `break` exits the nearest loop or switch.
 `continue` searches past intervening switch frames for the nearest loop.
@@ -1447,12 +1445,12 @@ PTC loads the one-byte entry count into H, limiting each table to 255 entries.
 Word switches may exceed 255 total labels if their high-byte table has at most
 255 groups and each low-byte table has at most 255 entries. Each table carries
 an explicit PASM `ELSE` entry (syntax `ELSE<TAB>label`; `ELSE:` is rejected by
-PASM). Previously unmatched values relied on falling through to the code after
-`ENDCASE`.
+PASM).
 
 `CASE` is `PTC`+`ETC`: PTC pushes the address after `ENDCASE` onto the CPU
 stack, and every target (including `ELSE`) is entered with that return address
-still pushed. The current codegen therefore treats each switch body as a
+still pushed (`ETC` jumps without popping; confirmed against MAME `scops.hxx`).
+The codegen therefore treats each switch body as a
 subroutine: `ctx->stack_depth += 2` inside the body, the body end and `break`
 emit `RTN` (back to the post-`ENDCASE` `JP done`), `continue` and `return`
 first `POP` the outstanding CASE bytes (`LoopLabels.stack_depth`/`is_switch`),
@@ -1461,35 +1459,26 @@ dispatch keeps the low byte on the stack (`PUSH` before the high-byte `CASE`,
 `POP`x3 in each group stub: 2 CASE bytes + low byte), because B is not
 preserved across `CASE`.
 
-**Open runtime failure** (`tests\pc1403_switch.c` + `pc1403_switch.lua`,
-results at `&E720`, expected
-`0B 00 16 00 01 00 21 00 2C 00 37 00 04 00 47 00`, call count at `&E740` = 1):
+PASM fix: a forward-referenced `ELSE label` was patched one byte too early
+(the value-entry `dec(codpos)` adjustment was also applied to `ELSE`, which
+has no value byte), overwriting the low target byte of the preceding entry and
+leaving a stray `NOP`. Word dispatch, whose group and default labels are all
+forward references, therefore jumped into ROM. `Source\pasm\pasm.dpr` now
+applies the adjustment to value entries only, and the root `pasm.exe` was
+rebuilt with FPC 3.2.2 (`fpc -Mdelphi -Pi386 -Twin32 pasm.dpr`). All other
+lcc2 fixtures assemble byte-identically.
 
-- First attempts (no `ELSE`, then `ELSE` without stack handling) hung after
-  `RUN`. The best observed run produced
-  `0B 00 16 00 01 00 00 00 00 00 37 00 E1 59 00 00`: byte dispatch,
-  fallthrough, single evaluation, and nested byte switches work; the word
-  switches (`results[3]`, `results[4]`), the `while`/`continue` switch
-  (`results[6]`, `results[7]`), and the return to BASIC fail (PC observed at
-  `0x13C9`/`0x0F37`, i.e. in ROM).
-- The PTC-return-address model described above was implemented afterwards;
-  `make -C Source/C/lcc2 test` passes and the fixture assembles (926 bytes),
-  but its MAME run was not completed (bridge timed out while the harness ran).
-- Next steps: rerun the harness in a fresh
-  `mame pc1403 -debug -nomaximize -console` session; if it still fails,
-  single-step a word switch in the debugger, checking R before/after `PTC`
-  and at each group stub, and confirm whether `ETC` itself pops the PTC address on
-  a match (if so, drop the `RTN`/`POP` model and revert to `JP`-based exits).
-  The harness no longer calls `emu.pause()` at the end so memory can be
-  inspected after the run.
+- Verified on PC-1403 with fixture `pc1403_switch` (`pc1403_switch.lua`):
+  10 BASIC `CALL`s, results at `&E720` =
+  `0B 00 16 00 01 00 21 00 2C 00 37 00 04 00 47 00`, call count 1 per run,
+  `status="PASS"`.
 
 Signed controlling expressions and negative signed case labels are rejected
 explicitly until Task 5.3.9. The resolver also rejects nonconstant case labels,
 duplicate cases/defaults, out-of-range byte cases, and case/default outside a
 switch. Targeted code-generation tests cover fallthrough, evaluation-once,
 nested switch labels, word staging, and continue routing; the CLI fixture is
-assembled by PASM. The task is complete only once the MAME runtime harness
-reports `status="PASS"`.
+assembled by PASM, and the MAME runtime harness reports `status="PASS"`.
 
 #### Task 5.3.4.14: Operation-parity checklist and completion gates
 

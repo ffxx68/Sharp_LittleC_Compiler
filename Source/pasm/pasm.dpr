@@ -914,11 +914,17 @@ begin
               codpos := adr;
            end else
            begin
+              { Forward references re-run this line from the recorded codpos:
+                value entries restart at their value byte, ELSE at its address. }
               if op <> 'ELSE' then
-                 begin addcode(mathparse(op, 8)); inc(casecnt); end;
-              dec(codpos);
-              adr := calcadr;
-              inc(codpos);
+              begin
+                 addcode(mathparse(op, 8)); inc(casecnt);
+                 dec(codpos);
+                 adr := calcadr;
+                 inc(codpos);
+              end
+              else
+                 adr := calcadr;
               if adr > 0 then
                  begin addcode(adr div 256); addcode(adr mod 256); end
               else
