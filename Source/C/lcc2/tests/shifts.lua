@@ -1,12 +1,12 @@
 -- Disposable session only: clears BASIC and overwrites reserved test RAM.
-local EXPECTED = "00 00 01 00 01 00 00 00 01 00 00 00 00 00 09 00 " ..
-                 "03 00 06 00 00 01 01 00 02 00 01 00 02 00 01 00"
+local EXPECTED = "40 23 23 01 40 23 23 01 34 12 34 12 00 34 12 00 " ..
+                 "02 00 01 00 00 80 00 40 00 00 00 00 02 01 2B 01"
 
-function lcc2_logical_test(binary_path)
+function lcc2_shifts_test(binary_path)
     assert(manager.machine.system.name == "pc1403", "PC-1403 required")
     assert(type(keyline) == "function", "load pc1403_key.lua first")
-    if lcc2_logical_subscription then
-        lcc2_logical_subscription:unsubscribe()
+    if lcc2_shifts_subscription then
+        lcc2_shifts_subscription:unsubscribe()
     end
     local cpu = manager.machine.devices[":maincpu"]
     local space = cpu.spaces.program
@@ -49,12 +49,12 @@ function lcc2_logical_test(binary_path)
         return table.concat(bytes, " ")
     end
 
-    lcc2_logical_result = {
+    lcc2_shifts_result = {
         status = "running", calls = 0, returns = 0, basic_checks = 0
     }
     local stage, entry_r, expected_registers = "idle", nil, {}
-    lcc2_logical_subscription = emu.add_machine_frame_notifier(function()
-        if lcc2_logical_result.status ~= "running" then return end
+    lcc2_shifts_subscription = emu.add_machine_frame_notifier(function()
+        if lcc2_shifts_result.status ~= "running" then return end
         local ok, message = pcall(function()
             local pc = cpu.state.PC.value
             if stage == "entry" and pc == origin then
@@ -64,8 +64,8 @@ function lcc2_logical_test(binary_path)
                 restore(origin)
                 stage = "main"
             elseif stage == "main" and pc == restore_address then
-                assert(cpu.state.R.value == entry_r, "stack imbalance after logical ops")
-                assert(cpu.state.BA.value == 0x0001, "incorrect return value")
+                assert(cpu.state.R.value == entry_r, "stack imbalance after shifts")
+                assert(cpu.state.BA.value == 0x0123, "incorrect return value")
                 local actual = dump(0xE720, 32)
                 assert(actual == EXPECTED, "results mismatch: " .. actual)
                 restore(restore_address)
@@ -78,21 +78,21 @@ function lcc2_logical_test(binary_path)
                         "register restoration failed at " .. (index - 1))
                 end
                 restore(return_address)
-                lcc2_logical_result.returns =
-                    lcc2_logical_result.returns + 1
+                lcc2_shifts_result.returns =
+                    lcc2_shifts_result.returns + 1
                 stage = "done"
             end
         end)
         if not ok then
-            lcc2_logical_result.status = "FAIL"
-            lcc2_logical_result.error = tostring(message)
+            lcc2_shifts_result.status = "FAIL"
+            lcc2_shifts_result.error = tostring(message)
             restore(origin)
             restore(restore_address)
             restore(return_address)
         end
     end)
 
-    lcc2_logical_coroutine = coroutine.create(function()
+    lcc2_shifts_coroutine = coroutine.create(function()
         local ok, message = pcall(function()
             keyline("_||")
             keyline("NEW")
@@ -115,11 +115,11 @@ function lcc2_logical_test(binary_path)
                 keyline("RUN")
                 for frame = 1, 180 do
                     if stage == "done" or
-                       lcc2_logical_result.status == "FAIL" then break end
+                       lcc2_shifts_result.status == "FAIL" then break end
                     emu.wait(1 / 60)
                 end
-                assert(lcc2_logical_result.status ~= "FAIL",
-                    lcc2_logical_result.error)
+                assert(lcc2_shifts_result.status ~= "FAIL",
+                    lcc2_shifts_result.error)
                 assert(stage == "done", "BASIC CALL did not return")
                 emu.wait(0.5)
                 space:write_u8(0xE710, 0x55)
@@ -127,18 +127,17 @@ function lcc2_logical_test(binary_path)
                 assert(space:read_u8(0xE710) == 42, "BASIC caller is not responsive")
                 assert(dump(basic_start, 64) == basic_before, "BASIC program changed")
                 assert(read_word(0xFF01) == basic_start, "BASIC memory pointer changed")
-                lcc2_logical_result.calls = call
-                lcc2_logical_result.basic_checks = call
-                lcc2_logical_result.outputs = dump(0xE720, 32)
+                lcc2_shifts_result.calls = call
+                lcc2_shifts_result.basic_checks = call
+                lcc2_shifts_result.outputs = dump(0xE720, 32)
             end
         end)
-        lcc2_logical_result.status = ok and "PASS" or "FAIL"
-        if not ok then lcc2_logical_result.error = tostring(message) end
-        print("lcc2 logical operators with BASIC: " ..
-              lcc2_logical_result.status)
-        emu.pause()
+        lcc2_shifts_result.status = ok and "PASS" or "FAIL"
+        if not ok then lcc2_shifts_result.error = tostring(message) end
+        print("lcc2 shift operators with BASIC: " ..
+              lcc2_shifts_result.status)
     end)
     emu.unpause()
-    local ok, message = coroutine.resume(lcc2_logical_coroutine)
+    local ok, message = coroutine.resume(lcc2_shifts_coroutine)
     assert(ok, message)
 end

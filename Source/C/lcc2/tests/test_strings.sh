@@ -96,7 +96,7 @@ fi
 grep -q "cannot find runtime 'strcpy'" "$dir/error.txt"
 cmp "$dir/output.asm" "$dir/expected.asm"
 
-gcc -E -P -nostdinc -Iinclude tests/pc1403_strings.c -o build/pc1403_strings.c
+gcc -E -P -nostdinc -Iinclude tests/strings.c -o build/pc1403_strings.c
 ./lcc2.exe build/pc1403_strings.c -o build/pc1403_strings.asm
 ../../../pasm.exe build/pc1403_strings.asm build/pc1403_strings.bin
 test "$(wc -c < build/pc1403_strings.bin)" -le 1232

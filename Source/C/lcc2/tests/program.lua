@@ -118,7 +118,6 @@ function lcc2_program_test(binary_path)
         lcc2_program_result.status = ok and "PASS" or "FAIL"
         if not ok then lcc2_program_result.error = tostring(message) end
         print("lcc2 integrated program: " .. lcc2_program_result.status)
-        emu.pause()
     end)
     local ok, message = coroutine.resume(lcc2_program_coroutine)
     assert(ok, message)

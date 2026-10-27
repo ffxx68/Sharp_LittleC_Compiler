@@ -1,11 +1,12 @@
 -- Disposable session only: clears BASIC and overwrites reserved test RAM.
-local EXPECTED = "05 00 06 00 07 00 07 00 05 00 2D 00 2E 00 2E 00 03 00 04 00 FA 00 FB 00 00 00 08 00 FF FF FE FF"
+local EXPECTED = "30 02 F4 1F C4 1D 0F F0 CC ED 00 00 01 00 55 00 " ..
+                 "0A 00 AA 01 FF FF FF FF F0 0F F4 1F 0F FF 01 00"
 
-function lcc2_incdec_test(binary_path)
+function lcc2_bitwise_unary_test(binary_path)
     assert(manager.machine.system.name == "pc1403", "PC-1403 required")
     assert(type(keyline) == "function", "load pc1403_key.lua first")
-    if lcc2_incdec_subscription then
-        lcc2_incdec_subscription:unsubscribe()
+    if lcc2_bitwise_unary_subscription then
+        lcc2_bitwise_unary_subscription:unsubscribe()
     end
     local cpu = manager.machine.devices[":maincpu"]
     local space = cpu.spaces.program
@@ -48,12 +49,12 @@ function lcc2_incdec_test(binary_path)
         return table.concat(bytes, " ")
     end
 
-    lcc2_incdec_result = {
+    lcc2_bitwise_unary_result = {
         status = "running", calls = 0, returns = 0, basic_checks = 0
     }
     local stage, entry_r, expected_registers = "idle", nil, {}
-    lcc2_incdec_subscription = emu.add_machine_frame_notifier(function()
-        if lcc2_incdec_result.status ~= "running" then return end
+    lcc2_bitwise_unary_subscription = emu.add_machine_frame_notifier(function()
+        if lcc2_bitwise_unary_result.status ~= "running" then return end
         local ok, message = pcall(function()
             local pc = cpu.state.PC.value
             if stage == "entry" and pc == origin then
@@ -63,8 +64,8 @@ function lcc2_incdec_test(binary_path)
                 restore(origin)
                 stage = "main"
             elseif stage == "main" and pc == restore_address then
-                assert(cpu.state.R.value == entry_r, "stack imbalance after incdec")
-                assert(cpu.state.BA.value == 0xFFFE, "incorrect return value")
+                assert(cpu.state.R.value == entry_r, "stack imbalance after operators")
+                assert(cpu.state.BA.value == 0x0230, "incorrect return value")
                 local actual = dump(0xE720, 32)
                 assert(actual == EXPECTED, "results mismatch: " .. actual)
                 restore(restore_address)
@@ -77,21 +78,21 @@ function lcc2_incdec_test(binary_path)
                         "register restoration failed at " .. (index - 1))
                 end
                 restore(return_address)
-                lcc2_incdec_result.returns =
-                    lcc2_incdec_result.returns + 1
+                lcc2_bitwise_unary_result.returns =
+                    lcc2_bitwise_unary_result.returns + 1
                 stage = "done"
             end
         end)
         if not ok then
-            lcc2_incdec_result.status = "FAIL"
-            lcc2_incdec_result.error = tostring(message)
+            lcc2_bitwise_unary_result.status = "FAIL"
+            lcc2_bitwise_unary_result.error = tostring(message)
             restore(origin)
             restore(restore_address)
             restore(return_address)
         end
     end)
 
-    lcc2_incdec_coroutine = coroutine.create(function()
+    lcc2_bitwise_unary_coroutine = coroutine.create(function()
         local ok, message = pcall(function()
             keyline("_||")
             keyline("NEW")
@@ -114,11 +115,11 @@ function lcc2_incdec_test(binary_path)
                 keyline("RUN")
                 for frame = 1, 180 do
                     if stage == "done" or
-                       lcc2_incdec_result.status == "FAIL" then break end
+                       lcc2_bitwise_unary_result.status == "FAIL" then break end
                     emu.wait(1 / 60)
                 end
-                assert(lcc2_incdec_result.status ~= "FAIL",
-                    lcc2_incdec_result.error)
+                assert(lcc2_bitwise_unary_result.status ~= "FAIL",
+                    lcc2_bitwise_unary_result.error)
                 assert(stage == "done", "BASIC CALL did not return")
                 emu.wait(0.5)
                 space:write_u8(0xE710, 0x55)
@@ -126,18 +127,17 @@ function lcc2_incdec_test(binary_path)
                 assert(space:read_u8(0xE710) == 42, "BASIC caller is not responsive")
                 assert(dump(basic_start, 64) == basic_before, "BASIC program changed")
                 assert(read_word(0xFF01) == basic_start, "BASIC memory pointer changed")
-                lcc2_incdec_result.calls = call
-                lcc2_incdec_result.basic_checks = call
-                lcc2_incdec_result.outputs = dump(0xE720, 32)
+                lcc2_bitwise_unary_result.calls = call
+                lcc2_bitwise_unary_result.basic_checks = call
+                lcc2_bitwise_unary_result.outputs = dump(0xE720, 32)
             end
         end)
-        lcc2_incdec_result.status = ok and "PASS" or "FAIL"
-        if not ok then lcc2_incdec_result.error = tostring(message) end
-        print("lcc2 update operators (incdec) with BASIC: " ..
-              lcc2_incdec_result.status)
-        emu.pause()
+        lcc2_bitwise_unary_result.status = ok and "PASS" or "FAIL"
+        if not ok then lcc2_bitwise_unary_result.error = tostring(message) end
+        print("lcc2 bitwise/unary operators with BASIC: " ..
+              lcc2_bitwise_unary_result.status)
     end)
     emu.unpause()
-    local ok, message = coroutine.resume(lcc2_incdec_coroutine)
+    local ok, message = coroutine.resume(lcc2_bitwise_unary_coroutine)
     assert(ok, message)
 end

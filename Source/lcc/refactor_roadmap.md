@@ -878,7 +878,7 @@ initialization and full code/data/library integration remain in Task
 5.3.4.7; this early slice does not complete that milestone.
 
 Implemented the CLI and minimal startup wrapper, with backend/CLI regression
-coverage and `tests/pc1403_smoke.c` / `tests/pc1403_smoke.lua`. The generated
+coverage and `tests/smoke.c` / `tests/smoke.lua`. The generated
 78-byte binary assembles with PASM. Memory/register-only MAME verification
 passes ten consecutive machine-code calls: BA is `42` before restoration,
 R is `94` on return from main and `96` on return to the caller, and all
@@ -942,8 +942,8 @@ local initialization, nested-block shadowing, and assignment values.
 Instruction tests cover the LP/LIP boundary, XRAM page crossings, local
 offsets with live temporaries, and invalid locations. CLI checks cover the
 scalar source path and preservation of output on rejected input.
-`tests/pc1403_scalars.c` assembles to 436 bytes. Using `pc1403_key.lua`,
-`tests/pc1403_scalars.lua` reserves memory, enters a BASIC caller, deploys the
+`tests/scalars.c` assembles to 436 bytes. Using `pc1403_key.lua`,
+`tests/scalars.lua` reserves memory, enters a BASIC caller, deploys the
 binary, and verifies ten RUNs through memory dumps: `2A 00 3B FF` at `&E600`
 and `5E 12` across `&E7FF`/`&E800`, with BASIC program bytes unchanged.
 Global initialization, automatic/symbolic global allocation, parameters,
@@ -1035,7 +1035,7 @@ runs after the optional register save and before `CALL main` for both register
 and XRAM locations. Resolver/codegen tests cover character and integer
 constants, byte truncation, signed word `0 - 1`, zero initialization, storage
 classes, and ordering. CLI rejection checks preserve existing output, and
-`tests/pc1403_global_init.c` assembles with PASM. PC-1403 runtime execution was
+`tests/global_init.c` assembles with PASM. PC-1403 runtime execution was
 not part of this validation.
 
 ##### Task 5.3.4.7.2 ✅: Runtime-library dependency tracking and inclusion
@@ -1069,8 +1069,8 @@ function collisions with included runtime labels fail explicitly.
 Host and CLI tests cover individual/repeated dependencies, no-library
 programs, unresolved routine errors, runtime-label collisions, and preservation
 of existing CLI output on failure. `make test` passes, and PASM assembles the
-self-contained `tests/pc1403_comparisons.c` fixture. On 2026-10-23,
-`tests/pc1403_comparisons.lua` passed 130 PC-1403 MAME calls: all six operators
+self-contained `tests/comparisons.c` fixture. On 2026-10-23,
+`tests/comparisons.lua` passed 130 PC-1403 MAME calls: all six operators
 over 13 operand pairs repeated ten times, covering equality, zero/65535,
 low-byte ordering, high-byte ordering, and the 32767/32768 unsigned boundary.
 Every return checked stack balance and wrapper register restoration.
@@ -1108,9 +1108,9 @@ optional `SREG` area follows functions; required helpers follow data.
 Host tests verify exact section composition, deterministic output, `nosave`,
 and context-reuse rejection. CLI tests assemble the combined fixture and
 confirm that failed compilation preserves existing output. `make test`
-passes, and PASM assembles `tests/pc1403_program.c` to 486 bytes.
+passes, and PASM assembles `tests/program.c` to 486 bytes.
 
-In a fresh disposable PC-1403 MAME session, `tests/pc1403_program.lua` passed
+In a fresh disposable PC-1403 MAME session, `tests/program.lua` passed
 ten BASIC `RUN`s and ten machine-code returns. Each run verified initialized
 and zeroed globals, nested function frames, a loop, comparison helper calls,
 balanced entry/return stack pointer (R=86), and wrapper register restoration.
@@ -1141,9 +1141,9 @@ as in C; multidimensional/variable-length arrays and array-to-pointer decay
 remain explicitly unsupported.
 
 `make test` passes resolver, codegen, CLI, and PASM checks, including rejection
-without replacing existing CLI output. `tests/pc1403_arrays.c` and
-`tests/pc1403_arrays_wide.c` assemble to 1964 and 3721 bytes respectively.
-Using `tests/pc1403_arrays.lua`, both fixtures passed ten BASIC RUNs and ten
+without replacing existing CLI output. `tests/arrays.c` and
+`tests/arrays_wide.c` assemble to 1964 and 3721 bytes respectively.
+Using `tests/arrays.lua`, both fixtures passed ten BASIC RUNs and ten
 machine-code returns in PC-1403 MAME. The first covers byte/word register,
 XRAM, and local reads/writes, zero initialization, page crossings, signed-byte
 promotion, assignment values, and single evaluation of an index function.
@@ -1157,7 +1157,7 @@ restoration, BASIC program retention, and a responsive BASIC caller.
 Prioritize this follow-up before the backend completion gate in Task
 5.3.4.14; do not defer it to Phase 6. Task 5.3.4.8 remains functionally
 complete, but its per-element initialization stores are too costly for
-larger arrays on the PC-1403. The 3721-byte for `pc1403_arrays_wide.c` declares
+larger arrays on the PC-1403. The 3721-byte for `arrays_wide.c` declares
 526 bytes of globals and currently spends roughly 3.1 KiB in startup,
 mostly zero initialization.
 
@@ -1172,7 +1172,7 @@ mostly zero initialization.
   balance, and the register save/restore contract. Keep storage/layout
   decisions outside the instruction emitter.
 - Record before/after PASM sizes for both array fixtures and require a
-  substantial reduction for `pc1403_arrays_wide.c`, with size-regression
+  substantial reduction for `arrays_wide.c`, with size-regression
   checks and repeated PC-1403 runtime verification of unchanged results.
 
 Implemented shared internal-RAM and XRAM fill routines for contiguous zero
@@ -1182,8 +1182,8 @@ initialized local arrays compact constant-zero runs and tails without touching
 uninitialized local arrays. XRAM fill starts with `DY` so `IYS` correctly
 handles page crossings. Nonzero initializers retain their original order.
 
-PASM sizes are 1964 to 1896 bytes for `pc1403_arrays.c` and 3721 to 646 bytes
-for `pc1403_arrays_wide.c` (about 83% smaller for the wide fixture). The small
+PASM sizes are 1964 to 1896 bytes for `arrays.c` and 3721 to 646 bytes
+for `arrays_wide.c` (about 83% smaller for the wide fixture). The small
 fixture now also covers register, XRAM, and local zero initialization. CLI
 regression limits are 1964 and 700 bytes respectively. `make test` passes.
 In MAME, both fixtures passed ten BASIC calls and ten returns; the small
@@ -1270,9 +1270,9 @@ results, and byte promotion. Dispatch uses a zero high byte for register RAM
 and nonzero high byte for XRAM; consequently, taking the address of an XRAM
 object below address 256 is rejected as ambiguous. Resolver/codegen tests cover
 both storage classes, parameter access, and a word crossing an XRAM page
-boundary. The 842-byte `tests/pc1403_pointers.c` fixture assembles through PASM
+boundary. The 842-byte `tests/pointers.c` fixture assembles through PASM
 and passed ten consecutive BASIC RUNs and machine-code returns in PC-1403 MAME using
-`tests/pc1403_pointers.lua`. Outputs were
+`tests/pointers.lua`. Outputs were
 `0007 0007 BEEF 00A5 1234 FF80 D156 1234`, verifying indirect register/XRAM
 access, assignment conversion/results, signed-byte promotion, and the XRAM
 word crossing address `0xE5FF`. Each BASIC call verified stack balance (R=86
@@ -1470,7 +1470,7 @@ applies the adjustment to value entries only, and the root `pasm.exe` was
 rebuilt with FPC 3.2.2 (`fpc -Mdelphi -Pi386 -Twin32 pasm.dpr`). All other
 lcc2 fixtures assemble byte-identically.
 
-- Verified on PC-1403 with fixture `pc1403_switch` (`pc1403_switch.lua`):
+- Verified on PC-1403 with fixture `pc1403_switch` (`switch.lua`):
   10 BASIC `CALL`s, results at `&E720` =
   `0B 00 16 00 01 00 21 00 2C 00 37 00 04 00 47 00`, call count 1 per run,
   `status="PASS"`.
@@ -1493,13 +1493,13 @@ tests as appropriate.
 
 | Backend area and related reference fixtures | `lcc2` implementation and evidence | C-contract status |
 |---|---|---|
-| Byte/word scalar access, constants, arithmetic: `test_C/LoadVariable/main.c`, `test_C/Math/main.c`, `test_C/16bitdiv/main.c` | Unsigned byte/word scalar and arithmetic subset; resolver/codegen checks and `Source/C/lcc2/tests/pc1403_scalars.c` | Supported subset is tested and target-validated. Signed semantics remain deferred to 5.3.9. |
-| Register/XRAM arrays, byte/word elements, initialization: `test_C/Array/main.c` | Fixed-address and local arrays, initialization and full-width indexing; `test_codegen.c`, `pc1403_arrays.c`, `pc1403_arrays_wide.c` | Supported forms are tested and target-validated; local arrays, 16-bit index scaling, and runtime-index support follow the C implementation contract, regardless of legacy behavior. |
-| Pointer address, dereference, indirect stores: `test_C/pointer/main.c`, `test_C/PointerAccess/main.c` | Supported global/array addresses, pointer values and parameters, and indirect byte/word accesses; `pc1403_pointers.c` and `.lua` | Supported subset is tested, including XRAM page crossing and stack restoration. Unsupported pointer forms are rejected explicitly. |
-| Branches, loops, switch: `test_C/Loop/main.c`, `test_C/bounce/main.c`, `test_C/SwitchCase/main.c`, `test_C/SwitchCaseElse/main.c` | Comparisons and structured control flow in 5.3.4.5; standard-C switch in 5.3.4.13; `pc1403_switch.c` / `.lua` | Codegen tests cover `for` step ordering and nested `continue` routing; the unsigned switch is target-validated. Standard-C fallthrough and loop behavior are intentional C semantics. Signed switch and negative signed cases are deferred to 5.3.9. |
+| Byte/word scalar access, constants, arithmetic: `test_C/LoadVariable/main.c`, `test_C/Math/main.c`, `test_C/16bitdiv/main.c` | Unsigned byte/word scalar and arithmetic subset; resolver/codegen checks and `Source/C/lcc2/tests/scalars.c` | Supported subset is tested and target-validated. Signed semantics remain deferred to 5.3.9. |
+| Register/XRAM arrays, byte/word elements, initialization: `test_C/Array/main.c` | Fixed-address and local arrays, initialization and full-width indexing; `test_codegen.c`, `arrays.c`, `arrays_wide.c` | Supported forms are tested and target-validated; local arrays, 16-bit index scaling, and runtime-index support follow the C implementation contract, regardless of legacy behavior. |
+| Pointer address, dereference, indirect stores: `test_C/pointer/main.c`, `test_C/PointerAccess/main.c` | Supported global/array addresses, pointer values and parameters, and indirect byte/word accesses; `pointers.c` and `.lua` | Supported subset is tested, including XRAM page crossing and stack restoration. Unsupported pointer forms are rejected explicitly. |
+| Branches, loops, switch: `test_C/Loop/main.c`, `test_C/bounce/main.c`, `test_C/SwitchCase/main.c`, `test_C/SwitchCaseElse/main.c` | Comparisons and structured control flow in 5.3.4.5; standard-C switch in 5.3.4.13; `switch.c` / `.lua` | Codegen tests cover `for` step ordering and nested `continue` routing; the unsigned switch is target-validated. Standard-C fallthrough and loop behavior are intentional C semantics. Signed switch and negative signed cases are deferred to 5.3.9. |
 | Float constants and arithmetic: `test_C/Float/main.c` | Not supported by the current backend slice | Explicitly deferred to 5.3.10; rejection is required until implementation and ABI/runtime tests are complete. |
-| Calls, arguments, local storage, return values, stack thresholds: `test_C/Parameter_passing/main.c`, `test_C/ProcCallStack/main.c` | Byte/word parameters, calls, frames, and return values; codegen tests and `pc1403_program.c` / `.lua` | Supported subset is functionally validated for stack balance and caller restoration. Floating-point calling convention is deferred to 5.3.10. |
-| Structure layout and member access (C feature beyond the Task 5.1.4 inventory) | Compiler-computed offsets for supported scalar fields and `.` / `->`; resolver/codegen tests and `pc1403_struct_members.c` / `.lua` | Supported subset is implemented and functionally validated; unsupported aggregate forms are explicit errors. |
+| Calls, arguments, local storage, return values, stack thresholds: `test_C/Parameter_passing/main.c`, `test_C/ProcCallStack/main.c` | Byte/word parameters, calls, frames, and return values; codegen tests and `program.c` / `.lua` | Supported subset is functionally validated for stack balance and caller restoration. Floating-point calling convention is deferred to 5.3.10. |
+| Structure layout and member access (C feature beyond the Task 5.1.4 inventory) | Compiler-computed offsets for supported scalar fields and `.` / `->`; resolver/codegen tests and `struct_members.c` / `.lua` | Supported subset is implemented and functionally validated; unsupported aggregate forms are explicit errors. |
 
 Cross-cutting gates apply to every row: verify emitted runtime-library
 dependencies are complete and deduplicated, and check evaluation-stack
@@ -1634,7 +1634,7 @@ Task 5.3.8.2.
   nonoverlap; there are no bounds checks or truncation.
 - String coverage: actual-header preprocessing, pointer use,
   signature rejection, selective inclusion/deduplication, user-defined
-  implementations and assembly; `pc1403_strings.c` / `pc1403_strings.lua`
+  implementations and assembly; `strings.c` / `strings.lua`
   exercise empty/260-byte strings, high bytes, page crossings, internal/XRAM
   combinations, destination-pointer returns, source/destination guards,
   stack/register preservation and BASIC responsiveness without pausing.
@@ -1645,7 +1645,7 @@ Task 5.3.8.2.
   provides six writable bytes in internal RAM or XRAM. It is not part of
   string.h or stdio.
 - Legacy conversion/display migration is documented and exercised by the
-  `pc1403_libraries.c` fixture: replace legacy `puts.h` with `stdio.h`,
+  `libraries.c` fixture: replace legacy `puts.h` with `stdio.h`,
   pass `&buffer[0]` rather than an integer address, and check the output
   result. Root headers and Pascal examples remain unchanged.
 - `tests/test_libraries.sh` preprocesses all five supplied headers twice,
@@ -1656,7 +1656,7 @@ Task 5.3.8.2.
   crossings, internal/XRAM storage, shared `puts`/`putchar` state and the
   conversion/display example. Stack balance, register restoration and BASIC
   responsiveness are required; MAME remains unpaused.
-- The header-using `pc1403_stdio.c` / `pc1403_stdio.lua`, append-only,
+- The header-using `stdio.c` / `stdio.lua`, append-only,
   input-only and string fixtures retain coverage for raw key input,
   character output, return values and caller-state preservation. Device
   verification is in PC-1403 MAME; physical-device verification is not claimed.

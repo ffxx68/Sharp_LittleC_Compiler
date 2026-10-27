@@ -35,7 +35,6 @@ function lcc2_smoke(binary_path)
         local pc = cpu.state.PC.value
         local function fail(message)
             lcc2_smoke_result.status = message
-            emu.pause()
         end
         if frames > 120 then fail("FAIL: timeout"); return end
         if stage == "result" and pc == trap then
@@ -60,7 +59,6 @@ function lcc2_smoke(binary_path)
             lcc2_smoke_result.calls = lcc2_smoke_result.calls + 1
             if lcc2_smoke_result.calls == 10 then
                 lcc2_smoke_result.status = "PASS"
-                emu.pause()
             else
                 install_trap()
                 stage = "result"

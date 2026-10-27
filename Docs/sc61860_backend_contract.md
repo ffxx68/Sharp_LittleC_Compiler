@@ -100,8 +100,8 @@ Stores preserve the converted assignment value without reevaluating the
 index, including when the index or RHS calls a function.
 
 `tests/test_codegen.c` covers addressing and stack effects, and
-`tests/pc1403_arrays.c`, `tests/pc1403_arrays_wide.c`, and
-`tests/pc1403_arrays.lua` supply functional gates across storage classes,
+`tests/arrays.c`, `tests/arrays_wide.c`, and
+`tests/arrays.lua` supply functional gates across storage classes,
 widths, page crossings, and byte offsets of 256. Unsupported array forms are
 diagnosed; dynamic out-of-bounds accesses retain C's undefined behavior.
 

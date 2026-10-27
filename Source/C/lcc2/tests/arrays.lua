@@ -154,7 +154,6 @@ function lcc2_array_test(binary_path, wide)
         lcc2_array_result.status = ok and "PASS" or "FAIL"
         if not ok then lcc2_array_result.error = tostring(message) end
         print("lcc2 arrays: " .. lcc2_array_result.status)
-        emu.pause()
     end)
     local ok, message = coroutine.resume(lcc2_array_coroutine)
     assert(ok, message)

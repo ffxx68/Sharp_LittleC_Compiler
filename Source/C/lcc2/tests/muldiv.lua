@@ -1,9 +1,12 @@
 -- Disposable session only: clears BASIC and overwrites reserved test RAM.
-function lcc2_pointer_test(binary_path)
+local EXPECTED = "BE 21 B0 00 02 00 C0 D4 40 9C 9C 00 40 00 00 00 " ..
+                 "00 00 00 00 07 00 FF FF D2 04 17 00 92 5F 0E 10"
+
+function lcc2_muldiv_test(binary_path)
     assert(manager.machine.system.name == "pc1403", "PC-1403 required")
     assert(type(keyline) == "function", "load pc1403_key.lua first")
-    if lcc2_pointer_subscription then
-        lcc2_pointer_subscription:unsubscribe()
+    if lcc2_muldiv_subscription then
+        lcc2_muldiv_subscription:unsubscribe()
     end
     local cpu = manager.machine.devices[":maincpu"]
     local space = cpu.spaces.program
@@ -13,7 +16,8 @@ function lcc2_pointer_test(binary_path)
     file:close()
 
     local origin = 0xe030
-    assert(#binary > 0 and origin + #binary < 0xe5ff, "binary overlaps test globals")
+    assert(#binary > 0 and origin + #binary < 0xe720,
+        "binary overlaps result storage")
     local return_offset = assert(binary:find(string.char(0, 11, 0x18, 0x37), 1, true),
         "register restore sequence not found")
     local return_address = origin + return_offset - 1 + 3
@@ -37,9 +41,6 @@ function lcc2_pointer_test(binary_path)
     local function read_word(address)
         return space:read_u8(address) + 256 * space:read_u8(address + 1)
     end
-    local function read_internal_word(address)
-        return ram:read(address) + 256 * ram:read(address + 1)
-    end
     local function dump(address, count)
         local bytes = {}
         for index = 0, count - 1 do
@@ -48,35 +49,25 @@ function lcc2_pointer_test(binary_path)
         return table.concat(bytes, " ")
     end
 
-    lcc2_pointer_result = {status = "running", calls = 0, returns = 0, basic_checks = 0}
-    local expected_results = {7, 7, 0xbeef, 0xa5, 0x1234, 0xff80, 0xd156, 0x1234}
-    local expected_registers = {}
-    local stage, entry_r = "idle", nil
-    lcc2_pointer_subscription = emu.add_machine_frame_notifier(function()
-        if lcc2_pointer_result.status ~= "running" then return end
+    lcc2_muldiv_result = {
+        status = "running", calls = 0, returns = 0, basic_checks = 0
+    }
+    local stage, entry_r, expected_registers = "idle", nil, {}
+    lcc2_muldiv_subscription = emu.add_machine_frame_notifier(function()
+        if lcc2_muldiv_result.status ~= "running" then return end
         local ok, message = pcall(function()
             local pc = cpu.state.PC.value
             if stage == "entry" and pc == origin then
                 entry_r = cpu.state.R.value
                 for index = 0, 11 do expected_registers[index + 1] = ram:read(index) end
-                expected_registers[1] = 11 -- LII 11 precedes the wrapper's save.
+                expected_registers[1] = 11
                 restore(origin)
                 stage = "main"
             elseif stage == "main" and pc == restore_address then
-                assert(cpu.state.R.value == entry_r, "stack imbalance after pointer operations")
-                assert(cpu.state.BA.value == 0xa5, "incorrect main return value")
-                for index, expected in ipairs(expected_results) do
-                    local actual = read_word(0xe700 + 2 * (index - 1))
-                    assert(actual == expected,
-                        string.format("results[%d]: got %04X, expected %04X",
-                            index - 1, actual, expected))
-                end
-                assert(ram:read(8) == 7, "register byte store through pointer failed")
-                assert(read_internal_word(10) == 0xbeef,
-                    "register word store through pointer failed")
-                assert(ram:read(12) == 0x80, "signed-byte pointee setup failed")
-                assert(space:read_u8(0xe610) == 0xa5, "XRAM byte store through parameter failed")
-                assert(read_word(0xe5ff) == 0x1234, "XRAM word page-crossing access failed")
+                assert(cpu.state.R.value == entry_r, "stack imbalance after muldiv")
+                assert(cpu.state.BA.value == 0x00B0, "incorrect return value")
+                local actual = dump(0xE720, 32)
+                assert(actual == EXPECTED, "results mismatch: " .. actual)
                 restore(restore_address)
                 install_loop(return_address)
                 stage = "return"
@@ -87,21 +78,21 @@ function lcc2_pointer_test(binary_path)
                         "register restoration failed at " .. (index - 1))
                 end
                 restore(return_address)
-                lcc2_pointer_result.returns = lcc2_pointer_result.returns + 1
-                lcc2_pointer_result.stack_r = entry_r
+                lcc2_muldiv_result.returns =
+                    lcc2_muldiv_result.returns + 1
                 stage = "done"
             end
         end)
         if not ok then
-            lcc2_pointer_result.status = "FAIL"
-            lcc2_pointer_result.error = tostring(message)
+            lcc2_muldiv_result.status = "FAIL"
+            lcc2_muldiv_result.error = tostring(message)
             restore(origin)
             restore(restore_address)
             restore(return_address)
         end
     end)
 
-    lcc2_pointer_coroutine = coroutine.create(function()
+    lcc2_muldiv_coroutine = coroutine.create(function()
         local ok, message = pcall(function()
             keyline("_||")
             keyline("NEW")
@@ -110,41 +101,43 @@ function lcc2_pointer_test(binary_path)
             keyline("10 CALL &E030")
             keyline("20 END")
             keyline("|")
-            local basic_start = read_word(0xff01)
-            assert(basic_start == 0xe830, "BASIC memory reservation failed")
+            local basic_start = read_word(0xFF01)
+            assert(basic_start == 0xE830, "BASIC memory reservation failed")
             local basic_before = dump(basic_start, 64)
             for index = 1, #binary do
                 space:write_u8(origin + index - 1, binary:byte(index))
             end
             for call = 1, 10 do
-                for address = 0xe700, 0xe70f do space:write_u8(address, 0x55) end
+                for address = 0xE720, 0xE73F do space:write_u8(address, 0x55) end
                 install_loop(origin)
                 install_loop(restore_address)
                 stage = "entry"
                 keyline("RUN")
                 for frame = 1, 180 do
-                    if stage == "done" or lcc2_pointer_result.status == "FAIL" then break end
+                    if stage == "done" or
+                       lcc2_muldiv_result.status == "FAIL" then break end
                     emu.wait(1 / 60)
                 end
-                assert(lcc2_pointer_result.status ~= "FAIL", lcc2_pointer_result.error)
+                assert(lcc2_muldiv_result.status ~= "FAIL",
+                    lcc2_muldiv_result.error)
                 assert(stage == "done", "BASIC CALL did not return")
                 emu.wait(0.5)
-                space:write_u8(0xe710, 0x55)
+                space:write_u8(0xE710, 0x55)
                 keyline("POKE&E710,6*7")
-                assert(space:read_u8(0xe710) == 42, "BASIC caller is not responsive")
+                assert(space:read_u8(0xE710) == 42, "BASIC caller is not responsive")
                 assert(dump(basic_start, 64) == basic_before, "BASIC program changed")
-                assert(read_word(0xff01) == basic_start, "BASIC memory pointer changed")
-                lcc2_pointer_result.basic_checks = call
-                lcc2_pointer_result.calls = call
-                lcc2_pointer_result.outputs = dump(0xe700, 16)
+                assert(read_word(0xFF01) == basic_start, "BASIC memory pointer changed")
+                lcc2_muldiv_result.calls = call
+                lcc2_muldiv_result.basic_checks = call
+                lcc2_muldiv_result.outputs = dump(0xE720, 32)
             end
         end)
-        lcc2_pointer_result.status = ok and "PASS" or "FAIL"
-        if not ok then lcc2_pointer_result.error = tostring(message) end
-        print("lcc2 pointers with BASIC: " .. lcc2_pointer_result.status)
-        emu.pause()
+        lcc2_muldiv_result.status = ok and "PASS" or "FAIL"
+        if not ok then lcc2_muldiv_result.error = tostring(message) end
+        print("lcc2 multiply/divide with BASIC: " ..
+              lcc2_muldiv_result.status)
     end)
     emu.unpause()
-    local ok, message = coroutine.resume(lcc2_pointer_coroutine)
+    local ok, message = coroutine.resume(lcc2_muldiv_coroutine)
     assert(ok, message)
 end

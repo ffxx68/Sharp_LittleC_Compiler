@@ -1,12 +1,11 @@
 -- Disposable session only: clears BASIC and overwrites reserved test RAM.
-local EXPECTED = "BE 21 B0 00 02 00 C0 D4 40 9C 9C 00 40 00 00 00 " ..
-                 "00 00 00 00 07 00 FF FF D2 04 17 00 92 5F 0E 10"
+local EXPECTED = "38 01 41 01 04 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
 
-function lcc2_muldiv_test(binary_path)
+function lcc2_update_arrays_test(binary_path)
     assert(manager.machine.system.name == "pc1403", "PC-1403 required")
     assert(type(keyline) == "function", "load pc1403_key.lua first")
-    if lcc2_muldiv_subscription then
-        lcc2_muldiv_subscription:unsubscribe()
+    if lcc2_update_arrays_subscription then
+        lcc2_update_arrays_subscription:unsubscribe()
     end
     local cpu = manager.machine.devices[":maincpu"]
     local space = cpu.spaces.program
@@ -49,12 +48,12 @@ function lcc2_muldiv_test(binary_path)
         return table.concat(bytes, " ")
     end
 
-    lcc2_muldiv_result = {
+    lcc2_update_arrays_result = {
         status = "running", calls = 0, returns = 0, basic_checks = 0
     }
     local stage, entry_r, expected_registers = "idle", nil, {}
-    lcc2_muldiv_subscription = emu.add_machine_frame_notifier(function()
-        if lcc2_muldiv_result.status ~= "running" then return end
+    lcc2_update_arrays_subscription = emu.add_machine_frame_notifier(function()
+        if lcc2_update_arrays_result.status ~= "running" then return end
         local ok, message = pcall(function()
             local pc = cpu.state.PC.value
             if stage == "entry" and pc == origin then
@@ -64,8 +63,8 @@ function lcc2_muldiv_test(binary_path)
                 restore(origin)
                 stage = "main"
             elseif stage == "main" and pc == restore_address then
-                assert(cpu.state.R.value == entry_r, "stack imbalance after muldiv")
-                assert(cpu.state.BA.value == 0x00B0, "incorrect return value")
+                assert(cpu.state.R.value == entry_r, "stack imbalance after update_arrays")
+                assert(cpu.state.BA.value == 0x0004, "incorrect return value")
                 local actual = dump(0xE720, 32)
                 assert(actual == EXPECTED, "results mismatch: " .. actual)
                 restore(restore_address)
@@ -78,21 +77,21 @@ function lcc2_muldiv_test(binary_path)
                         "register restoration failed at " .. (index - 1))
                 end
                 restore(return_address)
-                lcc2_muldiv_result.returns =
-                    lcc2_muldiv_result.returns + 1
+                lcc2_update_arrays_result.returns =
+                    lcc2_update_arrays_result.returns + 1
                 stage = "done"
             end
         end)
         if not ok then
-            lcc2_muldiv_result.status = "FAIL"
-            lcc2_muldiv_result.error = tostring(message)
+            lcc2_update_arrays_result.status = "FAIL"
+            lcc2_update_arrays_result.error = tostring(message)
             restore(origin)
             restore(restore_address)
             restore(return_address)
         end
     end)
 
-    lcc2_muldiv_coroutine = coroutine.create(function()
+    lcc2_update_arrays_coroutine = coroutine.create(function()
         local ok, message = pcall(function()
             keyline("_||")
             keyline("NEW")
@@ -115,11 +114,11 @@ function lcc2_muldiv_test(binary_path)
                 keyline("RUN")
                 for frame = 1, 180 do
                     if stage == "done" or
-                       lcc2_muldiv_result.status == "FAIL" then break end
+                       lcc2_update_arrays_result.status == "FAIL" then break end
                     emu.wait(1 / 60)
                 end
-                assert(lcc2_muldiv_result.status ~= "FAIL",
-                    lcc2_muldiv_result.error)
+                assert(lcc2_update_arrays_result.status ~= "FAIL",
+                    lcc2_update_arrays_result.error)
                 assert(stage == "done", "BASIC CALL did not return")
                 emu.wait(0.5)
                 space:write_u8(0xE710, 0x55)
@@ -127,18 +126,17 @@ function lcc2_muldiv_test(binary_path)
                 assert(space:read_u8(0xE710) == 42, "BASIC caller is not responsive")
                 assert(dump(basic_start, 64) == basic_before, "BASIC program changed")
                 assert(read_word(0xFF01) == basic_start, "BASIC memory pointer changed")
-                lcc2_muldiv_result.calls = call
-                lcc2_muldiv_result.basic_checks = call
-                lcc2_muldiv_result.outputs = dump(0xE720, 32)
+                lcc2_update_arrays_result.calls = call
+                lcc2_update_arrays_result.basic_checks = call
+                lcc2_update_arrays_result.outputs = dump(0xE720, 32)
             end
         end)
-        lcc2_muldiv_result.status = ok and "PASS" or "FAIL"
-        if not ok then lcc2_muldiv_result.error = tostring(message) end
-        print("lcc2 multiply/divide with BASIC: " ..
-              lcc2_muldiv_result.status)
-        emu.pause()
+        lcc2_update_arrays_result.status = ok and "PASS" or "FAIL"
+        if not ok then lcc2_update_arrays_result.error = tostring(message) end
+        print("lcc2 update operators (update_arrays) with BASIC: " ..
+              lcc2_update_arrays_result.status)
     end)
     emu.unpause()
-    local ok, message = coroutine.resume(lcc2_muldiv_coroutine)
+    local ok, message = coroutine.resume(lcc2_update_arrays_coroutine)
     assert(ok, message)
 end

@@ -71,7 +71,6 @@ function lcc2_comparison_test(binary_path)
                 lcc2_comparison_result.calls = lcc2_comparison_result.calls + 1
                 if lcc2_comparison_result.calls == #vectors * 10 then
                     lcc2_comparison_result.status = "PASS"
-                    emu.pause()
                 else
                     install_trap()
                     stage = "input"
@@ -82,7 +81,6 @@ function lcc2_comparison_test(binary_path)
         if not ok then
             lcc2_comparison_result.status = "FAIL"
             lcc2_comparison_result.error = tostring(message)
-            emu.pause()
         end
     end)
     emu.unpause()

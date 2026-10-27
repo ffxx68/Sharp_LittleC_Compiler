@@ -120,12 +120,12 @@ expect_failure
 printf '#include "int2str.h"\nvoid reject(char *d) { int2str(d, d); }\nvoid main(void) {}\n' > "$dir/source.c"
 expect_failure
 
-gcc -E -P -nostdinc -Iinclude tests/pc1403_libraries.c -o build/pc1403_libraries.c
+gcc -E -P -nostdinc -Iinclude tests/libraries.c -o build/pc1403_libraries.c
 ./lcc2.exe --target PC1403 build/pc1403_libraries.c -o build/pc1403_libraries.asm
 ../../../pasm.exe build/pc1403_libraries.asm build/pc1403_libraries.bin
 test "$(wc -c < build/pc1403_libraries.bin)" -le 1232
 
-for fixture in pc1403_stdio pc1403_stdio_append pc1403_getchar; do
+for fixture in stdio stdio_append getchar; do
     gcc -E -P -nostdinc -Iinclude "tests/$fixture.c" -o "build/$fixture.c"
     ./lcc2.exe --target PC1403 "build/$fixture.c" -o "build/$fixture.asm"
     ../../../pasm.exe "build/$fixture.asm" "build/$fixture.bin"

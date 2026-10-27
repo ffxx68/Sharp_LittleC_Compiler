@@ -10,7 +10,7 @@ compile()
     ./lcc2.exe --target PC1403 "$@"
 }
 
-    ./lcc2.exe tests/pc1403_smoke.c -o "$dir/output.asm"
+    ./lcc2.exe tests/smoke.c -o "$dir/output.asm"
 grep -q '^.ORG.*57392' "$dir/output.asm"
 grep -q 'CALL.*main' "$dir/output.asm"
 if grep -q '^getchar:' "$dir/output.asm"; then
@@ -18,7 +18,7 @@ if grep -q '^getchar:' "$dir/output.asm"; then
     exit 1
 fi
 cp "$dir/output.asm" "$dir/expected.asm"
-compile tests/pc1403_smoke.c -o "$dir/output.asm"
+compile tests/smoke.c -o "$dir/output.asm"
 cmp "$dir/output.asm" "$dir/expected.asm"
 
 expect_failure()
@@ -32,15 +32,15 @@ expect_failure()
 }
 
 expect_failure
-expect_failure tests/pc1403_smoke.c
+expect_failure tests/smoke.c
 expect_failure --unknown
-if ./lcc2.exe --target UNKNOWN tests/pc1403_smoke.c -o "$dir/output.asm" \
+if ./lcc2.exe --target UNKNOWN tests/smoke.c -o "$dir/output.asm" \
     > /dev/null 2> "$dir/error.txt"; then
     echo "Unexpected CLI success for an unsupported target" >&2
     exit 1
 fi
 expect_failure "$dir/missing.c" -o "$dir/output.asm"
-expect_failure tests/pc1403_smoke.c -o "$dir/missing/output.asm"
+expect_failure tests/smoke.c -o "$dir/missing/output.asm"
 printf 'int main(void) { return ; broken }\n' > "$dir/source.c"
 expect_failure "$dir/source.c" -o "$dir/output.asm"
 printf 'int value; void main(void) {}\n' > "$dir/source.c"
@@ -69,9 +69,9 @@ printf 'int main(void) { const int a[2] = {1}; int i = 0; a[i] = 2; return 0; }\
 expect_failure "$dir/source.c" -o "$dir/output.asm"
 printf 'typedef unsigned char byte; int main(void) { byte value; return 0; }\n' > "$dir/source.c"
 compile "$dir/source.c" -o "$dir/output.asm"
-compile tests/pc1403_scalars.c -o "$dir/output.asm"
+compile tests/scalars.c -o "$dir/output.asm"
 grep -q 'LIDP.*59391' "$dir/output.asm"
-compile tests/pc1403_calls.c -o "$dir/output.asm"
+compile tests/calls.c -o "$dir/output.asm"
 ../../../pasm.exe "$dir/output.asm" "$dir/output.bin"
 assert_no_runtime()
 {
@@ -125,13 +125,13 @@ if grep -q 'PC1403_GETCHAR_' "$dir/output.asm"; then
 fi
 grep -q '^putchar:' "$dir/output.asm"
 ../../../pasm.exe "$dir/output.asm" "$dir/output.bin"
-gcc -E -P -nostdinc -Iinclude tests/pc1403_stdio.c -o "$dir/source.c"
+gcc -E -P -nostdinc -Iinclude tests/stdio.c -o "$dir/source.c"
 compile "$dir/source.c" -o "$dir/output.asm"
 ../../../pasm.exe "$dir/output.asm" "$dir/output.bin"
-gcc -E -P -nostdinc -Iinclude tests/pc1403_stdio_append.c -o "$dir/source.c"
+gcc -E -P -nostdinc -Iinclude tests/stdio_append.c -o "$dir/source.c"
 compile "$dir/source.c" -o "$dir/output.asm"
 ../../../pasm.exe "$dir/output.asm" "$dir/output.bin"
-gcc -E -P -nostdinc -Iinclude tests/pc1403_getchar.c -o "$dir/source.c"
+gcc -E -P -nostdinc -Iinclude tests/getchar.c -o "$dir/source.c"
 compile "$dir/source.c" -o "$dir/output.asm"
 test "$(grep -c '^getchar:' "$dir/output.asm")" = 1
 if grep -Eq '^(putchar:|PC1403_STDOUT_)' "$dir/output.asm"; then
@@ -139,38 +139,38 @@ if grep -Eq '^(putchar:|PC1403_STDOUT_)' "$dir/output.asm"; then
     exit 1
 fi
 ../../../pasm.exe "$dir/output.asm" "$dir/output.bin"
-compile tests/pc1403_comparisons.c -o "$dir/output.asm"
+compile tests/comparisons.c -o "$dir/output.asm"
 for name in CPE16 CPNE16 CPS16 CPSE16 CPG16 CPGE16; do
     test "$(grep -c "^LIB_$name:" "$dir/output.asm")" = 1
 done
 ../../../pasm.exe "$dir/output.asm" "$dir/output.bin"
-compile tests/pc1403_global_init.c -o "$dir/output.asm"
+compile tests/global_init.c -o "$dir/output.asm"
 ../../../pasm.exe "$dir/output.asm" "$dir/output.bin"
-compile tests/pc1403_arrays.c -o "$dir/output.asm"
+compile tests/arrays.c -o "$dir/output.asm"
 ../../../pasm.exe "$dir/output.asm" "$dir/output.bin"
 test "$(wc -c < "$dir/output.bin")" -le 1964
-compile tests/pc1403_arrays_wide.c -o "$dir/output.asm"
+compile tests/arrays_wide.c -o "$dir/output.asm"
 ../../../pasm.exe "$dir/output.asm" "$dir/output.bin"
 test "$(wc -c < "$dir/output.bin")" -le 700
-compile tests/pc1403_pointers.c -o "$dir/output.asm"
+compile tests/pointers.c -o "$dir/output.asm"
 ../../../pasm.exe "$dir/output.asm" "$dir/output.bin"
-compile tests/pc1403_struct_members.c -o "$dir/output.asm"
+compile tests/struct_members.c -o "$dir/output.asm"
 ../../../pasm.exe "$dir/output.asm" "$dir/output.bin"
-compile tests/pc1403_bitwise_unary.c -o "$dir/output.asm"
+compile tests/bitwise_unary.c -o "$dir/output.asm"
 ../../../pasm.exe "$dir/output.asm" "$dir/output.bin"
-compile tests/pc1403_shifts.c -o "$dir/output.asm"
+compile tests/shifts.c -o "$dir/output.asm"
 ../../../pasm.exe "$dir/output.asm" "$dir/output.bin"
-compile tests/pc1403_logical.c -o "$dir/output.asm"
+compile tests/logical.c -o "$dir/output.asm"
 ../../../pasm.exe "$dir/output.asm" "$dir/output.bin"
-compile tests/pc1403_muldiv.c -o "$dir/output.asm"
+compile tests/muldiv.c -o "$dir/output.asm"
 ../../../pasm.exe "$dir/output.asm" "$dir/output.bin"
 test "$(wc -c < "$dir/output.bin")" -le 1964
-compile tests/pc1403_switch.c -o "$dir/output.asm"
+compile tests/switch.c -o "$dir/output.asm"
 test "$(grep -c '^[[:space:]]*CASE$' "$dir/output.asm")" = 10
 ../../../pasm.exe "$dir/output.asm" "$dir/output.bin"
-compile tests/pc1403_program.c -o "$dir/output.asm"
+compile tests/program.c -o "$dir/output.asm"
 cp "$dir/output.asm" "$dir/expected.asm"
-compile tests/pc1403_program.c -o "$dir/output.asm"
+compile tests/program.c -o "$dir/output.asm"
 cmp "$dir/output.asm" "$dir/expected.asm"
 ../../../pasm.exe "$dir/output.asm" "$dir/output.bin"
 printf 'void CPQ1(void) {} int main(void) { unsigned int left = 1; unsigned int right = 2; return left == right; }\n' > "$dir/source.c"

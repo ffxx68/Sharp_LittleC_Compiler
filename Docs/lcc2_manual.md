@@ -356,7 +356,7 @@ make -C Source\C\lcc2 test
 
 The suite covers the lexer/parser, AST, scalar resolver, emitted instruction
 sequences, and CLI diagnostics. Existing target fixtures are
-`Source\C\lcc2\tests\pc1403_smoke.c` and
-`Source\C\lcc2\tests\pc1403_scalars.c`, with Lua harnesses documented in the
+`Source\C\lcc2\tests\smoke.c` and
+`Source\C\lcc2\tests\scalars.c`, with Lua harnesses documented in the
 project README. Target checks use memory/register dumps rather than
 screenshots; BASIC-level execution is separate from synthetic ASM call tests.

@@ -37,7 +37,7 @@ standalone test target included in `make test`.
 From the repository root in PowerShell:
 
 ```powershell
-.\Source\C\lcc2\lcc2.exe --target PC1403 Source\C\lcc2\tests\pc1403_smoke.c -o Source\C\lcc2\build\pc1403_smoke.asm
+.\Source\C\lcc2\lcc2.exe --target PC1403 Source\C\lcc2\tests\smoke.c -o Source\C\lcc2\build\pc1403_smoke.asm
 .\pasm.exe Source\C\lcc2\build\pc1403_smoke.asm Source\C\lcc2\build\pc1403_smoke.bin
 ```
 
@@ -168,13 +168,13 @@ For a memory/register-only automated check, start a **disposable** PC-1403
 MAME session with the Lua console/bridge and execute:
 
 ```lua
-dofile([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\tests\pc1403_smoke.lua]])
+dofile([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\tests\smoke.lua]])
 lcc2_smoke([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\build\pc1403_smoke.bin]])
 ```
 
 Inspect `lcc2_smoke_result` after execution. The harness checks BA=`42` before
 restoration, stack balance, the restored register-memory dump, and ten
-consecutive returns to a machine-code caller. It pauses on success or failure.
+consecutive returns to a machine-code caller. MAME remains unpaused.
 It deliberately overwrites internal RAM, CPU state, and external RAM at
 `&E000`; do not run it in a session containing work you need to preserve.
 This harness checks the call/return ABI, not BASIC prompt responsiveness;
@@ -187,20 +187,20 @@ with `--target PC1403` and assembling with PASM. For example, from the
 repository root:
 
 ```powershell
-gcc -E -P -nostdinc -I Source\C\lcc2\include Source\C\lcc2\tests\pc1403_stdio.c -o Source\C\lcc2\build\pc1403_stdio.c
+gcc -E -P -nostdinc -I Source\C\lcc2\include Source\C\lcc2\tests\stdio.c -o Source\C\lcc2\build\pc1403_stdio.c
 .\Source\C\lcc2\lcc2.exe --target PC1403 Source\C\lcc2\build\pc1403_stdio.c -o Source\C\lcc2\build\pc1403_stdio.asm
 .\pasm.exe Source\C\lcc2\build\pc1403_stdio.asm Source\C\lcc2\build\pc1403_stdio.bin
 ```
 
 In a disposable PC-1403 session, load `pc1403_key.lua`, then
-`tests\pc1403_stdio.lua` and call `lcc2_stdio_test` with the binary's absolute
+`tests\stdio.lua` and call `lcc2_stdio_test` with the binary's absolute
 path. The harness clears BASIC, reserves memory, runs a BASIC caller, and
 presses `1`. It checks raw key code 51, `putchar('A')` returning 65, completion,
 stack balance, register restoration, and BASIC responsiveness.
 Inspect `lcc2_stdio_result` for the outcome. The session remains running after
 the test.
 
-For append-only output, compile and assemble `tests\pc1403_stdio_append.c`
+For append-only output, compile and assemble `tests\stdio_append.c`
 and pass `true` as the second argument to `lcc2_stdio_test`. It checks `ABC`
 after three calls, then `ABCDEFGHIJKLMNOPQRSTUVWX` at the 24-character
 limit, all character return values, and -1 for a full line or a control byte.
@@ -208,8 +208,8 @@ An optional third argument names a screenshot path captured before returning
 to BASIC. See the [PC-1403 output contract](../../../Docs/lcc2_libraries.md#pc-1403-putchar-append-only-lcd-output)
 for accepted limitations and buffer lifetime.
 
-For input-only verification, compile and assemble `tests\pc1403_getchar.c`.
-Load `pc1403_key.lua`, then `tests\pc1403_getchar.lua`, and call
+For input-only verification, compile and assemble `tests\getchar.c`.
+Load `pc1403_key.lua`, then `tests\getchar.lua`, and call
 `lcc2_getchar_test` with the binary's absolute path. Inspect
 `lcc2_getchar_result`. The harness executes BASIC `RUN`, verifies that input
 blocks, presses `1`, `2`, `1`, and checks raw word results 51, 50, 51,
@@ -223,13 +223,13 @@ The supported functions and caller requirements are documented in the
 Build the header-using fixture from the repository root:
 
 ```powershell
-gcc -E -P -nostdinc -I Source\C\lcc2\include Source\C\lcc2\tests\pc1403_strings.c -o Source\C\lcc2\build\pc1403_strings.c
+gcc -E -P -nostdinc -I Source\C\lcc2\include Source\C\lcc2\tests\strings.c -o Source\C\lcc2\build\pc1403_strings.c
 .\Source\C\lcc2\lcc2.exe Source\C\lcc2\build\pc1403_strings.c -o Source\C\lcc2\build\pc1403_strings.asm
 .\pasm.exe Source\C\lcc2\build\pc1403_strings.asm Source\C\lcc2\build\pc1403_strings.bin
 ```
 
 In a disposable PC-1403 MAME session, load `pc1403_key.lua`, then
-`tests\pc1403_strings.lua`, and call `lcc2_string_test` with the binary's
+`tests\strings.lua`, and call `lcc2_string_test` with the binary's
 absolute path. Inspect `lcc2_string_result`: success is `status="PASS"`,
 `vectors=17`, `returns=17`, and `basic_responsive=true`. The harness executes
 BASIC `RUN` for every vector and checks empty strings, 260-byte results,
@@ -253,13 +253,13 @@ The supported contracts, including the deliberately nonstandard no-newline
 To build the completion fixture separately from the repository root:
 
 ```powershell
-gcc -E -P -nostdinc -I Source\C\lcc2\include Source\C\lcc2\tests\pc1403_libraries.c -o Source\C\lcc2\build\pc1403_libraries.c
+gcc -E -P -nostdinc -I Source\C\lcc2\include Source\C\lcc2\tests\libraries.c -o Source\C\lcc2\build\pc1403_libraries.c
 .\Source\C\lcc2\lcc2.exe --target PC1403 Source\C\lcc2\build\pc1403_libraries.c -o Source\C\lcc2\build\pc1403_libraries.asm
 .\pasm.exe Source\C\lcc2\build\pc1403_libraries.asm Source\C\lcc2\build\pc1403_libraries.bin
 ```
 
 In a disposable PC-1403 session, load `pc1403_key.lua`, then
-`tests\pc1403_libraries.lua` and call `lcc2_library_test` with the binary's
+`tests\libraries.lua` and call `lcc2_library_test` with the binary's
 absolute path. An optional second argument specifies a screenshot path.
 Inspect `lcc2_library_result`: success is `status="PASS"`, `vectors=48`,
 `returns=48`, `conversions=33`, `output_checks=15`, `basic_runs=3`, and
@@ -297,13 +297,13 @@ MAME unpaused.
 
 ## Scalar functional test in MAME
 
-Build `tests\pc1403_scalars.c` using the same CLI/PASM commands as the smoke
+Build `tests\scalars.c` using the same CLI/PASM commands as the smoke
 fixture, substituting `pc1403_scalars` for `pc1403_smoke`. In a **disposable**
 PC-1403 session with the bridge and only one bridge-enabled MAME instance,
 load `pc1403_key.lua`, then:
 
 ```lua
-dofile([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\tests\pc1403_scalars.lua]])
+dofile([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\tests\scalars.lua]])
 lcc2_scalar_test([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\build\pc1403_scalars.bin]])
 ```
 
@@ -315,14 +315,14 @@ the BASIC program unchanged. No screenshots or machine snapshots are used.
 
 ## Comparison runtime test in MAME
 
-Compile and assemble `tests\pc1403_comparisons.c` as above. In a **disposable**
-PC-1403 session, load `tests\pc1403_comparisons.lua` and call
+Compile and assemble `tests\comparisons.c` as above. In a **disposable**
+PC-1403 session, load `tests\comparisons.lua` and call
 `lcc2_comparison_test` with the binary's absolute path. Inspect
 `lcc2_comparison_result`: success is `status="PASS"`, `calls=130`, and
 `vectors=13`. The harness injects operands immediately before startup calls
 `main`, checks all six unsigned comparisons across equality and byte/word
 boundaries, and verifies stack balance and register restoration on every
-return. It repeats each vector ten times and pauses on success or failure.
+return. It repeats each vector ten times and leaves MAME unpaused.
 It overwrites CPU state, RAM at `&E000`, generated code, and test globals at
 `&F000`/`&F010`; it does not test BASIC prompt responsiveness.
 
@@ -333,7 +333,7 @@ function output. `codegen_translation_unit` leaves it separate; complete
 
 ## Pointer runtime test in MAME
 
-Compile and assemble `tests\pc1403_pointers.c`, then in a **disposable**
+Compile and assemble `tests\pointers.c`, then in a **disposable**
 bridge-enabled PC-1403 session running BASIC, load `pc1403_key.lua` and run:
 
 If a previous test injected CPU state directly, use the emulated device Reset
@@ -341,7 +341,7 @@ key first to restore a clean BASIC environment; a machine soft reset may not
 be sufficient.
 
 ```lua
-dofile([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\tests\pc1403_pointers.lua]])
+dofile([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\tests\pointers.lua]])
 lcc2_pointer_test([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\build\pc1403_pointers.bin]])
 ```
 
@@ -355,18 +355,18 @@ and an XRAM word crossing `&E5FF`. The eight output words at `&E700` must be
 and wrapper register restoration. The harness clears BASIC, reserves the ASM
 area, and enters a two-line BASIC caller through the keyboard. After each
 `RUN`, it executes `POKE&E710,6*7` and verifies the value 42, the unchanged
-BASIC program, and the BASIC memory pointer. It pauses on success or failure.
+BASIC program, and the BASIC memory pointer. MAME remains unpaused.
 Use only a disposable session: this clears the current BASIC program and
 overwrites reserved test RAM.
 
 ## Structure pointer-member runtime test in MAME
 
-Compile and assemble `tests\pc1403_struct_members.c`, then in a **disposable**
+Compile and assemble `tests\struct_members.c`, then in a **disposable**
 bridge-enabled PC-1403 session running BASIC, load the repository-root
 `pc1403_key.lua` and run:
 
 ```lua
-dofile([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\tests\pc1403_struct_members.lua]])
+dofile([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\tests\struct_members.lua]])
 lcc2_struct_member_test([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\build\pc1403_struct_members.bin]])
 ```
 
@@ -381,11 +381,11 @@ RAM.
 
 ## Bitwise and unary operator runtime test in MAME
 
-Compile and assemble `tests\pc1403_bitwise_unary.c`, then in a **disposable**
+Compile and assemble `tests\bitwise_unary.c`, then in a **disposable**
 bridge-enabled PC-1403 session load `pc1403_key.lua` and run:
 
 ```lua
-dofile([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\tests\pc1403_bitwise_unary.lua]])
+dofile([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\tests\bitwise_unary.lua]])
 lcc2_bitwise_unary_test([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\build\pc1403_bitwise_unary.bin]])
 ```
 
@@ -395,11 +395,11 @@ in the Lua file. This clears the current BASIC program.
 
 ## Shift operator runtime test in MAME
 
-Compile and assemble `tests\pc1403_shifts.c`, then in a **disposable**
+Compile and assemble `tests\shifts.c`, then in a **disposable**
 bridge-enabled PC-1403 session load `pc1403_key.lua` and run:
 
 ```lua
-dofile([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\tests\pc1403_shifts.lua]])
+dofile([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\tests\shifts.lua]])
 lcc2_shifts_test([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\build\pc1403_shifts.bin]])
 ```
 
@@ -409,11 +409,11 @@ The fixture checks `<<` and `>>` with constant, byte and word counts
 
 ## Logical operator runtime test in MAME
 
-Compile and assemble `tests\pc1403_logical.c`, then in a **disposable**
+Compile and assemble `tests\logical.c`, then in a **disposable**
 bridge-enabled PC-1403 session load `pc1403_key.lua` and run:
 
 ```lua
-dofile([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\tests\pc1403_logical.lua]])
+dofile([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\tests\logical.lua]])
 lcc2_logical_test([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\build\pc1403_logical.bin]])
 ```
 
@@ -423,11 +423,11 @@ requires `status="PASS"`.
 
 ## Multiply/divide runtime test in MAME
 
-Compile and assemble `tests\pc1403_muldiv.c`, then in a **disposable**
+Compile and assemble `tests\muldiv.c`, then in a **disposable**
 bridge-enabled PC-1403 session load `pc1403_key.lua` and run:
 
 ```lua
-dofile([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\tests\pc1403_muldiv.lua]])
+dofile([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\tests\muldiv.lua]])
 lcc2_muldiv_test([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\build\pc1403_muldiv.bin]])
 ```
 
@@ -438,11 +438,11 @@ semantics are added.
 
 ## Switch runtime test in MAME
 
-Compile and assemble `tests\pc1403_switch.c`, then in a **disposable**
+Compile and assemble `tests\switch.c`, then in a **disposable**
 bridge-enabled PC-1403 session load `pc1403_key.lua` and run:
 
 ```lua
-dofile([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\tests\pc1403_switch.lua]])
+dofile([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\tests\switch.lua]])
 lcc2_switch_test([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\build\pc1403_switch.bin]])
 ```
 
@@ -456,13 +456,13 @@ with the repository's root `pasm.exe`; older builds mis-patch forward-referenced
 
 ## Compound assignment and increment/decrement runtime test in MAME
 
-Compile and assemble `tests\pc1403_update_ops.c`, `pc1403_incdec.c`,
-`pc1403_update_arrays.c` and `pc1403_update_members.c`, then in a
+Compile and assemble `tests\update_ops.c`, `incdec.c`,
+`update_arrays.c` and `update_members.c`, then in a
 **disposable** bridge-enabled PC-1403 session load `pc1403_key.lua` and run
 each harness, for example:
 
 ```lua
-dofile([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\tests\pc1403_incdec.lua]])
+dofile([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\tests\incdec.lua]])
 lcc2_incdec_test([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\build\pc1403_incdec.bin]])
 ```
 
@@ -495,23 +495,23 @@ remains independent of generated function text. CLI output is opened only
 after successful generation/composition, so compilation failures preserve
 existing output.
 
-Compile and assemble `tests\pc1403_program.c` to exercise initialized/zeroed
+Compile and assemble `tests\program.c` to exercise initialized/zeroed
 register and XRAM globals, nested stack frames, calls, comparisons, and a
 loop. In a fresh **disposable** PC-1403 session, load `pc1403_key.lua`, then
-`tests\pc1403_program.lua`, and invoke `lcc2_program_test` with the binary's
+`tests\program.lua`, and invoke `lcc2_program_test` with the binary's
 absolute path. This erases BASIC, reserves two KiB for ASM, enters a BASIC
 caller, and performs ten `RUN`s. Each run checks outputs `37 12 23 00 FF FF FF`
 at `&E600`, startup/return stack equality, register restoration, and BASIC
 memory preservation. A subsequent keyboard-entered `POKE&E607,42` verifies
 that BASIC has resumed interpreting commands. Success is
 `lcc2_program_result.status="PASS"`, `calls=10`, `returns=10`, with final
-outputs `37 12 23 00 FF FF FF 2A`; the emulator pauses at completion.
+outputs `37 12 23 00 FF FF FF 2A`; MAME remains unpaused.
 
 ## Array functional tests in MAME
 
-Compile and assemble `tests\pc1403_arrays.c` and
-`tests\pc1403_arrays_wide.c`. In a **disposable** PC-1403 session, load
-`pc1403_key.lua` and `tests\pc1403_arrays.lua`, then invoke
+Compile and assemble `tests\arrays.c` and
+`tests\arrays_wide.c`. In a **disposable** PC-1403 session, load
+`pc1403_key.lua` and `tests\arrays.lua`, then invoke
 `lcc2_array_test` with the first binary's absolute path. The test clears BASIC
 and reserves four KiB; it runs ten BASIC calls covering byte/word register,
 XRAM, and local arrays, page crossings, zero initialization, signed-byte
@@ -519,10 +519,10 @@ promotion, assignment values, and single evaluation of an index function.
 It also checks the returned word, stack balance, register restoration, BASIC
 program retention, and a keyboard-entered `POKE` after each return.
 
-After success, resume emulation and invoke `lcc2_array_test` with the second
+After success, invoke `lcc2_array_test` with the second
 binary's path and `true` as its second argument. This reserves six KiB and
 checks a byte index of 256 and a word index of 128 (byte offset 256), including
-expression indices and assignment truncation. Both tests pause at completion;
+expression indices and assignment truncation. Both tests leave MAME unpaused;
 require `lcc2_array_result.status="PASS"`, `calls=10`, and `returns=10` for
 each run. The result table is replaced when starting the next test.
 
