@@ -1,10 +1,11 @@
 ; Set/clear one pixel on the 120x7 PC-1403 LCD.
+; Stack at entry: R+2 = mode, R+3 = y, R+4 = x (last argument nearest R).
 lcd_pset:
 	LDR
 	ADIA	2
 	STP
 	LDM
-	LIDP	PC1403_LCD_PSET_X
+	LIDP	PC1403_LCD_PSET_MODE
 	STD
 	LDR
 	ADIA	3
@@ -16,7 +17,7 @@ lcd_pset:
 	ADIA	4
 	STP
 	LDM
-	LIDP	PC1403_LCD_PSET_MODE
+	LIDP	PC1403_LCD_PSET_X
 	STD
 	LIDP	PC1403_LCD_PSET_SAVED_IRAM
 	LP	8

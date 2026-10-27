@@ -1,28 +1,29 @@
 ; Draw a clipped horizontal line using the shared lcd_pset implementation.
+; Stack at entry: R+2 = mode, R+3 = length, R+4 = y, R+5 = x.
 lcd_hline:
 	LDR
 	ADIA	2
 	STP
 	LDM
-	LIDP	PC1403_LCD_HLINE_X
+	LIDP	PC1403_LCD_HLINE_MODE
 	STD
 	LDR
 	ADIA	3
 	STP
 	LDM
-	LIDP	PC1403_LCD_HLINE_Y
+	LIDP	PC1403_LCD_HLINE_LENGTH
 	STD
 	LDR
 	ADIA	4
 	STP
 	LDM
-	LIDP	PC1403_LCD_HLINE_LENGTH
+	LIDP	PC1403_LCD_HLINE_Y
 	STD
 	LDR
 	ADIA	5
 	STP
 	LDM
-	LIDP	PC1403_LCD_HLINE_MODE
+	LIDP	PC1403_LCD_HLINE_X
 	STD
 	LIDP	PC1403_LCD_HLINE_SAVED_IRAM
 	LP	8

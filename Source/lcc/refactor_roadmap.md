@@ -1661,7 +1661,7 @@ Task 5.3.8.2.
   character output, return values and caller-state preservation. Device
   verification is in PC-1403 MAME; physical-device verification is not claimed.
 
-#### Task 5.3.8.2: Device-specific endpoints — LCD and keyboard
+#### Task 5.3.8.2 ✅: Device-specific endpoints — LCD and keyboard
 
 - Migrate `lcd.h` and `key.h` as explicitly nonstandard device APIs, separate
   from `stdio.h` and portable string/conversion helpers.
@@ -1682,8 +1682,12 @@ Task 5.3.8.2.
   uses the nonblocking `0xFF` no-key sentinel; `lcd_hline` clips at the right
   edge and has a zero-length no-op. Both endpoints and stdio `getchar` use
   external target modules selected only for called functions. Compiler
-  selection/assembly checks pass, and the MAME runtime fixture is present;
-  final device-level LCD/keyboard verification remains pending.
+  selection/assembly checks pass. The `pc1403_device.c` / `pc1403_device.lua`
+  MAME fixture passes: 0xFF no-key sentinel, raw scan/wait codes (51/50),
+  break press/release, stack balance, caller register restoration and BASIC
+  responsiveness; LCD pixel/clipped-line output was checked in LCD memory and
+  visually. Device verification is in PC-1403 MAME; physical-device
+  verification is not claimed.
 
 ### Task 5.3.9: Signed integer semantics
 

@@ -287,7 +287,7 @@ selective inclusion of all `lcd.h` / `key.h` endpoints and the shared pixel
 helper. For runtime testing, build `build\pc1403_device.bin`, start a
 disposable PC-1403 MAME session, load `pc1403_key.lua` and
 `tests\pc1403_device.lua`, then call `lcc2_device_test` with the binary's
-absolute path and optionally a screenshot path. Use the `_|` key sequence to
+absolute path and optionally a screenshot path. Use the `_||` key sequence to
 enter BASIC before the harness types `NEW` and `POKE&FF01,&30,&E8`.
 The fixture checks the 0xFF no-key sentinel, raw key scan/wait codes, break
 press and release, LCD clear/pixel/clipped-line calls, stack balance, caller
