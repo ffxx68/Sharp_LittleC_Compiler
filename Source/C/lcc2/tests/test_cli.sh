@@ -123,11 +123,14 @@ if grep -q 'PC1403_GETCHAR_' "$dir/output.asm"; then
 fi
 grep -q '^putchar:' "$dir/output.asm"
 ../../../pasm.exe "$dir/output.asm" "$dir/output.bin"
-compile tests/pc1403_stdio.c -o "$dir/output.asm"
+gcc -E -P -nostdinc -Iinclude tests/pc1403_stdio.c -o "$dir/source.c"
+compile "$dir/source.c" -o "$dir/output.asm"
 ../../../pasm.exe "$dir/output.asm" "$dir/output.bin"
-compile tests/pc1403_stdio_append.c -o "$dir/output.asm"
+gcc -E -P -nostdinc -Iinclude tests/pc1403_stdio_append.c -o "$dir/source.c"
+compile "$dir/source.c" -o "$dir/output.asm"
 ../../../pasm.exe "$dir/output.asm" "$dir/output.bin"
-compile tests/pc1403_getchar.c -o "$dir/output.asm"
+gcc -E -P -nostdinc -Iinclude tests/pc1403_getchar.c -o "$dir/source.c"
+compile "$dir/source.c" -o "$dir/output.asm"
 test "$(grep -c '^getchar:' "$dir/output.asm")" = 1
 if grep -Eq '^(putchar:|PC1403_STDOUT_)' "$dir/output.asm"; then
     echo "getchar fixture pulled in unused output runtime" >&2

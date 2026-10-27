@@ -74,6 +74,7 @@ test: all $(TEST_TARGET) $(LEXER_TEST_TARGET) $(PARSER_TEST_TARGET) $(SYMTAB_TES
 	./$(TARGET) --version
 	sh tests/test_cli.sh
 	sh tests/test_strings.sh
+	sh tests/test_libraries.sh
 
 clean:
 	rm -rf $(BUILD_DIR) $(TARGET)

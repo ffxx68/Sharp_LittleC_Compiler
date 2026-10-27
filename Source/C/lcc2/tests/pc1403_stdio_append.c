@@ -1,5 +1,4 @@
-int getchar(void);
-int putchar(int character);
+#include "stdio.h"
 
 __xram __at(0xE600) unsigned int key_code;
 __xram __at(0xE602) unsigned int output_result;

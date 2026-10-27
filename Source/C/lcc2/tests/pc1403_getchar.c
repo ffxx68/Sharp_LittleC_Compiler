@@ -1,4 +1,4 @@
-int getchar(void);
+#include "stdio.h"
 
 __xram __at(0xE600) unsigned int key_codes[3];
 __xram __at(0xE606) unsigned char completed;

@@ -129,6 +129,21 @@ static char *read_runtime(const char *directory, const char *routine)
     return runtime;
 }
 
+static int function_defined(const AstTranslationUnit *unit, const char *name)
+{
+    size_t index;
+    for (index = 0; index < unit->declarations.count; ++index) {
+        const AstDecl *declaration = unit->declarations.items[index];
+        if (declaration->node.kind == AST_NODE_FUNCTION_DECL) {
+            const AstFunctionDecl *function = (const AstFunctionDecl *)declaration;
+            if (!function->is_prototype && strcmp(function->name, name) == 0) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     const char *input = NULL, *output = NULL;
@@ -136,13 +151,17 @@ int main(int argc, char **argv)
     static const struct {
         const char *name;
         const char *directory;
+        const char *dependency;
     } runtime_modules[] = {
-        {"strcpy", "runtime"},
-        {"strcat", "runtime"},
-        {"getchar", NULL},
-        {"putchar", NULL}
+        {"strcpy", "runtime", NULL},
+        {"strcat", "runtime", NULL},
+        {"int2str", "runtime", NULL},
+        {"puts", "runtime", "putchar"},
+        {"getchar", NULL, NULL},
+        {"putchar", NULL, NULL}
     };
     char *runtimes[sizeof(runtime_modules) / sizeof(runtime_modules[0])] = {NULL};
+    int needed[sizeof(runtime_modules) / sizeof(runtime_modules[0])] = {0};
     char target_directory[64];
     char *source;
     size_t runtime_index;
@@ -212,6 +231,30 @@ int main(int argc, char **argv)
     for (runtime_index = 0;
          runtime_index < sizeof(runtime_modules) / sizeof(runtime_modules[0]);
          ++runtime_index) {
+        needed[runtime_index] =
+            codegen_external_function_used(ctx, runtime_modules[runtime_index].name);
+    }
+    for (runtime_index = 0;
+         runtime_index < sizeof(runtime_modules) / sizeof(runtime_modules[0]);
+         ++runtime_index) {
+        const char *dependency = runtime_modules[runtime_index].dependency;
+        size_t dependency_index;
+        if (!needed[runtime_index] || dependency == NULL ||
+            function_defined(unit, dependency)) {
+            continue;
+        }
+        for (dependency_index = 0;
+             dependency_index < sizeof(runtime_modules) / sizeof(runtime_modules[0]);
+             ++dependency_index) {
+            if (strcmp(runtime_modules[dependency_index].name, dependency) == 0) {
+                needed[dependency_index] = 1;
+                break;
+            }
+        }
+    }
+    for (runtime_index = 0;
+         runtime_index < sizeof(runtime_modules) / sizeof(runtime_modules[0]);
+         ++runtime_index) {
         const char *directory = runtime_modules[runtime_index].directory;
         if (directory == NULL) {
             if (target == NULL) {
@@ -219,7 +262,7 @@ int main(int argc, char **argv)
             }
             directory = target_directory;
         }
-        if (codegen_external_function_used(ctx, runtime_modules[runtime_index].name)) {
+        if (needed[runtime_index]) {
             runtimes[runtime_index] =
                 read_runtime(directory, runtime_modules[runtime_index].name);
             if (runtimes[runtime_index] == NULL) {
