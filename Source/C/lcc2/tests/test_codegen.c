@@ -317,6 +317,9 @@ static void test_invalid_programs(void)
         "#pragma org(1 * 2)\nvoid main(void) {}",
         "#pragma pc(57392)\nvoid main(void) {}",
         "int value; void main(void) {}",
+        "int main(void) { return 1 ? 2 : 3; }",
+        "typedef unsigned char byte; int main(void) { byte value; return 0; }",
+        "enum color { RED, GREEN, BLUE } shade; int main(void) { return 0; }",
         "__xram __at(32) unsigned char value;"
         "void main(void) { &value; }"
     };

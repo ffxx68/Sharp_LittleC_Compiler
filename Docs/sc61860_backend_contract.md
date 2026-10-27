@@ -87,11 +87,11 @@ as separately validated milestones. Signed arithmetic and standard-C switch
 semantics require new implementations; the legacy routines are unsigned and
 the legacy switch helpers emit a separate assembler dialect.
 
-## Pascal behavioral fixtures
+## C backend behavior
 
 ### C array slice (Task 5.3.4.8)
 
-The C implementation retains the Pascal storage conventions but extends
+The C implementation uses the established storage conventions and extends
 subscripts to full 16-bit integer expressions and supports local arrays.
 Constant subscripts resolve to scalar locations; dynamic subscripts compute
 an address once, with 16-bit word scaling, then use P for register/local RAM
@@ -99,8 +99,6 @@ or X/Y with `IXL`/`IYS` for XRAM. Local words retain reversed stack byte order.
 Stores preserve the converted assignment value without reevaluating the
 index, including when the index or RHS calls a function.
 
-These intentional extensions do not preserve the legacy array instruction
-text (which uses byte index scaling and has no local-array stores).
 `tests/test_codegen.c` covers addressing and stack effects, and
 `tests/pc1403_arrays.c`, `tests/pc1403_arrays_wide.c`, and
 `tests/pc1403_arrays.lua` supply functional gates across storage classes,
@@ -110,12 +108,8 @@ diagnosed; dynamic out-of-bounds accesses retain C's undefined behavior.
 ### Legacy reference fixture inventory
 
 The existing `Source/lcc/test_C` inputs document legacy littleC examples and
-may help identify behavior that is intentionally preserved. They are not a
-required feature inventory for `lcc2`; the supported C subset and its tests
-are the acceptance contract. Use Pascal-vs-C assembly comparisons only for
-specific compatibility behaviors selected for preservation. The existing
-`Source/lcc/test.bat` flow rebuilds the reference compiler and recreates its
-test directories, so isolate it before running if a comparison is needed.
+are historical material, not a feature inventory or acceptance oracle for
+`lcc2`. The supported C subset and its tests define the acceptance contract.
 
 | Behavior under contract | Fixture |
 |---|---|
@@ -128,9 +122,8 @@ test directories, so isolate it before running if a comparison is needed.
 
 For `lcc2`, validate supported constructs against the documented C semantics
 and test assembly/runtime behavior at the appropriate level. Where littleC
-and standard C differ (notably precedence, `for`, and `switch`), preserve the
-C behavior and test it functionally; assembly divergence from Pascal is not a
-backend regression.
+and standard C differ (notably precedence, `for`, and `switch`), preserve and
+test the C behavior functionally.
 
 ## Reference locations
 

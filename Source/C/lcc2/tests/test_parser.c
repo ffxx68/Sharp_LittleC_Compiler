@@ -41,6 +41,34 @@ static void test_expression_precedence(void)
     ast_arena_destroy(arena);
 }
 
+static void test_ternary_expression_ast(void)
+{
+    AstArena *arena = ast_arena_create();
+    AstTranslationUnit *unit = NULL;
+    AstFunctionDecl *function;
+    AstReturnStmt *return_statement;
+    AstTernaryExpr *outer;
+    AstTernaryExpr *inner;
+
+    assert(arena != NULL);
+    assert(lcc2_parse_string(arena,
+        "int choose(int a, int b, int c) { return a ? b : c ? 4 : 5; }",
+        &unit) == 0);
+    assert(unit != NULL && unit->declarations.count == 1);
+    function = (AstFunctionDecl *)unit->declarations.items[0];
+    return_statement = (AstReturnStmt *)function->body->items[0].as.statement;
+    assert(return_statement->expression->node.kind == AST_NODE_TERNARY_EXPR);
+    outer = (AstTernaryExpr *)return_statement->expression;
+    assert(outer->condition->node.kind == AST_NODE_IDENT_EXPR);
+    assert(outer->then_expression->node.kind == AST_NODE_IDENT_EXPR);
+    assert(outer->else_expression->node.kind == AST_NODE_TERNARY_EXPR);
+    inner = (AstTernaryExpr *)outer->else_expression;
+    assert(inner->condition->node.kind == AST_NODE_IDENT_EXPR);
+    assert(inner->then_expression->node.kind == AST_NODE_CONSTANT_EXPR);
+    assert(inner->else_expression->node.kind == AST_NODE_CONSTANT_EXPR);
+    ast_arena_destroy(arena);
+}
+
 static void test_declarators_and_statements(void)
 {
     AstArena *arena = ast_arena_create();
@@ -243,6 +271,7 @@ static void test_typedef_classification_and_scope(void)
 int main(void)
 {
     test_expression_precedence();
+    test_ternary_expression_ast();
     test_declarators_and_statements();
     test_initializers_attributes_and_casts();
     test_aggregate_types();

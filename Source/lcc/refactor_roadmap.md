@@ -645,13 +645,13 @@ It is not directly reusable by a C/Flex/Bison program as-is: the unit is Pascal,
 
 | Existing capability in `CodeGen.pas` | How Phase 5 should use it |
 |---|---|
-| Emission, labels, branches, comparisons, arithmetic and library selection | Use proven SC61860 sequences as implementation guidance; define C API names and expected behavior from the C subset, with targeted compatibility checks where desired. |
+| Emission, labels, branches, comparisons, arithmetic and library selection | Use proven SC61860 sequences as implementation guidance; define C API names and expected behavior from the C subset. |
 | Byte/word/float variables, arrays, pointers, locals and stack/call sequences | Consult as a reference for applicable target conventions. Keep type/address classification in the compiler and pass explicit parameters/state to backend routines. |
-| Global data initialization and program startup/finalization | Reuse established assembler directives and output order where appropriate; golden ASM fixtures are useful when behavior is intentionally preserved. |
+| Global data initialization and program startup/finalization | Use established assembler directives and validate output order and runtime behavior against the C backend contract. |
 | `Output` buffers and `outfile` routing | Replace implicit global routing with an explicit C output context/buffer; test switch buffering and library text separately. |
 | Existing optimizer transformations in `SecondScan` | Keep distinct from instruction-generation helpers; extract and test them in Phase 5.2 before porting the optimizer to C. |
 
-The language direction remains a standard-C subset for SC61860 rather than a byte-for-byte reimplementation of littleC semantics. Existing programs may need minimal syntax changes, and standard-C behavior changes must be validated functionally rather than treated as regressions.
+The language direction remains a standard-C subset for SC61860 rather than a reimplementation of littleC semantics. Existing programs may need minimal syntax changes; validate C behavior against the documented subset and functional tests.
 
 
 ### Task 5.1.1 ✅: Define the target C subset
@@ -679,8 +679,10 @@ signed operations and standard-C switch semantics require new implementations.
 ---
 ## Phase 5.2 — Stabilize and test the backend boundary
 
-Phase 5.2 is a bridge, not a second backend rewrite. Keep `CodeGen.pas` as the reference implementation;
-extract the existing optimizer from `SecondScan` into a separately testable Pascal unit, then use the same cases to validate the C port.
+Phase 5.2 is a bridge, not a second backend rewrite. Extract the existing
+optimizer from `SecondScan` into a separately testable Pascal unit. Test the C
+optimizer independently against its own input/output contract; Pascal optimizer
+cases are not C migration acceptance tests.
 
 ### Task 5.2.1 ✅: Extract optimizations from `SecondScan` into `Backend.pas`
 
@@ -708,9 +710,9 @@ labels, comments, and library text.
 
 Prerequisites: target language and grammar defined (Tasks 5.1.1–5.1.3), backend compatibility contract and fixtures established (Task 5.1.4), and Pascal optimizer extracted/tested (Phase 5.2).
 
-> From this phase the work is on a new C codebase (`Source/C/lcc2/`), parallel to the Pascal one. The Pascal compiler stays functional as reference for regression tests.
+> From this phase the work is on a new C codebase (`Source/C/lcc2/`), parallel to the Pascal one. The Pascal compiler remains a separate codebase; its outputs are not a C migration acceptance oracle.
 
-The C backend is a staged port of relevant behavior in `CodeGen.pas`, not an independent redesign. First reproduce current behavior for a small subset; introduce standard-C semantic changes only in separate, explicitly tested milestones. A direct Pascal/C FFI is out of scope unless a later measured need justifies its build and runtime complexity.
+The C backend implements relevant SC61860 operations from `CodeGen.pas` as needed by the documented C subset. Its behavior and tests are defined by the C contract, not by reproducing Pascal output. A direct Pascal/C FFI is out of scope unless a later measured need justifies its build and runtime complexity.
 
 ### Task 5.3.1 ✅: Project setup in C
 
@@ -835,7 +837,7 @@ void codegen_translation_unit(CodegenContext *ctx, TranslationUnit *tu);
 For each implemented operation:
 
 - Preserve the existing instruction sequence and formatting first, unless standard-C semantics require a change.
-- Verify generated assembly and behavior against the documented C contract. Pascal comparisons are optional, targeted checks only when preserving a specific legacy behavior is an explicit goal.
+- Verify generated assembly and behavior against the documented C contract.
 - Test stack-depth and library requirements as well as output text.
 - Keep AST-level concerns (type checking, symbol lookup, layout) outside the instruction emitter; pass their results to backend operations as storage/address inputs.
 
@@ -1483,13 +1485,11 @@ assembled by PASM, and the MAME runtime harness reports `status="PASS"`.
 #### Task 5.3.4.14 ✅: Backend coverage checklist and completion gates
 
 The acceptance baseline is the supported C subset and the backend operations
-implemented in Tasks 5.3.4.1 through 5.3.4.13, not the full feature set or
-output of the Pascal compiler. The Task 5.1.4 fixtures below are useful
-reference examples for overlapping behavior; they do not require `lcc2` to
-support every legacy construct or reproduce legacy assembly. Compare against
-Pascal only when a specific compatibility behavior is intentionally being
-preserved. Otherwise validate the documented C semantics through resolver,
-codegen, CLI/PASM, or target-functional tests as appropriate.
+implemented in Tasks 5.3.4.1 through 5.3.4.13, not the full legacy feature set.
+The Task 5.1.4 fixtures below are historical examples for overlapping behavior;
+they do not require `lcc2` to support every legacy construct. Validate the
+documented C semantics through resolver, codegen, CLI/PASM, or target-functional
+tests as appropriate.
 
 | Backend area and related reference fixtures | `lcc2` implementation and evidence | C-contract status |
 |---|---|---|
@@ -1548,29 +1548,28 @@ Runtime-library definitions are appended after optimization and remain unchanged
 at the end of generated output. `tests/test_peephole.c` covers each rewrite and representative near-matches; 
 `make -C Source\C\lcc2 test` passes, including assembled CLI regression fixtures.
 
-### Task 5.3.7: Regression and compatibility tests
+### Task 5.3.7 ✅: Regression tests
 
-Strategy with three levels:
+The regression suite uses two levels:
 
-1. Backend contract tests: verify each implemented operation against the supported C subset, 
-   including emitted instructions, stack effects, runtime dependencies, and rejection of unsupported forms.
-2. C semantics tests: compile programs using standard-C behavior and verify the assembled or emulated result. 
-   Output need not match Pascal ASM when precedence, `for`, `switch`, or other language semantics differ.
-3. Optional compatibility tests: compare selected existing demos with minimal syntax changes 
-   (`byte` → `unsigned char`, etc.) when preserving a specific legacy behavior is an explicit goal; 
-   document intentional differences.
+1. `tests/test_codegen.c` checks backend output, stack accounting, runtime
+   integration, and rejection without partial output for unsupported forms.
+   `tests/test_parser.c` checks AST structure, including syntax not yet supported
+   by code generation.
+2. `tests/test_cli.sh` compiles and assembles representative standard-C
+   fixtures. The `pc1403_*.lua` harnesses verify runtime results, stack balance,
+   and caller-state preservation on the PC-1403 in MAME; their setup and
+   expected results are documented in `Source/C/lcc2/README.md`.
 
-Tests for new constructs should include:
-
-- `void f(void) { ... }`
-- `switch/case/default/break`
-- `continue`
-- `struct point { int x; int y; }; struct point p; p.x = 10;`
-- `enum color { RED, GREEN, BLUE };`
-- `typedef unsigned char byte;`
-- `int *p = &x; *p = 42;` (including pointers as parameters)
-- `signed int` comparisons and arithmetic
-- Ternary operator `a > b ? a : b`
+The supported fixtures cover calls, `for`/`continue`, standard `switch`
+fallthrough and `break`, structures and members, and pointer reads/writes,
+alongside the scalar, array, arithmetic, and logical subsets. The AST parser
+accepts some syntax beyond the backend contract; ternary expressions are
+regression-tested as parsed ASTs and rejected by code generation. Ternary
+evaluation, `enum` objects, and `typedef` declarations remain unsupported per
+`Docs/lcc2_manual.md`; CLI regression cases ensure representative uses fail
+without replacing prior output. Signed comparisons and arithmetic remain
+deferred to Task 5.3.9 rather than treated as a compatibility requirement.
 
 ### Task 5.3.8: Migrate library headers
 
@@ -1606,7 +1605,7 @@ Tests for new constructs should include:
 ### Task 5.3.11: Port completion gates
 
 - The Pascal reference compiler remains buildable and its existing regression tests continue to pass.
-- Every implemented backend capability required by the supported C subset has a contract, codegen, or functional test appropriate to its behavior; Pascal comparisons are optional targeted compatibility checks.
+- Every implemented backend capability required by the supported C subset has a contract, codegen, or functional test appropriate to its behavior.
 - Unsupported constructs fail with a clear diagnostic; they must not silently generate partial or success-shaped output.
 - Complete Task 5.3.9's signed-integer slice and Task 5.3.10's floating-point slice, and do not retire or archive the Pascal compiler until the C compiler satisfies the final acceptance criteria and repository workflows have migrated.
 
@@ -1696,7 +1695,7 @@ Task 4.1.14 ──→ Phase 5.1 ──→ Phase 5.2 ──→ Phase 5.3 ──�
 
 -   Completare Phase 4 (nessuna emissione ASM sintattica residua nel parser) è il **prerequisito critico** per il nuovo frontend. Output serializzato e diagnostica restano fuori da tale obiettivo.
 -   Prima del codice C, catalogare l'API effettiva di `CodeGen.pas` e scegliere fixture rappresentative; non serve ricostruire un AST Pascal.
--   Portare il backend C incrementalmente seguendo i costrutti implementati, usando il compilatore Pascal come oracolo e le stesse fixture per verificare la parità.
+-   Portare il backend C incrementalmente seguendo i costrutti implementati e verificare ogni slice contro il contratto C e le fixture funzionali.
 -   Per Phase 5.3, partire da un **micro-compilatore C esistente** come reference architetturale:
     -   **chibicc** (Rui Ueyama): ~5000 righe, ottima documentazione, C11 quasi completo, molto didattico.
     -   **8cc** (stesso autore): predecessore di chibicc, più piccolo.
