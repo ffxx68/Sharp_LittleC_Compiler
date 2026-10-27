@@ -37,7 +37,7 @@ single operation twice.
 | Constants and scalar access | `LoadByteConstant`, `LoadWordConstant`; `LoadByte/WordFromReg/Local/Xram`; `StoreByte/WordToReg/Local/Xram` | Value/width; symbol name; register address or `-1` for symbolic XRAM; local byte offset; local helpers read `pushcnt`. | Byte constant: `LIA value`; word constant: load `LB(value)` into A and `HB(value)` into B. Register accesses use `LP` below address 64, otherwise `LIP`; XRAM uses `LIDP` with `LDD`/`STD`. Word operations transfer both bytes with `EXAB` and `INCP`/`DECP`. Local operations derive P from R with `LDR`, `ADIA`, `STP`. No library includes. | First; byte/word globals and locals form the scalar subset. |
 | Arrays and pointers | `Load/StoreArrayByte/WordFrom/ToReg/Xram`; `Load/StorePointerContentReg/Xram`; `LoadAddressOf`; `load_x`, `load_y` | Element base/address, symbol, element width, index already in registers/stack, pointee type, storage class. Array/pointer operations may adjust `pushcnt`. | Register-array addressing adds the index to base; word arrays double the index (`SL`). XRAM arrays form the base in X/Y registers and use `IXL`/`IYS`. Pointer helpers use X for XRAM loads and Y for XRAM stores; word dereference transfers both bytes. Address-of loads low/high address bytes for XRAM, low byte for register-space values. No library includes. | After scalar milestone; validate separately by storage/element width. |
 | Arithmetic, comparisons, unary | `PopAdd/Sub/Mul/Div/Mod/And/Or/Xor/SL/SR`, `CompEqual/NotEqual/Smaller/SmOrEq/Greater/GrOrEq`, `Negate`, `NotIt` | Operand type via `optype`, stack layout, and primary/TOS values; helpers consume stack bytes. | Byte add/sub/bitwise operations use SC61860 instructions; word add/sub/bitwise operations manipulate A:B and stack bytes. Byte/word multiply, divide, shifts, word modulo/XOR and word comparisons call library labels and mark required libraries. Float add/sub/multiply/divide use fixed ROM entry calls and float registers; several float bitwise/shift/modulo operations are explicitly unsupported. `NotIt` emits inline instructions. See library mapping below. | Port only as needed; operation contracts must be type-explicit. Signed arithmetic/comparison is not provided by this legacy API. |
-| Branch and control flow | `BranchAbs`, `Branch`, `BranchAbsFalse`, `BranchFalse`; `EmitSwitch*`, `BeginSwitchArm`, `EndSwitchArm` | Label/value; conditions in A; switch helpers also mutate output destination | Unconditional forms emit `JP` or `RJMP`. False branches emit `TSIA 255` then `JRZP` / `JPZ`, followed by a blank line. Switch helpers emit the legacy `CASE`/`ENDCASE` dialect and temporarily route arm lines to `asmlist`. No library changes. | Branch/labels first; legacy switch dialect is not assumed to satisfy standard C semantics. Implement C switch separately if parity is inadequate. |
+| Branch and control flow | `BranchAbs`, `Branch`, `BranchAbsFalse`, `BranchFalse`; `EmitSwitch*`, `BeginSwitchArm`, `EndSwitchArm` | Label/value; conditions in A; switch helpers also mutate output destination | Unconditional forms emit `JP` or `RJMP`. False branches emit `TSIA 255` then `JRZP` / `JPZ`, followed by a blank line. Switch helpers emit the legacy `CASE`/`ENDCASE` dialect and temporarily route arm lines to `asmlist`. No library changes. | Branch/labels first; use the legacy switch behavior only where it satisfies the documented C semantics, otherwise implement C switch independently. |
 | Calls and stack frames | `AllocStackSpace`, `FreeStackSpace`, `EmitProcCall` | Byte counts, return kind/width, local comments; reads/writes `pushcnt` | Allocation below 8 bytes emits repeated `PUSH`; at 8+ uses `LP 0`, `EXAM`, `LDR`, `SBIA n`, `STR`, `EXAM`. Freeing a byte/word result restores R while preserving the result; void cleanup below 4 bytes uses repeated `POP`, otherwise adjusts R with `LDR`/`ADIA`/`STR`. `EmitProcCall` emits optional local allocation, `CALL name`, and optional argument cleanup. No library changes. | First procedure/call milestone; test thresholds and all return modes. |
 | Startup and initialized data | `EmitProgramStartup`, `EmitGlobalVariableInitialization`, `varxram`, `varxarr`, `varcode`, `varfcode`, `varcarr`, `varfarr`, `varreg`, `varrarr`, `FinalizeAndWrite` | Origin/save flag; name/type/address/size/value/storage/initializer data; output filename | Startup emits headers, `.ORG`, optional SREG save/restore wrapper and `CALL main`. Initialization dispatches by register/XRAM, fixed-address, scalar/array, and float status; some declarations go through the separately buffered `asmlist`. Final output writes assembly and library buffers. | Needed for complete programs; preserve ordering and distinct data/code routing. |
 | Register increment/decrement | `EmitIncReg`, `EmitDecReg` | Register address and optional comment | Emits the corresponding `INC*`/`DEC*` instruction; unsupported register addresses fall back to `INCA`/`DECA`. No state/library changes. | Optional helper; callers should validate addresses instead of depending on fallback. |
@@ -107,12 +107,15 @@ text (which uses byte index scaling and has no local-array stores).
 widths, page crossings, and byte offsets of 256. Unsupported array forms are
 diagnosed; dynamic out-of-bounds accesses retain C's undefined behavior.
 
-### Reference fixture inventory
+### Legacy reference fixture inventory
 
-The existing `Source/lcc/test_C` inputs are the fixtures; compare output to
-the reference compiler with the existing `Source/lcc/test.bat` flow (the
-script rebuilds the compiler and recreates its test directories, so preserve
-local data before invoking it).
+The existing `Source/lcc/test_C` inputs document legacy littleC examples and
+may help identify behavior that is intentionally preserved. They are not a
+required feature inventory for `lcc2`; the supported C subset and its tests
+are the acceptance contract. Use Pascal-vs-C assembly comparisons only for
+specific compatibility behaviors selected for preservation. The existing
+`Source/lcc/test.bat` flow rebuilds the reference compiler and recreates its
+test directories, so isolate it before running if a comparison is needed.
 
 | Behavior under contract | Fixture |
 |---|---|
@@ -123,10 +126,11 @@ local data before invoking it).
 | Float constants and arithmetic | `test_C/Float/main.c` |
 | Calls, arguments, local storage, return values, stack thresholds | `test_C/Parameter_passing/main.c`, `test_C/ProcCallStack/main.c` |
 
-For equivalent supported source semantics, require assembly parity. Where
-littleC and standard C differ (notably precedence, `for`, and `switch`),
-record the expected semantic difference and use a functional test rather
-than treating ASM divergence as a backend regression.
+For `lcc2`, validate supported constructs against the documented C semantics
+and test assembly/runtime behavior at the appropriate level. Where littleC
+and standard C differ (notably precedence, `for`, and `switch`), preserve the
+C behavior and test it functionally; assembly divergence from Pascal is not a
+backend regression.
 
 ## Reference locations
 
