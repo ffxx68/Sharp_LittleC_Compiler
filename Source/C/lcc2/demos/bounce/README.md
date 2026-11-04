@@ -18,6 +18,10 @@ The current generated image is 2,927 bytes. The Pascal demo assembles to 1,509
 bytes, so this port is 1.94 times as large. Moving state to globals reduced the
 earlier lcc2 image by 467 bytes (about 12%); Task 6.2 backend optimizations
 removed another 156 bytes, and sharing the LCD endpoints' 88-byte save area
-removed 264 bytes from the four LCD routines used here. The repository's 2 KiB
-PC-1403 reservation example is not large enough; reserve sufficient memory
-before transferring the binary.
+removed 264 bytes from the four LCD routines used here.
+
+The image occupies `&E030`–`&EB9E`, so the repository's 2 KiB PC-1403
+reservation example (`POKE &FF01,&30,&E8`) is not large enough. In BASIC PRO
+mode, reserve 3 KiB with `POKE &FF01,&30,&EC`, then `NEW` (this erases the
+current BASIC program). Transfer the binary to `&E030` and start it with
+`CALL &E030`.
