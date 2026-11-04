@@ -1,0 +1,75 @@
+; Nonstandard append-only puts: no newline, 0 on success, -1 on output error.
+; Save the source cursor on the stack across the external putchar call.
+puts:
+	LDR
+	ADIA	2
+	STP
+	LDM
+	LP	5
+	EXAM
+	LDR
+	ADIA	3
+	STP
+	LDM
+	LP	4
+	EXAM
+	DX
+LCC2_PUTS_NEXT:
+	IX
+	LP	5
+	LDM
+	CPIA	0
+	JPZ	LCC2_PUTS_READ_INTERNAL
+	LDD
+	JP	LCC2_PUTS_CHARACTER
+LCC2_PUTS_READ_INTERNAL:
+	LP	4
+	LDM
+	STP
+	LDM
+LCC2_PUTS_CHARACTER:
+	CPIA	0
+	JPZ	LCC2_PUTS_DONE
+	EXAB
+	LP	4
+	LDM
+	PUSH
+	LP	5
+	LDM
+	PUSH
+	EXAB
+	PUSH
+	LIA	0
+	PUSH
+	CALL	putchar
+	LP	0
+	EXAM
+	LDR
+	ADIA	2
+	STR
+	EXAM
+	EXAB
+	CPIA	255
+	JPNZ	LCC2_PUTS_RESTORE
+	EXAB
+	CPIA	255
+	JPZ	LCC2_PUTS_ERROR
+LCC2_PUTS_RESTORE:
+	POP
+	LP	5
+	EXAM
+	POP
+	LP	4
+	EXAM
+	JP	LCC2_PUTS_NEXT
+LCC2_PUTS_ERROR:
+	POP
+	POP
+	LIA	255
+	LIB	255
+	RTN
+LCC2_PUTS_DONE:
+	LIA	0
+	LIB	0
+	RTN
+

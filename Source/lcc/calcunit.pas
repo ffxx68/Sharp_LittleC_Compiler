@@ -58,7 +58,7 @@ procedure Evaluate(var Formula: String;    { Fomula to evaluate}
                    var Value: Float;        { Result of formula }
                    var ErrPosf: Integer);  { Posfition of error }
 const
-  HexNumbers: set of Char = ['0'..'9','A'..'F'];
+  HexNumbers: set of Char = ['0'..'9','A'..'F', 'a'..'f'];
   BinNumbers: set of Char = ['0','1'];
   Numbers: set of Char = ['0'..'9'];
   EofLine  = ^M;
@@ -146,18 +146,18 @@ var
               Start:=Posf; hex:=false; bin:=false;
               repeat NextCh until not (Ch in Numbers);
               if Ch='.' then repeat NextCh until not (upcase(Ch) in Numbers);
-              if Ch='E' then
+              if UpCase(Ch)='E' then
               begin
                 NextCh;
                 repeat NextCh until not (Ch in Numbers);
               end;
-              if Ch='X' then
+              if UpCase(Ch)='X' then
               begin
                 NextCh;
                 repeat NextCh until not (Ch in HexNumbers);
                 hex:=true;
               end;
-              if Ch='B' then
+              if UpCase(Ch)='B' then
               begin
                 NextCh;
                 repeat NextCh until not (Ch in BinNumbers);

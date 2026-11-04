@@ -294,6 +294,7 @@ void addlabel(const char *l) {
         // Save current state
         int saved_codpos = codpos;
         bool saved_mcase = mcase;
+        int saved_ccase = ccase, saved_casecnt = casecnt;
         char saved_op[256], saved_params[256], saved_param1[256], saved_param2[256];
         strcpy(saved_op, op);
         strcpy(saved_params, params);
@@ -317,6 +318,8 @@ void addlabel(const char *l) {
         // Restore state
         codpos = saved_codpos;
         mcase = saved_mcase;
+        ccase = saved_ccase;
+        casecnt = saved_casecnt;
         strcpy(op, saved_op);
         strcpy(params, saved_params);
         strcpy(param1, saved_param1);
@@ -479,32 +482,18 @@ int calcadr() {
                 char *endptr2 = NULL;
                 long num2 = strtol(s, &endptr2, 0);
                 if (!(endptr2 != s && *endptr2 == '\0')) {
-                    // Check if token is just a suffix of an existing defined label; if so, skip adding it as unresolved
-                    char up_s[256]; int ui=0;
-                    for (int ti=0; s[ti] && ui < 255; ti++) up_s[ui++] = toupper((unsigned char)s[ti]);
-                    up_s[ui] = '\0';
-                    bool is_suffix_of_defined = false;
-                    for (int li = 0; li < labcnt; li++) {
-                        if (strstr(lab[li], up_s) != NULL && strcmp(lab[li], up_s) != 0) {
-                            is_suffix_of_defined = true;
-                            break;
-                        }
-                    }
-                    if (!is_suffix_of_defined) {
-                        if (!findlabel(s)) {
-                            // Aggiungi label solo se non è numerica
-                            addnlabel(s);
-                            lf = true;
-                        } else {
-                            // Replace the label with il suo valore assoluto
-                            snprintf(s2, 255, "%d", labbase[labp] + labpos[labp]);
-                            replace_text(params, s, s2);
-                            strcpy(param1, params);
-                            param2[0] = '\0';
-                            i = start + strlen(s2);
-                        }
+                    if (!findlabel(s)) {
+                        // Aggiungi label solo se non è numerica
+                        addnlabel(s);
+                        lf = true;
                     } else {
-                        // skip this token because it's likely a fragment of a defined label
+                        // Replace the label with il suo valore assoluto
+                        snprintf(s2, 255, "%d", labbase[labp] + labpos[labp]);
+                        replace_text(params, s, s2);
+                        len = strlen(params);
+                        strcpy(param1, params);
+                        param2[0] = '\0';
+                        i = start + strlen(s2);
                     }
                 }
             }
@@ -813,6 +802,49 @@ void doasm(const char *line) {
     }
     trim(param1);
     trim(param2);
+
+    // CASE table: PTC count,hi,lo (patched at ENDCASE) + ETC, then
+    // "value label" entries and a final "ELSE label" (address only).
+    if (strcmp(op, "CASE") == 0) {
+        addcode(122);
+        mcase = true;
+        ccase = codpos;
+        casecnt = 0;
+        addcode(NOP); addcode(NOP); addcode(NOP);
+        addcode(105);
+        return;
+    }
+    if (mcase) {
+        if (strcmp(op, "ENDCASE") == 0) {
+            mcase = false;
+            adr = codpos;
+            codpos = ccase;
+            addcode(casecnt);
+            addcode(((adr + startadr) / 256) & 0xFF);
+            addcode((adr + startadr) % 256);
+            codpos = adr;
+            return;
+        }
+        // Forward references re-run this line from the recorded codpos:
+        // value entries restart at their value byte, ELSE at its address.
+        if (strcmp(op, "ELSE") != 0) {
+            addcode(mathparse(op, 8));
+            casecnt++;
+            codpos--;
+            adr = calcadr();
+            codpos++;
+        } else {
+            adr = calcadr();
+        }
+        if (adr > 0) {
+            addcode(adr / 256);
+            addcode(adr % 256);
+        } else {
+            addcode(NOP);
+            addcode(NOP);
+        }
+        return;
+    }
 
     // Search opcode in table
     if (findop(op)) {

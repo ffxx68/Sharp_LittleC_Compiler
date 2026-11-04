@@ -44,9 +44,9 @@ if not exist "%FPC%" (
 )
 
 REM Uso -Mdelphi -Sh e forzo la codepage CP1252
-"%FPC%" -B -Pi386 -Mdelphi -Sh -gl -Fccp1252 lcc.dpr > baseline_build.log 2>&1
+"%FPC%" -B -Pi386 -Mdelphi -Sh -gl -Fccp1252 lcc.dpr > lcc_build.log 2>&1
 if %ERRORLEVEL% neq 0 (
-    echo [ERROR] Build failed. See baseline_build.log
+    echo [ERROR] Build failed. See lcc_build.log
     exit /b %ERRORLEVEL%
 )
 echo [BUILD] Success.
@@ -66,7 +66,13 @@ call :RUN_TEST "bounce" "bounce"
 call :RUN_TEST "Loop" "Loop"
 call :RUN_TEST "Math" "Math"
 call :RUN_TEST "pointer" "pointer"
-
+call :RUN_TEST "PointerAccess" "PointerAccess"
+call :RUN_TEST "SwitchCase" "SwitchCase"
+call :RUN_TEST "SwitchCaseElse" "SwitchCaseElse"
+call :RUN_TEST "Float" "Float"
+call :RUN_TEST "LoadVariable" "LoadVariable"
+call :RUN_TEST "Parameter_passing" "Parameter_passing"
+call :RUN_TEST "ProcCallStack" "ProcCallStack"
 
 :ALL_DONE
 echo.
@@ -86,7 +92,7 @@ echo -----------------
 echo ==========================================
 if %FAILED_TESTS% gtr 0 (
     echo.
-    echo [WARNING] %FAILED_TESTS% test(s) failed - see details above
+    echo [WARNING] %FAILED_TESTS% test^(s^) failed - see details above
     echo.
 )
 exit /b 0
@@ -157,4 +163,3 @@ if %ERRORLEVEL% equ 0 (
 )
 
 exit /b 0
-

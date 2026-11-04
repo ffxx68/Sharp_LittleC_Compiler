@@ -1,7 +1,7 @@
 ; set / clear pixel on screen
 ; input 
-;  X-low as x-position on screen (0 = left)
-;  Y-low as y-position on screen (0 = top)
+;  X-low as x-position on screen (0 = LEFT)
+;  Y-low as y-position on screen (0 = BOTTOM)
 ;  K (0x08) mode: 1: set; 0: clear
 LCD_LIB_PSET:
 

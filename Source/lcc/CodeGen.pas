@@ -11,13 +11,118 @@ interface
 
 uses Output, SysUtils;
 
+// Core instruction emission
+procedure EmitInst(const inst: string); overload;
+procedure EmitInst(const inst, operand: string); overload;
+procedure EmitInst(const inst, operand, comment: string); overload;
+procedure EmitInstComment(const inst, comment: string); overload;
+procedure EmitComment(const comment: string);
+procedure EmitBlankLine;
+procedure EmitPush; overload;
+procedure EmitPush(const comment: string); overload;
+procedure EmitPop; overload;
+procedure EmitPop(const comment: string); overload;
 
+// Raw asm passthrough for #asm blocks
+procedure EmitRawAsmLine(const s: string);
+procedure EmitRawAsmBlock(const block: string);
+procedure EmitSwitchStart;
+procedure EmitSwitchCasesStart;
+procedure EmitSwitchCase(const value, labelName: string);
+procedure BeginSwitchArm(const labelName: string);
+procedure EndSwitchArm;
+procedure EmitSwitchDefault;
+procedure EmitSwitchEnd;
+procedure EmitProgramStartup(const org: string; saveRegisters: boolean);
+
+// Finalize current asm buffers and write to output file
+procedure FinalizeAndWrite(const filename: string);
+procedure ResetRuntimeLibraries;
+procedure RequireRuntimeLibrary(const libraryName: string);
+procedure ResolveRuntimeLibraries;
+
+
+// Label management
 function NewLabel: string;
 procedure PostLabel(L: string);
-procedure CompGreater;
-procedure CompSmaller;
+procedure PostUserLabel(const L: string);
+procedure PostProcedureLabel(const name: string);
+procedure EmitSkippedProcedureComment(const name: string);
+
+// Register load helpers
+procedure load_x(s: string);
+procedure load_y(s: string);
+
+procedure LoadByteConstant(const value: string);
+procedure LoadWordConstant(const value: string);
+procedure LoadFloatConstant(const value: string; const bcd: RawByteString; isZero: boolean);
+procedure LoadFloatFromReg(adr: integer; const name: string);
+procedure LoadFloatFromLocal(adr: integer; const name: string);
+procedure LoadFloatFromXram(adr: integer; const name: string);
+
+// High-level store functions (Task 4.1.1)
+procedure StoreByteToReg(adr: integer; const name: string);
+procedure StoreWordToReg(adr: integer; const name: string);
+
+// High-level store functions for local variables (Task 4.1.2)
+procedure StoreByteToLocal(adr: integer; const name: string);
+procedure StoreWordToLocal(adr: integer; const name: string);
+
+// High-level store functions for XRAM variables (Task 4.1.3)
+procedure StoreByteToXram(adr: integer; const name: string);
+procedure StoreWordToXram(adr: integer; const name: string);
+// High-level store functions for float variables (Task 4.1.3 extended)
+procedure StoreFloatToReg(adr: integer; const name: string);
+procedure StoreFloatToLocal(adr: integer; const name: string);
+procedure StoreFloatToXram(adr: integer; const name: string);
+
+// High-level load functions for global variables in registers (Task 4.1.4)
+procedure LoadByteFromReg(adr: integer; const name: string);
+procedure LoadWordFromReg(adr: integer; const name: string);
+
+// High-level load functions for local variables (Task 4.1.5)
+procedure LoadByteFromLocal(adr: integer; const name: string);
+procedure LoadWordFromLocal(adr: integer; const name: string);
+
+// High-level load functions for XRAM variables (Task 4.1.6)
+procedure LoadByteFromXram(adr: integer; const name: string);
+procedure LoadWordFromXram(adr: integer; const name: string);
+
+// High-level array element access functions - byte (Task 4.1.7)
+procedure LoadArrayByteFromReg(adr: integer; const name: string);
+procedure LoadArrayByteFromXram(adr: integer; const name: string);
+procedure StoreArrayByteToReg(adr: integer; const name: string);
+procedure StoreArrayByteToXram(adr: integer; const name: string);
+
+// High-level array element access functions - word (Task 4.1.8)
+procedure LoadArrayWordFromReg(adr: integer; const name: string);
+procedure LoadArrayWordFromXram(adr: integer; const name: string);
+procedure StoreArrayWordToReg(adr: integer; const name: string);
+procedure StoreArrayWordToXram(adr: integer; const name: string);
+
+// Pointer dereferencing functions (Task 4.1.10)
+procedure LoadPointerContentXram(const pnttyp, name: string);
+procedure LoadPointerContentReg(const pnttyp, name: string);
+procedure StorePointerContentXram(const pnttyp, name: string);
+procedure StorePointerContentReg(const pnttyp, name: string);
+procedure LoadAddressOf(adr: integer; const name: string; isXram: boolean);
+
+// Stack management functions (Task 4.1.12)
+procedure AllocStackSpace(bytes: integer);
+procedure FreeStackSpace(bytes: integer; hasReturn, isWord: boolean);
+procedure EmitProcCall(const name: string; localBytes, stackBytes: integer;
+  hasReturn, isWord: boolean; const localComments: array of string);
+
+// Increment / Decrement register helpers (Step 4.1.13)
+procedure EmitIncReg(regAddr: integer); overload;
+procedure EmitIncReg(regAddr: integer; const comment: string); overload;
+procedure EmitDecReg(regAddr: integer); overload;
+procedure EmitDecReg(regAddr: integer; const comment: string); overload;
+
 procedure CompSmOrEq;
 procedure CompGrOrEq;
+procedure CompGreater;
+procedure CompSmaller;
 procedure CompEqual;
 procedure CompNotEqual;
 procedure BranchAbs(L: string);
@@ -38,15 +143,19 @@ procedure PopAnd;
 procedure PopMod;
 procedure NotIt;
 procedure varxram(Value, adr, size: integer; nm: string);
-procedure varxarr(Value: string; adr, size: integer; nm, typ: string);
+procedure varxarr(Value: RawByteString; adr, size: integer; nm, typ: string);
 procedure varcode(Value, adr, size: integer; nm: string);
-procedure varfcode(Value, nm: string);
-procedure varcarr(Value: string; adr, size: integer; nm, typ: string);
-procedure varfarr(Value: string; size: integer; nm: string);
+procedure varfcode(Value: RawByteString; nm: string);
+procedure varcarr(Value: RawByteString; adr, size: integer; nm, typ: string);
+procedure varfarr(Value: RawByteString; size: integer; nm: string);
 procedure varreg(Value, adr, size: integer; nm: string);
-procedure varrarr(Value: string; adr, size: integer; nm, typ: string);
+procedure varrarr(Value: RawByteString; adr, size: integer; nm, typ: string);
+procedure EmitGlobalVariableInitialization(const name, typ: string;
+  address, size, initValue: integer; isXram, isAt, isArray: boolean;
+  const initData: RawByteString);
 
 type OpTypes = (otByte, otWord, otFloat);
+
 
 var
   LCount: integer;
@@ -58,7 +167,6 @@ var
   isfloat: boolean;
   pushcnt: integer;
   optype: OpTypes;
-
 
 const   { Math }
   MUL8 = 0;
@@ -91,6 +199,407 @@ const   { Math }
   {--------------------------------------------------------------}
 implementation
 
+uses Classes;
+
+var
+  RequiredLibraries: TStringList;
+
+{--------------------------------------------------------------}
+{ Core Instruction Emission }
+
+procedure EmitInst(const inst: string);
+begin
+  WritLn(#9 + inst);
+end;
+
+procedure EmitInst(const inst, operand: string);
+begin
+  WritLn(#9 + inst + #9 + operand);
+end;
+
+procedure EmitInst(const inst, operand, comment: string);
+begin
+  if operand = '' then
+    WritLn(#9 + inst + ' ; ' + comment)
+  else
+    WritLn(#9 + inst + #9 + operand + #9 + '; ' + comment);
+end;
+
+procedure EmitInstComment(const inst, comment: string);
+begin
+  WritLn(#9 + inst + #9 + '; ' + comment);
+end;
+
+procedure EmitComment(const comment: string);
+begin
+  WritLn(#9 + '; ' + comment);
+end;
+
+procedure EmitBlankLine;
+begin
+  WritLn('');
+end;
+
+// Simple raw push/pop helpers that update pushcnt consistently.
+procedure EmitPush;
+begin
+  // forward to comment overload with empty comment
+  EmitPush('');
+end;
+
+procedure EmitPush(const comment: string);
+begin
+  if comment = '' then
+    EmitInst('PUSH')
+  else
+    EmitInstComment('PUSH', comment);
+  Inc(pushcnt);
+end;
+
+procedure EmitPop;
+begin
+  // forward to comment overload with empty comment
+  EmitPop('');
+end;
+
+procedure EmitPop(const comment: string);
+begin
+  if comment = '' then
+    EmitInst('POP')
+  else
+    EmitInstComment('POP', comment);
+  Dec(pushcnt);
+end;
+
+procedure EmitRawAsmLine(const s: string);
+begin
+  // forward raw asm line to Output unit; Output.writeln will respect outfile/addasm
+  WritLn(s);
+end;
+
+procedure EmitRawAsmBlock(const block: string);
+var
+  i: integer;
+  line: string;
+begin
+  line := '';
+  i := 1;
+  while i <= Length(block) do
+  begin
+    if block[i] in [#10, #13] then
+    begin
+      EmitRawAsmLine(#9 + line);
+      line := '';
+      if (block[i] = #13) and (i < Length(block)) and (block[i + 1] = #10) then
+        Inc(i);
+    end
+    else
+      line := line + block[i];
+    Inc(i);
+  end;
+  if line <> '' then
+    EmitRawAsmLine(#9 + line);
+end;
+
+procedure EmitSwitchStart;
+begin
+  EmitComment('Switch');
+end;
+
+procedure EmitSwitchCasesStart;
+begin
+  EmitInst('CASE');
+end;
+
+procedure EmitSwitchCase(const value, labelName: string);
+begin
+  EmitRawAsmLine(#9 + value + #9 + labelName);
+end;
+
+procedure BeginSwitchArm(const labelName: string);
+begin
+  outfile := false;
+  EmitRawAsmLine('  ' + labelName + ':');
+end;
+
+procedure EndSwitchArm;
+begin
+  EmitInst('RTN');
+  EmitBlankLine;
+  outfile := true;
+end;
+
+procedure EmitSwitchDefault;
+begin
+  EmitRawAsmLine(#9 + 'ELSE:' + #9 + 'EOP');
+end;
+
+procedure EmitSwitchEnd;
+begin
+  EmitInst('ENDCASE');
+  EmitComment('End switch');
+end;
+
+procedure EmitProgramStartup(const org: string; saveRegisters: boolean);
+begin
+  EmitRawAsmLine('; pasm file - assemble with pasm!');
+  EmitRawAsmLine('; Compiled with lcc v1.1');
+  EmitBlankLine;
+  EmitRawAsmLine('.ORG'#9 + org);
+  EmitBlankLine;
+
+  if saveRegisters then
+  begin
+    EmitRawAsmLine(#9'LP'#9'0');
+    EmitRawAsmLine(#9'LIDP'#9'SREG');
+    EmitRawAsmLine(#9'LII'#9'11');
+    EmitRawAsmLine(#9'EXWD');
+  end;
+
+  EmitBlankLine;
+  EmitRawAsmLine(#9'CALL'#9'main');
+
+  if saveRegisters then
+  begin
+    EmitBlankLine;
+    EmitRawAsmLine(#9'LP'#9'0');
+    EmitRawAsmLine(#9'LIDP'#9'SREG');
+    EmitRawAsmLine(#9'LII'#9'11');
+    EmitRawAsmLine(#9'MVWD');
+    EmitRawAsmLine(#9'RTN');
+    EmitBlankLine;
+    EmitRawAsmLine('SREG:'#9'.DW 0, 0, 0, 0, 0, 0');
+    EmitBlankLine;
+  end;
+end;
+
+procedure FinalizeAndWrite(const filename: string);
+begin
+  // write accumulated asm + libtext to disk
+  SaveToFile(filename);
+end;
+
+procedure ResetRuntimeLibraries;
+var
+  i: integer;
+begin
+  for i := Low(libins) to High(libins) do
+    libins[i] := False;
+  libcnt := 0;
+  RequiredLibraries.Clear;
+  ClearLibText;
+end;
+
+procedure RequireRuntimeLibrary(const libraryName: string);
+var
+  i: integer;
+  ch: char;
+begin
+  if libraryName = '' then
+    raise Exception.Create('Runtime library name cannot be empty');
+  for i := 1 to Length(libraryName) do
+  begin
+    ch := libraryName[i];
+    if not (ch in ['a'..'z', 'A'..'Z', '0'..'9', '_', '-']) then
+      raise Exception.CreateFmt('Invalid runtime library name "%s"',
+        [libraryName]);
+  end;
+
+  for i := 0 to RequiredLibraries.Count - 1 do
+    if SameText(RequiredLibraries[i], libraryName) then
+      Exit;
+  RequiredLibraries.Add(libraryName);
+end;
+
+function FindRuntimeLibrary(const libraryName: string;
+  out searchedPaths: string): string;
+var
+  SearchDirs: TStringList;
+  Candidate: string;
+  i: integer;
+
+  procedure AddSearchDirectory(const directory: string);
+  var
+    j: integer;
+    normalized: string;
+  begin
+    if directory = '' then
+      Exit;
+    normalized := ExpandFileName(directory);
+    for j := 0 to SearchDirs.Count - 1 do
+      if SameText(SearchDirs[j], normalized) then
+        Exit;
+    SearchDirs.Add(normalized);
+  end;
+
+  procedure AddDirectoryAndParents(const directory: string);
+  var
+    currentDir, parent: string;
+  begin
+    currentDir := ExpandFileName(directory);
+    while currentDir <> '' do
+    begin
+      AddSearchDirectory(currentDir);
+      parent := ExpandFileName(IncludeTrailingPathDelimiter(currentDir) + '..');
+      if SameText(parent, currentDir) then
+        Break;
+      currentDir := parent;
+    end;
+  end;
+
+begin
+  Result := '';
+  searchedPaths := '';
+  SearchDirs := TStringList.Create;
+  try
+    AddDirectoryAndParents(GetCurrentDir);
+    AddDirectoryAndParents(ExtractFilePath(ParamStr(0)));
+    for i := 0 to SearchDirs.Count - 1 do
+    begin
+      Candidate := IncludeTrailingPathDelimiter(SearchDirs[i]) +
+        libraryName + '.lib';
+      if searchedPaths <> '' then
+        searchedPaths := searchedPaths + '; ';
+      searchedPaths := searchedPaths + Candidate;
+      if FileExists(Candidate) then
+      begin
+        Result := Candidate;
+        Exit;
+      end;
+    end;
+  finally
+    SearchDirs.Free;
+  end;
+end;
+
+function HasRuntimeLabel(const source, labelName: string): boolean;
+var
+  SourceLines: TStringList;
+  i: integer;
+  line: string;
+begin
+  Result := False;
+  SourceLines := TStringList.Create;
+  try
+    SourceLines.Text := source;
+    for i := 0 to SourceLines.Count - 1 do
+    begin
+      line := Trim(SourceLines[i]);
+      if SameText(Copy(line, 1, Length(labelName)), labelName) then
+      begin
+        if Length(line) = Length(labelName) then
+        begin
+          Result := True;
+          Exit;
+        end;
+        if line[Length(labelName) + 1] in [#9, ' ', ';'] then
+        begin
+          Result := True;
+          Exit;
+        end;
+      end;
+    end;
+  finally
+    SourceLines.Free;
+  end;
+end;
+
+procedure ResolveRuntimeLibraries;
+var
+  i: integer;
+  hasExpectedLabel: boolean;
+  fileName, searchedPaths, contents, expectedLabel: string;
+  Lines: TStringList;
+
+  procedure ValidateRuntimeCalls(const source: string);
+  var
+    CallLines: TStringList;
+    line, target, upperLine: string;
+    lineIndex, targetEnd, commentStart: integer;
+  begin
+    CallLines := TStringList.Create;
+    try
+      CallLines.Text := source;
+      for lineIndex := 0 to CallLines.Count - 1 do
+      begin
+        line := Trim(CallLines[lineIndex]);
+        upperLine := UpperCase(line);
+        if (Copy(upperLine, 1, 4) <> 'CALL') or (Length(line) < 5) or
+          not (line[5] in [#9, ' ']) then
+          Continue;
+
+        target := Trim(Copy(line, 6, Length(line)));
+        commentStart := Pos(';', target);
+        if commentStart > 0 then
+          Delete(target, commentStart, Length(target));
+        targetEnd := 1;
+        while (targetEnd <= Length(target)) and
+          not (target[targetEnd] in [#9, ' ']) do
+          Inc(targetEnd);
+        target := Copy(target, 1, targetEnd - 1);
+        if Copy(UpperCase(target), 1, 4) = 'LIB_' then
+          if not HasRuntimeLabel(GetLibText, UpperCase(target) + ':') then
+            raise Exception.CreateFmt(
+              'Runtime call to %s has no included routine definition', [target]);
+      end;
+    finally
+      CallLines.Free;
+    end;
+  end;
+
+begin
+  ClearLibText;
+  if RequiredLibraries.Count > 0 then
+  begin
+    AddLibText('; Runtime library routines'#13#10);
+    Lines := TStringList.Create;
+    try
+      for i := 0 to RequiredLibraries.Count - 1 do
+      begin
+        fileName := FindRuntimeLibrary(RequiredLibraries[i], searchedPaths);
+        if fileName = '' then
+          raise Exception.CreateFmt(
+            'Required runtime library "%s.lib" could not be resolved. Searched: %s',
+            [RequiredLibraries[i], searchedPaths]);
+
+        Lines.Clear;
+        Lines.LoadFromFile(fileName);
+        contents := Lines.Text;
+        if SameText(RequiredLibraries[i], 'divmod8') then
+        begin
+          expectedLabel := 'LIB_DIV8: and LIB_MOD8:';
+          hasExpectedLabel :=
+            HasRuntimeLabel(contents, 'LIB_DIV8:') and
+            HasRuntimeLabel(contents, 'LIB_MOD8:');
+        end
+        else
+        begin
+          expectedLabel := 'LIB_' + UpperCase(RequiredLibraries[i]) + ':';
+          hasExpectedLabel := HasRuntimeLabel(contents, expectedLabel);
+        end;
+        if not hasExpectedLabel then
+        begin
+          raise Exception.CreateFmt(
+            'Runtime library "%s" does not define expected label(s) %s',
+            [fileName, expectedLabel]);
+        end;
+
+        AddLibText('; ' + RequiredLibraries[i] + '.lib'#13#10);
+        AddLibText(contents);
+        if (contents <> '') and (contents[Length(contents)] <> #10) then
+          AddLibText(#13#10);
+        AddLibText(#13#10);
+      end;
+    finally
+      Lines.Free;
+    end;
+  end;
+
+  ValidateRuntimeCalls(asmtext);
+  ValidateRuntimeCalls(GetLibText);
+end;
+
+
 {--------------------------------------------------------------}
 { Generate a Unique Label }
 
@@ -102,7 +611,6 @@ begin
    Inc(LCount);
 end;
 
-
 {--------------------------------------------------------------}
 { Post a Label To Output }
 
@@ -111,25 +619,641 @@ begin
    WritLn('  '+L+':');
 end;
 
-procedure load_x(s: string);
+procedure PostUserLabel(const L: string);
 begin
-  writln(#9'LP'#9'4'#9'; Load XL');
-  writln(#9'LIA'#9'LB(' + s + ')');
-  writln(#9'EXAM');
-  writln(#9'LP'#9'5'#9'; Load XH');
-  writln(#9'LIA'#9'HB(' + s + ')');
-  writln(#9'EXAM');
+   WritLn('  '+L+':'#9'; User label');
 end;
 
+procedure PostProcedureLabel(const name: string);
+begin
+   WritLn(name+':'#9'; Procedure');
+end;
+
+procedure EmitSkippedProcedureComment(const name: string);
+begin
+   WritLn('; Skipping procedure '+name+' (never used)');
+end;
+
+{--------------------------------------------------------------}
+{ Load X register pair with address }
+
+procedure load_x(s: string);
+begin
+  EmitInst('LP', '4', 'Load XL');
+  EmitInst('LIA', 'LB(' + s + ')');
+  EmitInst('EXAM');
+  EmitInst('LP', '5', 'Load XH');
+  EmitInst('LIA', 'HB(' + s + ')');
+  EmitInst('EXAM');
+end;
+
+{--------------------------------------------------------------}
+{ High-level Store functions (Task 4.1.1) }
+
+procedure StoreByteToReg(adr: integer; const name: string);
+begin
+  if adr <= 63 then
+    EmitInst('LP', IntToStr(adr), 'Store result in ' + name)
+  else
+    EmitInst('LIP', IntToStr(adr), 'Store result in ' + name);
+  EmitInst('EXAM');
+end;
+
+procedure StoreWordToReg(adr: integer; const name: string);
+begin
+  if adr < 64 then
+    EmitInst('LP', IntToStr(adr), 'Store 16bit variable ' + name)
+  else
+    EmitInst('LIP', IntToStr(adr), 'Store 16bit variable ' + name);
+  EmitInstComment('EXAM', 'LB');
+  EmitInst('EXAB');
+  EmitInstComment('INCP', 'HB');
+  EmitInst('EXAM');
+end;
+
+{--------------------------------------------------------------}
+{ High-level Store functions for local variables (Task 4.1.2) }
+
+procedure StoreByteToLocal(adr: integer; const name: string);
+begin
+  EmitInst('EXAB');  // temp save A (value to store) to B
+  EmitInst('LDR');   // get stack ptr R to A
+  EmitInst('ADIA', IntToStr(adr + 2 + pushcnt));  // add relative address
+  EmitInst('STP');   // move result to P (absolute address)
+  EmitInst('EXAB');  // restore A
+  EmitInstComment('EXAM', 'Store result in ' + name);  // store value to P location
+end;
+
+procedure StoreWordToLocal(adr: integer; const name: string);
+begin
+  EmitInst('PUSH'); Inc(pushcnt);  // temp save A
+  EmitInst('LDR');   // we overwrite A here
+  EmitInst('ADIA', IntToStr(adr + 2 + pushcnt));  // adr + size + pushcnt
+  EmitInst('STP');
+  EmitInst('POP'); Dec(pushcnt);   // restore A
+  EmitInstComment('EXAM', 'LB - Store result in ' + name);
+  EmitInst('EXAB');
+  EmitInst('DECP');
+  EmitInstComment('EXAM', 'HB');
+end;
+
+{--------------------------------------------------------------}
+{ High-level Store functions for XRAM variables (Task 4.1.3) }
+
+procedure StoreByteToXram(adr: integer; const name: string);
+begin
+  if adr <> -1 then
+    EmitInst('LIDP', IntToStr(adr), 'Store result in ' + name)
+  else
+    EmitInst('LIDP', name, 'Store result in ' + name);
+  EmitInst('STD');
+end;
+
+procedure StoreWordToXram(adr: integer; const name: string);
+begin
+  if adr <> -1 then
+    EmitInst('LIDP', IntToStr(adr), 'Store 16bit variable ' + name)
+  else
+    EmitInst('LIDP', name, 'Store 16bit variable ' + name);
+  EmitInstComment('STD', 'LB');
+  EmitInst('EXAB');
+  if (adr <> -1) and ((adr + 1) div 256 = adr div 256) then
+    EmitInst('LIDL', 'LB(' + IntToStr(adr) + '+1)')
+  else if adr <> -1 then
+    EmitInst('LIDP', IntToStr(adr) + '+1')
+  else
+    EmitInst('LIDP', name + '+1');  // PASM doesn't parse "name + 1"
+  EmitInstComment('STD', 'HB');
+end;
+
+procedure StoreFloatToReg(adr: integer; const name: string);
+begin
+  // store float from FloatXReg to memory mapped register area
+  if adr < 64 then
+    EmitInst('LP', '0x' + IntToHex(adr, 2), 'store float var ' + name)
+  else
+    EmitInst('LIP', '0x' + IntToHex(adr, 2), 'store float var ' + name);
+  EmitInst('LIQ', '0x' + IntToHex(FloatXReg, 2), 'from temp float reg');
+  EmitInst('LII', '7');
+  EmitInst('MVW', '');
+end;
+
+procedure StoreFloatToLocal(adr: integer; const name: string);
+var lb: string;
+begin
+  // a local variable is reverse-ordered in stack
+  EmitBlankLine;
+  EmitComment('Store FloatXReg onto local-float variable, reversed');
+  // to:
+  EmitInst('LDR'); // R -> A
+  EmitInst('EXAB'); // save R in B first
+  EmitInst('LDR'); // R -> A
+  EmitInst('ADIA', IntToStr(adr + 2 + pushcnt + 2)); // to: name end + 2
+  EmitInst('STR'); // now R points to the local variable start addr
+  // from:
+  EmitInst('LIP', '0x' + IntToHex(FloatXReg, 2), 'from: primary float reg addr');
+  // loop 8 times
+  EmitInst('LIJ', '8');
+  lb := NewLabel;
+  PostLabel(lb);
+  // move using LDM+PUSH
+  EmitInst('LDM'); // (P) -> A
+  EmitPush('Store float local');
+  EmitInst('INCP');
+  EmitInst('DECA');
+  EmitInst('JRNZM ' + lb);
+  EmitInst('EXAB'); // restore R
+  EmitInst('STR'); // A -> R
+end;
+
+procedure StoreFloatToXram(adr: integer; const name: string);
+begin
+  if adr <> -1 then
+    EmitInst('LIDP', '0x' + IntToHex(adr, 4), 'Store float var ' + name)
+  else
+    EmitInst('LIDP', name, 'store var ' + name);
+  EmitInst('LP', '0x' + IntToHex(FloatXReg, 2), 'temp float reg');
+  EmitInst('LII', '7');
+  EmitInst('EXWD', '');
+end;
+
+{--------------------------------------------------------------}
+{ High-level Load functions for global variables in registers (Task 4.1.4) }
+
+procedure LoadByteConstant(const value: string);
+begin
+  EmitInst('LIA', value, 'Load byte constant ' + value);
+end;
+
+procedure LoadWordConstant(const value: string);
+begin
+  EmitInst('LIA', 'LB(' + value + ')', 'Load word constant LB');
+  EmitInst('LIB', 'HB(' + value + ')', 'Load word constant HB');
+end;
+
+procedure LoadFloatConstant(const value: string; const bcd: RawByteString; isZero: boolean);
+var lb: string;
+begin
+  if not isZero then
+  begin
+    lb := 'C_' + NewLabel;
+    varfcode(bcd, lb);
+    EmitInst('LIDP', lb + ' ; Load floating-point constant: ' + value);
+  end
+  else
+    EmitInst('LIA 00');
+  EmitInst('LP', '0x' + IntToHex(FloatXReg, 2) + ' ; temporary store point');
+  EmitInst('LII 07');
+  if not isZero then
+    EmitInst('MVWD')
+  else
+    EmitInst('FILM');
+end;
+
+procedure LoadFloatFromReg(adr: integer; const name: string);
+begin
+  EmitInstComment('LIQ 0x' + IntToHex(adr, 2), 'from here');
+  EmitInst('LP', '0x' + IntToHex(FloatXReg, 2), 'to temporary store');
+  EmitInst('LII 7');
+  EmitInst('MVW ; (Q) -> (FloatXReg), 8 bytes');
+end;
+
+procedure LoadFloatFromLocal(adr: integer; const name: string);
+var lb: string;
+begin
+  // Local floats are reverse-ordered on the stack; save and restore R.
+  EmitBlankLine;
+  EmitComment('Load local-float var into FloatXReg, reversed');
+  EmitInst('LDR');
+  EmitInst('EXAB');
+  EmitInst('LDR');
+  EmitInst('ADIA', IntToStr(adr + pushcnt + 2 - 7), 'from: ' + name + ' offset');
+  EmitInst('STR');
+  EmitInstComment('LIP 0x' + IntToHex(FloatXReg + 7, 2), 'to: primary float reg end addr');
+  EmitInstComment('LIJ 8', 'move 8 bytes');
+  lb := NewLabel;
+  PostLabel(lb);
+  EmitPop;
+  EmitInst('EXAM');
+  EmitInst('DECP');
+  EmitInst('DECJ');
+  EmitInst('JRNZM ' + lb);
+  EmitInst('EXAB');
+  EmitInst('STR');
+end;
+
+procedure LoadFloatFromXram(adr: integer; const name: string);
+begin
+  if adr <> -1 then
+    EmitInst('LIDP', '0x' + IntToHex(adr, 4), 'Load variable ' + name)
+  else
+    EmitInst('LIDP', name + '+1', 'Load variable ' + name);
+  EmitInst('LP', '0x' + IntToHex(FloatXReg, 2) + ' ; to temporary store');
+  EmitInst('LII 07');
+  EmitInst('MVWD ; (DP) -> (P), I+1 times');
+end;
+
+procedure LoadByteFromReg(adr: integer; const name: string);
+begin
+  if adr < 64 then
+    EmitInst('LP', IntToStr(adr), 'Load variable ' + name)
+  else
+    EmitInst('LIP', IntToStr(adr), 'Load variable ' + name);
+  EmitInst('LDM');
+end;
+
+procedure LoadWordFromReg(adr: integer; const name: string);
+begin
+  if adr < 64 then
+    EmitInst('LP', IntToStr(adr + 1), 'Load 16bit variable ' + name)
+  else
+    EmitInst('LIP', IntToStr(adr + 1), 'Load 16bit variable ' + name);
+  EmitInstComment('LDM', 'HB');
+  EmitInst('EXAB');
+  EmitInstComment('DECP', 'LB');
+  EmitInst('LDM');
+end;
+
+{--------------------------------------------------------------}
+{ High-level Load functions for local variables (Task 4.1.5) }
+
+procedure LoadByteFromLocal(adr: integer; const name: string);
+begin
+  EmitInst('LDR');
+  EmitInst('ADIA', IntToStr(adr + 2 + pushcnt));
+  EmitInst('STP');
+  EmitInstComment('LDM', 'Load variable ' + name);
+end;
+
+procedure LoadWordFromLocal(adr: integer; const name: string);
+begin
+  EmitInst('LDR');
+  EmitInst('ADIA', IntToStr(adr + 1 + pushcnt));
+  EmitInst('STP');
+  EmitInstComment('LDM', 'HB - Load variable ' + name);
+  EmitInst('EXAB');
+  EmitInst('INCP');
+  EmitInstComment('LDM', 'LB');
+end;
+
+{--------------------------------------------------------------}
+{ High-level Load functions for XRAM variables (Task 4.1.6) }
+
+procedure LoadByteFromXram(adr: integer; const name: string);
+begin
+  if adr <> -1 then
+    EmitInst('LIDP', IntToStr(adr), 'Load variable ' + name)
+  else
+    EmitInst('LIDP', name, 'Load variable ' + name);
+  EmitInst('LDD');
+end;
+
+procedure LoadWordFromXram(adr: integer; const name: string);
+begin
+  if adr <> -1 then
+    EmitInst('LIDP', IntToStr(adr + 1), 'Load 16bit variable ' + name)
+  else
+    EmitInst('LIDP', name + '+1', 'Load 16bit variable ' + name);
+  EmitInstComment('LDD', 'HB');
+  EmitInst('EXAB');
+  if (adr <> -1) and ((adr + 1) div 256 = adr div 256) then
+    EmitInst('LIDL', 'LB(' + IntToStr(adr) + ')')
+  else if adr <> -1 then
+    EmitInst('LIDP', IntToStr(adr))
+  else
+    EmitInst('LIDP', name);
+  EmitInstComment('LDD', 'LB');
+end;
+
+{--------------------------------------------------------------}
+{ High-level array element access functions - byte (Task 4.1.7) }
+
+procedure LoadArrayByteFromReg(adr: integer; const name: string);
+begin
+  EmitInst('LIB', IntToStr(adr), 'Load array element from ' + name);
+  EmitInst('LP', '3');
+  EmitInst('ADM');
+  EmitInst('EXAB');
+  EmitInst('STP');
+  EmitInst('LDM');
+end;
+
+procedure LoadArrayByteFromXram(adr: integer; const name: string);
+begin
+  EmitPush('Load array element from ' + name);
+  EmitInst('LP', '5', 'HB of address');
+  if adr <> -1 then
+  begin
+    EmitInst('LIA', 'HB(' + IntToStr(adr) + '-1)');
+    EmitInst('EXAM');
+    EmitInst('LP', '4', 'LB');
+    EmitInst('LIA', 'LB(' + IntToStr(adr) + '-1)');
+  end else
+  begin
+    EmitInst('LIA', 'HB(' + name + '-1)');
+    EmitInst('EXAM');
+    EmitInst('LP', '4', 'LB');
+    EmitInst('LIA', 'LB(' + name + '-1)');
+  end;
+  EmitInst('EXAM');
+  EmitPop;
+  EmitInst('LIB', '0');
+  EmitInst('ADB');
+  EmitInst('IXL');
+end;
+
+procedure StoreArrayByteToReg(adr: integer; const name: string);
+begin
+  EmitInst('LIB', IntToStr(adr), 'Store array element from ' + name);
+  EmitInst('LP', '3');
+  EmitInst('ADM');
+  EmitInst('EXAB');
+  EmitInst('STP');
+  EmitInst('POP'); Dec(pushcnt);
+  EmitInst('EXAM');
+end;
+
+procedure StoreArrayByteToXram(adr: integer; const name: string);
+begin
+  EmitInstComment('PUSH', 'Store array element from ' + name); Inc(pushcnt);
+  EmitInst('LP', '7', 'HB of address');
+  if adr <> -1 then
+  begin
+    EmitInst('LIA', 'HB(' + IntToStr(adr) + '-1)');
+    EmitInst('EXAM');
+    EmitInst('LP', '6', 'LB');
+    EmitInst('LIA', 'LB(' + IntToStr(adr) + '-1)');
+  end else
+  begin
+    EmitInst('LIA', 'HB(' + name + '-1)');
+    EmitInst('EXAM');
+    EmitInst('LP', '6', 'LB');
+    EmitInst('LIA', 'LB(' + name + '-1)');
+  end;
+  EmitInst('EXAM');
+  EmitInst('POP'); Dec(pushcnt);
+  EmitInst('LIB', '0');
+  EmitInst('ADB');
+  EmitInst('POP'); Dec(pushcnt);
+  EmitInst('IYS');
+end;
+
+{--------------------------------------------------------------}
+{ High-level array element access functions - word (Task 4.1.8) }
+
+procedure LoadArrayWordFromReg(adr: integer; const name: string);
+begin
+  EmitInst('RC');
+  EmitInstComment('SL', 'index*2 for word array');
+  EmitInst('LII', IntToStr(adr), 'Load array element from ' + name);
+  EmitInst('LP', '0');
+  EmitInst('ADM');
+  EmitInst('EXAM');
+  EmitInst('STP');
+  EmitInstComment('LDM', 'HB');
+  EmitInst('EXAB');
+  EmitInst('DECP');
+  EmitInstComment('LDM', 'LB');
+end;
+
+procedure LoadArrayWordFromXram(adr: integer; const name: string);
+begin
+  EmitInst('RC');
+  EmitInstComment('SL', 'index*2 for word array');
+  EmitPush('Load array element from ' + name);
+  EmitInst('LP', '5', 'HB of address');
+  if adr <> -1 then
+  begin
+    EmitInst('LIA', 'HB(' + IntToStr(adr) + '-1)');
+    EmitInst('EXAM');
+    EmitInst('LP', '4', 'LB');
+    EmitInst('LIA', 'LB(' + IntToStr(adr) + '-1)');
+  end else
+  begin
+    EmitInst('LIA', 'HB(' + name + '-1)');
+    EmitInst('EXAM');
+    EmitInst('LP', '4', 'LB');
+    EmitInst('LIA', 'LB(' + name + '-1)');
+  end;
+  EmitInst('EXAM');
+  EmitPop;
+  EmitInst('LIB', '0');
+  EmitInst('ADB');
+  EmitInst('DX');
+  EmitInstComment('IXL', 'HB');
+  EmitInst('EXAB');
+  EmitInstComment('IXL', 'LB');
+  EmitInst('EXAB');
+end;
+
+procedure StoreArrayWordToReg(adr: integer; const name: string);
+begin
+  EmitInst('RC');
+  EmitInst('SL');
+  EmitInst('LII', IntToStr(adr), 'Store array element from ' + name);
+  EmitInst('LP', '0');
+  EmitInst('ADM');
+  EmitInst('EXAM');
+  EmitInst('STP');
+  EmitInst('INCP');
+  EmitInst('POP'); Dec(pushcnt);
+  EmitInst('EXAM');
+  EmitInst('DECP');
+  EmitInst('POP'); Dec(pushcnt);
+  EmitInst('EXAM');
+end;
+
+procedure StoreArrayWordToXram(adr: integer; const name: string);
+begin
+  EmitInst('RC');
+  EmitInst('SL');
+  EmitInstComment('PUSH', 'Store array element from ' + name); Inc(pushcnt);
+  EmitInst('LP', '7', 'HB of address');
+  if adr <> -1 then
+  begin
+    EmitInst('LIA', 'HB(' + IntToStr(adr) + '-1)');
+    EmitInst('EXAM');
+    EmitInst('LP', '6', 'LB');
+    EmitInst('LIA', 'LB(' + IntToStr(adr) + '-1)');
+  end else
+  begin
+    EmitInst('LIA', 'HB(' + name + '-1)');
+    EmitInst('EXAM');
+    EmitInst('LP', '6', 'LB');
+    EmitInst('LIA', 'LB(' + name + '-1)');
+  end;
+  EmitInst('EXAM');
+  EmitInst('POP'); Dec(pushcnt);
+  EmitInst('LIB', '0');
+  EmitInst('ADB');
+  EmitInst('POP'); Dec(pushcnt);
+  EmitInst('EXAB');
+  EmitInst('POP'); Dec(pushcnt);
+  EmitInst('IYS');
+  EmitInst('EXAB');
+  EmitInst('IYS');
+end;
+
+{--------------------------------------------------------------}
+{ Pointer dereferencing functions (Task 4.1.10) }
+
+procedure LoadPointerContentXram(const pnttyp, name: string);
+begin
+  EmitInst('LP', '4', 'XL');
+  EmitInst('EXAM');
+  EmitInst('LP', '5', 'XH');
+  EmitInst('EXAB');
+  EmitInst('EXAM');
+  EmitInst('DX');
+  if pnttyp <> 'word' then
+  begin
+    EmitRawAsmLine(#9 + 'IXL' + #9 + #9 + '; Load content *' + name);
+  end else
+  begin
+    EmitRawAsmLine(#9 + 'IXL' + #9 + #9 + '; Load content LB *' + name);
+    EmitInst('EXAB');
+    EmitRawAsmLine(#9 + 'IXL' + #9 + #9 + '; Load content HB *' + name);
+    EmitInst('EXAB');
+  end;
+end;
+
+procedure LoadPointerContentReg(const pnttyp, name: string);
+begin
+  EmitRawAsmLine(#9 + 'STP' + #9 + #9 + '; Set P');
+  if pnttyp <> 'word' then
+  begin
+    EmitRawAsmLine(#9 + 'LDM' + #9 + #9 + '; Load content *' + name);
+  end else
+  begin
+    EmitRawAsmLine(#9 + 'LDM' + #9 + #9 + '; Load content LB *' + name);
+    EmitInst('EXAB');
+    EmitInst('INCP');
+    EmitRawAsmLine(#9 + 'LDM' + #9 + #9 + '; Load content HB *' + name);
+    EmitInst('EXAB');
+  end;
+end;
+
+procedure StorePointerContentXram(const pnttyp, name: string);
+begin
+  EmitInst('LP', '6', 'YL');
+  EmitInst('EXAM');
+  EmitInst('LP', '7', 'YH');
+  EmitInst('EXAB');
+  EmitInst('EXAM');
+  EmitInst('DY');
+  if pnttyp <> 'word' then
+  begin
+    EmitPop;
+    EmitRawAsmLine(#9 + 'IYS' + #9 + #9 + '; Store content *' + name);
+  end else
+  begin
+    EmitPop;
+    EmitInst('EXAB');
+    EmitPop;
+    EmitRawAsmLine(#9 + 'IYS' + #9 + #9 + '; Store content LB *' + name);
+    EmitInst('EXAB');
+    EmitRawAsmLine(#9 + 'IYS' + #9 + #9 + '; Store content HB *' + name);
+  end;
+end;
+
+procedure StorePointerContentReg(const pnttyp, name: string);
+begin
+  EmitRawAsmLine(#9 + 'STP' + #9 + #9 + '; Set P');
+  if pnttyp <> 'word' then
+  begin
+    EmitPop;
+    EmitRawAsmLine(#9 + 'EXAM' + #9 + #9 + '; Store content *' + name);
+  end else
+  begin
+    EmitPop;
+    EmitInst('EXAB');
+    EmitPop;
+    EmitRawAsmLine(#9 + 'EXAM' + #9 + #9 + '; Store content LB *' + name);
+    EmitInst('EXAB');
+    EmitRawAsmLine(#9 + 'EXAM' + #9 + #9 + '; Store content HB *' + name);
+  end;
+end;
+
+procedure LoadAddressOf(adr: integer; const name: string; isXram: boolean);
+begin
+  if isXram then
+  begin
+    if adr <> -1 then
+    begin
+      EmitInst('LIA', 'LB(' + IntToStr(adr) + ')', '&' + name);
+      EmitInst('LIB', 'HB(' + IntToStr(adr) + ')', '&' + name);
+    end else
+    begin
+      EmitInst('LIA', 'LB(' + name + ')', '&' + name);
+      EmitInst('LIB', 'HB(' + name + ')', '&' + name);
+    end;
+  end else
+  begin
+    EmitInst('LIA', IntToStr(adr), '&' + name);
+  end;
+end;
+
+{--------------------------------------------------------------}
+{ Increment / Decrement register helpers (Step 4.1.13) }
+
+procedure EmitIncReg(regAddr: integer);
+begin
+  // forward to overload with empty comment
+  EmitIncReg(regAddr, '');
+end;
+
+procedure EmitIncReg(regAddr: integer; const comment: string);
+begin
+  case regAddr of
+    0: if comment = '' then EmitInst('INCI') else EmitInstComment('INCI', comment);
+    1: if comment = '' then EmitInst('INCJ') else EmitInstComment('INCJ', comment);
+    2: if comment = '' then EmitInst('INCA') else EmitInstComment('INCA', comment);
+    3: if comment = '' then EmitInst('INCB') else EmitInstComment('INCB', comment);
+    8: if comment = '' then EmitInst('INCK') else EmitInstComment('INCK', comment);
+    9: if comment = '' then EmitInst('INCL') else EmitInstComment('INCL', comment);
+    10: if comment = '' then EmitInst('INCM') else EmitInstComment('INCM', comment);
+    11: if comment = '' then EmitInst('INCN') else EmitInstComment('INCN', comment);
+    12: if comment = '' then EmitInst('INCP') else EmitInstComment('INCP', comment);
+  else
+    // Generic fallback: increment A
+    if comment = '' then EmitInst('INCA') else EmitInstComment('INCA', comment);
+  end;
+end;
+
+procedure EmitDecReg(regAddr: integer);
+begin
+  // forward to overload with empty comment
+  EmitDecReg(regAddr, '');
+end;
+
+procedure EmitDecReg(regAddr: integer; const comment: string);
+begin
+  case regAddr of
+    0: if comment = '' then EmitInst('DECI') else EmitInstComment('DECI', comment);
+    1: if comment = '' then EmitInst('DECJ') else EmitInstComment('DECJ', comment);
+    2: if comment = '' then EmitInst('DECA') else EmitInstComment('DECA', comment);
+    3: if comment = '' then EmitInst('DECB') else EmitInstComment('DECB', comment);
+    8: if comment = '' then EmitInst('DECK') else EmitInstComment('DECK', comment);
+    9: if comment = '' then EmitInst('DECL') else EmitInstComment('DECL', comment);
+    10: if comment = '' then EmitInst('DECM') else EmitInstComment('DECM', comment);
+    11: if comment = '' then EmitInst('DECN') else EmitInstComment('DECN', comment);
+    12: if comment = '' then EmitInst('DECP') else EmitInstComment('DECP', comment);
+  else
+    // Generic fallback: decrement A
+    if comment = '' then EmitInst('DECA') else EmitInstComment('DECA', comment);
+  end;
+end;
+
+{--------------------------------------------------------------}
 
 procedure load_y(s: string);
 begin
-  writln(#9'LP'#9'6'#9'; Load YL');
-  writln(#9'LIA'#9'LB(' + s + ')');
-  writln(#9'EXAM');
-  writln(#9'LP'#9'7'#9'; Load YH');
-  writln(#9'LIA'#9'HB(' + s + ')');
-  writln(#9'EXAM');
+  EmitInst('LP', '6', 'Load YL');
+  EmitInst('LIA', 'LB(' + s + ')');
+  EmitInst('EXAM');
+  EmitInst('LP', '7', 'Load YH');
+  EmitInst('LIA', 'HB(' + s + ')');
+  EmitInst('EXAM');
 end;
 
 
@@ -138,14 +1262,15 @@ end;
 
 procedure addlib(lib: integer);
 begin
-  if libcnt = 0 then
-    libtext := libtext + '; LIB Code'#13#10;
-  Inc(libcnt);
-
-  if (libins[lib] = False) then
+  if (lib < Low(libins)) or (lib > High(libins)) then
+    raise Exception.CreateFmt('Unknown runtime library id %d', [lib]);
+  if libname[lib] = '' then
+    raise Exception.CreateFmt('Unknown runtime library id %d', [lib]);
+  if not libins[lib] then
   begin
     libins[lib] := True;
-    libtext := libtext + '.include ' + libname[lib] + '.lib'#13#10;
+    Inc(libcnt);
+    RequireRuntimeLibrary(libname[lib]);
   end;
 end;
 
@@ -155,39 +1280,39 @@ end;
 
 procedure varxram(Value, adr, size: integer; nm: string);
 begin
-  writln(#9'LIDP'#9 + IntToStr(adr) + #9'; Variable ' + nm + ' = ' + IntToStr(Value));
+  EmitInst('LIDP', IntToStr(adr), 'Variable ' + nm + ' = ' + IntToStr(Value));
   if size = 1 then
   begin
                 {if value = 0 then
-                        writln( #9'RA')
+                        EmitInst('RA')
                 else           }
-    writln(#9'LIA'#9 + IntToStr(Value));
-    writln(#9'STD');
+    EmitInst('LIA', IntToStr(Value));
+    EmitInst('STD');
   end
   else if size = 2 then
   begin
                 {if value mod 256 = 0 then
-                        writln( #9'RA')
+                        EmitInst('RA')
                 else     }
-    writln(#9'LIA'#9'LB(' + IntToStr(Value) + ')');
+    EmitInst('LIA', 'LB(' + IntToStr(Value) + ')');
 
-    writln(#9'STD');
+    EmitInst('STD');
     if adr div 256 = (adr + 1) div 256 then
-      writln(#9'LIDL'#9'LB(' + IntToStr(adr + 1) + ')')
+      EmitInst('LIDL', 'LB(' + IntToStr(adr + 1) + ')')
     else
-      writln(#9'LIDP'#9 + IntToStr(adr + 1));
+      EmitInst('LIDP', IntToStr(adr + 1));
 
     if Value mod 256 <> Value div 256 then
                 {if value div 256 = 0 then
-                        writln( #9'RA')
+                        EmitInst('RA')
                 else      }
-      writln(#9'LIA'#9'HB(' + IntToStr(Value) + ')');
-    writln(#9'STD');
+      EmitInst('LIA', 'HB(' + IntToStr(Value) + ')');
+    EmitInst('STD');
   end
   else if size = 8 then
-    writln(' ; varxram - Unsupported float');
+    EmitComment('varxram - Unsupported float');
 
-  writln('');
+  EmitBlankLine;
 end;
 {--------------------------------------------------------------}
 
@@ -195,12 +1320,13 @@ end;
 {--------------------------------------------------------------}
 { Generates init code for an array in xram }
 
-procedure varxarr(Value: string; adr, size: integer; nm, typ: string);
+procedure varxarr(Value: RawByteString; adr, size: integer; nm, typ: string);
 var
   i: integer;
   v, c: integer;
   s: string;
 begin
+
   if (size = 0) then exit;
 
   s := '';
@@ -224,21 +1350,21 @@ begin
   if ((typ = 'byte') or (typ = 'char')) and (size <= 5) then
   begin
     // Set up address and write 1st byte
-    writln(#9'LIDP'#9 + IntToStr(adr) + #9'; Variable ' + nm + ' = (' + s + ')');
+    EmitInst('LIDP', IntToStr(adr), 'Variable ' + nm + ' = (' + s + ')');
     v := Ord(Value[1]);
         { if v = 0 then
-                writln( #9'RA')
+                EmitInst('RA')
         else  }
-    writln(#9'LIA'#9 + IntToStr(v));
-    writln(#9'STD');
+    EmitInst('LIA', IntToStr(v));
+    EmitInst('STD');
 
     c := v;
     if size > 1 then for i := 2 to size do
       begin
         if (adr + i - 2) div 256 = (adr + i - 1) div 256 then
-          writln(#9'LIDL'#9'LB(' + IntToStr(adr + i - 1) + ')')
+          EmitInst('LIDL', 'LB(' + IntToStr(adr + i - 1) + ')')
         else
-          writln(#9'LIDP'#9 + IntToStr(adr + i - 1));
+          EmitInst('LIDP', IntToStr(adr + i - 1));
 
         if i <= length(Value) then
           v := Ord(Value[i])
@@ -248,26 +1374,26 @@ begin
         if v <> c then
         begin
                         {if v = 0 then
-                                writln( #9'RA')
+                                EmitInst('RA')
                         else         }
-          writln(#9'LIA'#9 + IntToStr(v));
-          writln(#9'STD');
+          EmitInst('LIA', IntToStr(v));
+          EmitInst('STD');
         end
         else
-          writln(#9'STD');
+          EmitInst('STD');
         c := v;
       end;
   end
   else if ((typ = 'byte') or (typ = 'char')) then
   begin
-    writln(#9'; Variable ' + nm + ' = (' + s + ')');
+    EmitComment('Variable ' + nm + ' = (' + s + ')');
     load_x(nm + '-1');
-    load_y(IntToStr(adr - 1));
-    writln(#9'LII'#9 + IntToStr(size) + #9'; Load I as counter');
-    writln(#9'IXL');
-    writln(#9'IYS');
-    writln(#9'DECI');
-    writln(#9'JRNZM'#9'4');
+    load_y(nm + '-1');
+    EmitInst('LII', IntToStr(size), 'Load I as counter');
+    EmitInst('IXL');
+    EmitInst('IYS');
+    EmitInst('DECI');
+    EmitInst('JRNZM', '4');
 
     addasm(nm + ':'#9'; Variable init data ' + nm);
     s := #9'.DB'#9 + s;
@@ -276,14 +1402,14 @@ begin
   end
   else if (typ = 'word') then
   begin
-    writln(#9'; Variable ' + nm + ' = (' + s + ')');
+    EmitComment('Variable ' + nm + ' = (' + s + ')');
     load_x(nm + '-1');
-    load_y(IntToStr(adr - 1));
-    writln(#9'LII'#9 + IntToStr(size * 2) + #9'; Load I as counter');
-    writln(#9'IXL');
-    writln(#9'IYS');
-    writln(#9'DECI');
-    writln(#9'JRNZM'#9'4');
+    load_y(nm + '-1');
+    EmitInst('LII', IntToStr(size * 2), 'Load I as counter');
+    EmitInst('IXL');
+    EmitInst('IYS');
+    EmitInst('DECI');
+    EmitInst('JRNZM', '4');
 
     addasm(nm + ':'#9'; Variable init data ' + nm);
     s := #9'.DW'#9 + s;
@@ -293,10 +1419,10 @@ begin
   else if (typ = 'float') then
   begin
     //...  TODO - float
-    writln(#9'; varxarr - Unsupported float ' + nm);
+    EmitComment('varxarr - Unsupported float ' + nm);
   end;
 
-  writln('');
+  EmitBlankLine;
 end;
 {--------------------------------------------------------------}
 
@@ -305,9 +1431,6 @@ end;
 { Generates init code for a var in code space }
 
 procedure varcode(Value, adr, size: integer; nm: string);
-var
-  i: integer;
-  s: string;
 begin
   if Value = -1 then Value := 0;
   addasm(nm + ':'#9'; Variable ' + nm + ' = ' + IntToStr(Value));
@@ -322,7 +1445,7 @@ end;
 {--------------------------------------------------------------}
 { Generates init code for an array in code space }
 
-procedure varcarr(Value: string; adr, size: integer; nm, typ: string);
+procedure varcarr(Value: RawByteString; adr, size: integer; nm, typ: string);
 var
   i: integer;
   s: string;
@@ -355,16 +1478,17 @@ end;
 
 { Generates init code for a float in code space }
 
-procedure varfcode(Value, nm: string);
+procedure varfcode(Value: RawByteString; nm: string);
 var
   i: integer;
   s: string;
 begin
-
   s := '';
-  for i := 1 to 7 do begin s := s + '0x'+IntToHex(ord(Value[i])) + ',';
+  for i := 1 to 7 do begin
+    s := s + '0x'+IntToHex(ord(Value[i]), 2) + ',';
   end;
-  s := s + '0x'+IntToHex(ord(Value[8]));
+  s := s + '0x'+IntToHex(ord(Value[8]), 2);
+
 
   addasm(nm + ':'#9'; Floating-point  ' + nm ) ;
   s := #9'.DB'#9 + s;
@@ -374,7 +1498,7 @@ end;
 {--------------------------------------------------------------}
 
 { Generates init code for a float array in code space }
-procedure varfarr(Value: string; size: integer; nm: string);
+procedure varfarr(Value: RawByteString; size: integer; nm: string);
 var
   i, j : integer;
   s: string;
@@ -384,8 +1508,8 @@ begin
             + ' array (' + IntToStr( size ) + ')' ) ;
   for j := 0 to size-1 do begin
     s := '';
-    for i := 1 to 7 do s := s + '0x'+IntToHex(ord(Value[j*8 + i])) + ',';
-    s := s + '0x'+IntToHex(ord(Value[j*8 + 8]));
+    for i := 1 to 7 do s := s + '0x'+IntToHex(ord(Value[j*8 + i]), 2) + ',';
+    s := s + '0x'+IntToHex(ord(Value[j*8 + 8]), 2);
     s := #9'.DB'#9 + s + ' ; ' + IntToStr( j ) ;
     addasm(s);
   end;
@@ -402,46 +1526,45 @@ begin
   if ((adr = 0) or (adr = 1)) and (size = 1) then
   begin
     if adr = 0 then
-      writln(#9'LII'#9 + IntToStr(Value) + #9'; I is ' + nm + ' = ' + IntToStr(Value))
+      EmitInst('LII', IntToStr(Value), 'I is ' + nm + ' = ' + IntToStr(Value))
     else
-      writln(#9'LIJ'#9 + IntToStr(Value) + #9'; J is ' + nm + ' = ' + IntToStr(Value));
-    writln('');
+      EmitInst('LIJ', IntToStr(Value), 'J is ' + nm + ' = ' + IntToStr(Value));
+    EmitBlankLine;
     exit;
   end;
 
   if adr <= 63 then
-    writln(#9'LP'#9 + IntToStr(adr) + #9'; Variable ' + nm + ' = ' + IntToStr(Value))
+    EmitInst('LP', IntToStr(adr), 'Variable ' + nm + ' = ' + IntToStr(Value))
   else
   begin
-    writln(#9'LIP'#9 + IntToStr(adr) + #9'; Variable ' + nm +
-      ' = ' + IntToStr(Value));
+    EmitInst('LIP', IntToStr(adr), 'Variable ' + nm + ' = ' + IntToStr(Value));
   end;
   if size = 1 then
   begin
-    writln(#9'LIA'#9 + IntToStr(Value));
-    writln(#9'EXAM');
+    EmitInst('LIA', IntToStr(Value));
+    EmitInst('EXAM');
   end
   else if size = 2 then
   begin
                 { if value mod 256 = 0 then
-                        writln( #9'RA'#9'; LB')
+                        EmitInst('RA')
                 else    }
-    writln(#9'LIA'#9'LB(' + IntToStr(Value) + ')' + #9'; LB');
-    writln(#9'EXAM');
+    EmitInst('LIA', 'LB(' + IntToStr(Value) + ')', 'LB');
+    EmitInst('EXAM');
 
-    writln(#9'INCP');
+    EmitInst('INCP');
     if Value mod 256 <> Value div 256 then
                 { if value div 256 = 0 then
-                        writln( #9'RA'#9'; HB')    }
+                        EmitInst('RA')    }
     else
-      writln(#9'LIA'#9'HB(' + IntToStr(Value) + ')' + #9'; HB');
-    writln(#9'EXAM');
+      EmitInst('LIA', 'HB(' + IntToStr(Value) + ')', 'HB');
+    EmitInst('EXAM');
   end
   else if size = 8 then
   begin
-    writln(#9'; varreg - Unsupported float');
+    EmitComment('varreg - Unsupported float');
   end;
-  writln('');
+  EmitBlankLine;
 end;
 {--------------------------------------------------------------}
 
@@ -449,13 +1572,13 @@ end;
 {--------------------------------------------------------------}
 { Generates init code for an array variable in a register }
 
-procedure varrarr(Value: string; adr, size: integer; nm, typ: string);
+procedure varrarr(Value: RawByteString; adr, size: integer; nm, typ: string);
 var
   i: integer;
   s: string;
 begin
   if size = 0 then exit;
-  if typ = 'float' then writln(#9'; varrarr - Unsupported float');
+  if typ = 'float' then EmitComment('varrarr - Unsupported float');
 
   s := '';
   for i := 1 to size do
@@ -474,15 +1597,15 @@ begin
   end;
 
   if typ <> 'word' then
-    writln(#9'LII'#9 + IntToStr(size - 1) + #9'; Variable ' + nm + ' = (' + s + ')')
+    EmitInst('LII', IntToStr(size - 1), 'Variable ' + nm + ' = (' + s + ')')
   else
-    writln(#9'LII'#9 + IntToStr(size * 2 - 1) + #9'; Variable ' + nm + ' = (' + s + ')');
-  writln(#9'LIDP'#9 + nm);
+    EmitInst('LII', IntToStr(size * 2 - 1), 'Variable ' + nm + ' = (' + s + ')');
+  EmitInst('LIDP', nm);
   if adr <= 63 then
-    writln(#9'LP'#9 + IntToStr(adr))
+    EmitInst('LP', IntToStr(adr))
   else
-    writln(#9'LIP'#9 + IntToStr(adr));
-  writln(#9'MVWD');
+    EmitInst('LIP', IntToStr(adr));
+  EmitInst('MVWD');
 
   addasm(nm + ':'#9'; Variable init data ' + nm);
   if typ <> 'word' then
@@ -492,43 +1615,87 @@ begin
   addasm(s);
   addasm('');
 
-  writln('');
+  EmitBlankLine;
 end;
 {--------------------------------------------------------------}
 
+procedure EmitGlobalVariableInitialization(const name, typ: string;
+  address, size, initValue: integer; isXram, isAt, isArray: boolean;
+  const initData: RawByteString);
+begin
+  if isXram then
+  begin
+    if isAt then
+    begin
+      if initValue <> -1 then
+      begin
+        if not isArray then
+          varxram(initValue, address, size, name)
+        else
+          varxarr(initData, address, size, name, typ);
+      end;
+    end
+    else
+    begin
+      if not isArray then
+      begin
+        if typ <> 'float' then
+          varcode(initValue, address, size, name)
+        else
+          varfcode(initData, name);
+      end
+      else
+      begin
+        if typ <> 'float' then
+          varcarr(initData, address, size, name, typ)
+        else
+          varfarr(initData, size, name);
+      end;
+    end;
+  end
+  else if initValue <> -1 then
+  begin
+    if not isArray then
+      varreg(initValue, address, size, name)
+    else
+      varrarr(initData, address, size, name, typ);
+  end;
+end;
 
-{---------------------------------------------------------------}
+
+{--------------------------------------------------------------}
 { Comparison Equal }
 
 procedure CompEqual;
 begin
   if optype = otWord then
   begin
-    writln(#9'LP'#9'0');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM');
-    writln(#9'POP');
+    EmitInst('LP', '0');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_CPE16'#9'; Compare for equal');
+    EmitInst('CALL', 'LIB_CPE16', 'Compare for equal');
     addlib(CPE16);
   end
   else
   begin
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'LP'#9'3');
-    writln(#9'CPMA'#9#9'; Compare for equal');
-    {writln( #9'RA')}writln(#9'LIA'#9'0');
-    writln(#9'JRNZP'#9'2');
-    writln(#9'DECA');
+    EmitInst('LP', '3');
+    EmitInstComment('CPMA', 'Compare for equal');
+    {EmitInst('RA')}
+    EmitInst('LIA', '0');
+    EmitInst('JRNZP', '2');
+    EmitInst('DECA');
   end;
-  writln('');
+  EmitBlankLine;
 end;
 
 
@@ -539,31 +1706,32 @@ procedure CompNotEqual;
 begin
   if optype = otWord then
   begin
-    writln(#9'LP'#9'0');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM');
-    writln(#9'POP');
+    EmitInst('LP', '0');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_CPNE16'#9'; Compare not equal');
+    EmitInst('CALL', 'LIB_CPNE16', 'Compare not equal');
     addlib(CPNE16);
   end
   else
   begin
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'LP'#9'3');
-    writln(#9'CPMA'#9#9'; Compare for not equal');
-    {writln( #9'RA')}writln(#9'LIA'#9'0');
-    writln(#9'JRZP'#9'2');
-    writln(#9'DECA');
+    EmitInst('LP', '3');
+    EmitInstComment('CPMA', 'Compare for not equal');
+    {EmitInst('RA')}
+    EmitInst('LIA', '0');
+    EmitInst('JRZP', '2');
+    EmitInst('DECA');
   end;
-  writln('');
+  EmitBlankLine;
 end;
 
 
@@ -574,32 +1742,33 @@ procedure CompGrOrEq;
 begin
   if optype = otWord then
   begin
-    writln(#9'LP'#9'0');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM');
-    writln(#9'POP');
+    EmitInst('LP', '0');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_CPGE16'#9'; Compare for Greater or Equal');
+    EmitInst('CALL', 'LIB_CPGE16', 'Compare for Greater or Equal');
     addlib(CPGE16);
   end
   else
   begin
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'EXAB');
-    writln(#9'LP'#9'3');
-    writln(#9'CPMA'#9#9'; Compare for Greater or Equal');
-    {writln( #9'RA')}writln(#9'LIA'#9'0');
-    writln(#9'JRCP'#9'2');
-    writln(#9'DECA');
+    EmitInst('EXAB');
+    EmitInst('LP', '3');
+    EmitInstComment('CPMA', 'Compare for Greater or Equal');
+    {EmitInst('RA')}
+    EmitInst('LIA', '0');
+    EmitInst('JRCP', '2');
+    EmitInst('DECA');
   end;
-  writln('');
+  EmitBlankLine;
 end;
 
 
@@ -610,31 +1779,32 @@ procedure CompSmOrEq;
 begin
   if optype = otWord then
   begin
-    writln(#9'LP'#9'0');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM');
-    writln(#9'POP');
+    EmitInst('LP', '0');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_CPSE16'#9'; Compare for smaller or equal');
+    EmitInst('CALL', 'LIB_CPSE16', 'Compare for smaller or equal');
     addlib(CPSE16);
   end
   else
   begin
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'LP'#9'3');
-    writln(#9'CPMA'#9#9'; Compare for smaller or equal');
-    {writln( #9'RA')}writln(#9'LIA'#9'0');
-    writln(#9'JRCP'#9'2');
-    writln(#9'DECA');
+    EmitInst('LP', '3');
+    EmitInstComment('CPMA', 'Compare for smaller or equal');
+    {EmitInst('RA')}
+    EmitInst('LIA', '0');
+    EmitInst('JRCP', '2');
+    EmitInst('DECA');
   end;
-  writln('');
+  EmitBlankLine;
 end;
 
 
@@ -645,31 +1815,31 @@ procedure CompGreater;
 begin
   if optype = otWord then
   begin
-    writln(#9'LP'#9'0');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM');
-    writln(#9'POP');
+    EmitInst('LP', '0');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_CPG16'#9'; Compare for greater');
+    EmitInst('CALL', 'LIB_CPG16', 'Compare for greater');
     addlib(CPG16);
   end
   else
   begin
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'LP'#9'3');
-    writln(#9'CPMA'#9#9'; Compare for greater');
-    {writln( #9'RA')}writln(#9'LIA'#9'0');
-    writln(#9'JRNCP'#9'2');
-    writln(#9'DECA');
+    EmitInst('LP', '3');
+    EmitInstComment('CPMA', 'Compare for greater');
+    {EmitInst('RA')}EmitInst('LIA', '0');
+    EmitInst('JRNCP', '2');
+    EmitInst('DECA');
   end;
-  writln('');
+  EmitBlankLine;
 end;
 
 
@@ -680,32 +1850,33 @@ procedure CompSmaller;
 begin
   if optype = otWord then
   begin
-    writln(#9'LP'#9'0');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM');
-    writln(#9'POP');
+    EmitInst('LP', '0');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_CPS16'#9'; Compare for smaller');
+    EmitInst('CALL', 'LIB_CPS16', 'Compare for smaller');
     addlib(CPS16);
   end
   else
   begin
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'EXAB');
-    writln(#9'LP'#9'3');
-    writln(#9'CPMA'#9#9'; Compare for smaller');
-    {writln( #9'RA')}writln(#9'LIA'#9'0');
-    writln(#9'JRNCP'#9'2');
-    writln(#9'DECA');
+    EmitInst('EXAB');
+    EmitInst('LP', '3');
+    EmitInstComment('CPMA', 'Compare for smaller');
+    {EmitInst('RA')}
+    EmitInst('LIA', '0');
+    EmitInst('JRNCP', '2');
+    EmitInst('DECA');
   end;
-  writln('');
+  EmitBlankLine;
 end;
 
 {---------------------------------------------------------------}
@@ -713,7 +1884,7 @@ end;
 
 procedure BranchAbs(L: string);
 begin
-  writln(#9'JP'#9 + L);
+  EmitInst('JP', L);
 end;
 
 {---------------------------------------------------------------}
@@ -721,7 +1892,7 @@ end;
 
 procedure Branch(L: string);
 begin
-  writln(#9'RJMP'#9 + L);
+  EmitInst('RJMP', L);
 end;
 
 
@@ -730,9 +1901,9 @@ end;
 
 procedure BranchFalse(L: string);
 begin
-  writln(#9'TSIA'#9'255'#9'; Branch if false');
-  writln(#9'JRZP'#9 + L);
-  writln('');
+  EmitInst('TSIA', '255', 'Branch if false');
+  EmitInst('JRZP', L);
+  EmitBlankLine;
 end;
 
 {---------------------------------------------------------------}
@@ -740,9 +1911,9 @@ end;
 
 procedure BranchAbsFalse(L: string);
 begin
-  writln(#9'TSIA'#9'255'#9'; Branch if false');
-  writln(#9'JPZ'#9 + L);
-  writln('');
+  EmitInst('TSIA', '255', 'Branch if false');
+  EmitInst('JPZ', L);
+  EmitBlankLine;
 end;
 
 {--------------------------------------------------------------}
@@ -752,46 +1923,46 @@ procedure NotIt;
 begin
   if optype = otWord then
   begin
-    writln(#9'LP'#9'1');
-    writln(#9'ORIM'#9'255');
-    writln(#9'LP'#9'0');
-    writln(#9'ORIM'#9'255');
-    writln(#9'SBB'#9#9'; Negate');
-    writln(#9'LP'#9'1');
-    writln(#9'LDM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'0');
-    writln(#9'LDM');
+    EmitInst('LP', '1');
+    EmitInst('ORIM', '255');
+    EmitInst('LP', '0');
+    EmitInst('ORIM', '255');
+    EmitInstComment('SBB', 'Negate');
+    EmitInst('LP', '1');
+    EmitInst('LDM');
+    EmitInst('EXAB');
+    EmitInst('LP', '0');
+    EmitInst('LDM');
   end
   else
   begin
-    writln(#9'LIB'#9'0');
-    writln(#9'LP'#9'3');
-    writln(#9'SBM'#9#9'; Negate');
-    writln(#9'EXAB');
+    EmitInst('LIB', '0');
+    EmitInst('LP', '3');
+    EmitInstComment('SBM', 'Negate');
+    EmitInst('EXAB');
   end;
 {    if optype = otWord then
     begin
-        writln( #9'LP'#9'0');
-        writln( #9'EXAM');
-        writln( #9'LP'#9'1');
-        writln( #9'EXAB');
-        writln( #9'EXAM');
-        writln( #9'LIA'#9'255');
-        writln( #9'SBM'#9#9'; NOT HB');
-        writln( #9'EXAB');
-        writln( #9'EXAM');
-        writln( #9'EXAB');
-        writln( #9'LP'#9'0');
-        writln( #9'SBM'#9#9'; NOT LB');
-        writln( #9'EXAM');
+        EmitInst('LP', '0');
+        EmitInst('EXAM');
+        EmitInst('LP', '1');
+        EmitInst('EXAB');
+        EmitInst('EXAM');
+        EmitInst('LIA', '255');
+        EmitInstComment('SBM', 'NOT HB');
+        EmitInst('EXAB');
+        EmitInst('EXAM');
+        EmitInst('EXAB');
+        EmitInst('LP', '0');
+        EmitInstComment('SBM', 'NOT LB');
+        EmitInst('EXAM');
     end else
     begin
-        writln( #9'EXAB');
-        writln( #9'LIA'#9'255');
-        writln( #9'LP'#9'3');
-  writln( #9'SBM'#9#9'; NOT');
-        writln( #9'EXAB');
+        EmitInst('EXAB');
+        EmitInst('LIA', '255');
+        EmitInst('LP', '3');
+        EmitInstComment('SBM', 'NOT');
+        EmitInst('EXAB');
     end;}
 end;
 
@@ -805,25 +1976,25 @@ procedure Negate;
 begin
   if optype = otWord then
   begin
-    writln(#9'LP'#9'1');
-    writln(#9'ORIM'#9'255');
-    writln(#9'LP'#9'0');
-    writln(#9'ORIM'#9'255');
-    writln(#9'SBB'#9#9'; Negate');
-    writln(#9'LP'#9'1');
-    writln(#9'LDM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'0');
-    writln(#9'LDM');
+    EmitInst('LP', '1');
+    EmitInst('ORIM', '255');
+    EmitInst('LP', '0');
+    EmitInst('ORIM', '255');
+    EmitInstComment('SBB', 'Negate');
+    EmitInst('LP', '1');
+    EmitInst('LDM');
+    EmitInst('EXAB');
+    EmitInst('LP', '0');
+    EmitInst('LDM');
   end else if optype = otFloat then
   begin
-    writln(#9' ; TO-DO? Negate a floating point');
+    EmitComment('TO-DO? Negate a floating point');
   end else
   begin
-    writln(#9'LIB'#9'0');
-    writln(#9'LP'#9'3');
-    writln(#9'SBM'#9#9'; Negate');
-    writln(#9'EXAB');
+    EmitInst('LIB', '0');
+    EmitInst('LP', '3');
+    EmitInstComment('SBM', 'Negate');
+    EmitInst('EXAB');
   end;
 end;
 {--------------------------------------------------------------}
@@ -836,34 +2007,34 @@ procedure PopOr;
 begin
   if optype = otWord then
   begin
-    writln(#9'LP'#9'0');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM');
-    writln(#9'POP');
+    EmitInst('LP', '0');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'ORMA'#9#9'; OR HB');
-    writln(#9'LP'#9'0');
-    writln(#9'POP');
+    EmitInstComment('ORMA', 'OR HB');
+    EmitInst('LP', '0');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'ORMA'#9#9'; OR LB');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
+    EmitInstComment('ORMA', 'OR LB');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
   end else if optype = otFloat then
   begin
-    writln(#9' ; !!! USUPPORTED Floating-point OR');
+    EmitComment('!!! USUPPORTED Floating-point OR');
   end else
   begin
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'LP'#9'3');
-    writln(#9'ORMA'#9#9'; OR');
-    writln(#9'EXAB');
+    EmitInst('LP', '3');
+    EmitInstComment('ORMA', 'OR');
+    EmitInst('EXAB');
   end;
 end;
 
@@ -874,28 +2045,28 @@ procedure PopXor;
 begin
   if optype = otWord then
   begin
-    writln(#9'LP'#9'0');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM');
-    writln(#9'POP');
+    EmitInst('LP', '0');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_XOR16'#9'; XOR');
+    EmitInst('CALL', 'LIB_XOR16', 'XOR');
     addlib(XOR16);
     addlib(XOR8);
   end else if optype = otFloat then
   begin
-    writln(#9' ; !!! USUPPORTED Floating-point XOR');
+    EmitComment('!!! UNSUPPORTED Floating-point XOR');
   end else
   begin
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_XOR8'#9'; XOR');
+    EmitInst('CALL', 'LIB_XOR8', 'XOR');
     addlib(XOR8);
   end;
 end;
@@ -909,28 +2080,28 @@ procedure PopSL;
 begin
   if optype = otWord then
   begin
-    writln(#9'LP'#9'0');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM');
-    writln(#9'POP');
+    EmitInst('LP', '0');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_SL16'#9'; SL');
+    EmitInst('CALL', 'LIB_SL16', 'Shift left');
     addlib(SL16);
   end else if optype = otFloat then
   begin
-    writln(#9' ; !!! USUPPORTED Floating-point Shift');
+    EmitComment('!!! UNSUPPORTED Floating-point Shift');
   end
   else
   begin
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_SL8'#9'; Shift left');
+    EmitInst('CALL', 'LIB_SL8', 'Shift left');
     addlib(SL8);
   end;
 end;
@@ -944,26 +2115,26 @@ procedure PopSR;
 begin
   if optype = otWord then
   begin
-    writln(#9'LP'#9'0');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM');
-    writln(#9'POP');
+    EmitInst('LP', '0');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_SR16'#9'; SR');
+    EmitInst('CALL', 'LIB_SR16', 'Shift right');
     addlib(SR16);
   end else if optype = otFloat then
   begin
-    writln(#9' ; !!! UNSUPPORTED Floating-point Shift');
+    EmitComment('!!! UNSUPPORTED Floating-point Shift');
   end else begin
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_SR8'#9'; Shift right');
+    EmitInst('CALL', 'LIB_SR8', 'Shift right');
     addlib(SR8);
   end;
 end;
@@ -977,29 +2148,29 @@ procedure PopMod;
 begin
   if optype = otWord then
   begin
-    writln(#9'LP'#9'0');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM');
-    writln(#9'POP');
+    EmitInst('LP', '0');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_MOD16'#9'; Modulo');
+    EmitInst('CALL', 'LIB_MOD16', 'Modulo');
     addlib(MOD16);
   end
   else if optype = otFloat then
   begin
-    writln(#9' TO DO - Float Modulo');
+    EmitComment('TO DO - Float Modulo');
   end else
   begin
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_DIV8'#9'; Modulo');
-    writln(#9'EXAB');
+    EmitInst('CALL', 'LIB_DIV8', 'Modulo');
+    EmitInst('EXAB');
     addlib(DIVMOD8);
   end;
 end;
@@ -1013,47 +2184,49 @@ procedure PopAnd;
 begin
   if optype = otWord then
   begin
-    writln(#9'LP'#9'0');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM');
-    writln(#9'POP');
+    EmitInst('LP', '0');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'ANMA'#9#9'; AND HB');
-    writln(#9'LP'#9'0');
-    writln(#9'POP');
+    EmitInstComment('ANMA', 'AND HB');
+    EmitInst('LP', '0');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'ANMA'#9#9'; AND LB');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
+    EmitInstComment('ANMA', 'AND LB');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
   end else if optype = otFloat then
   begin
-    writln(#9' ; !!! UNSUPPORTED Floating-point AND');
+    EmitComment('!!! UNSUPPORTED Floating-point AND');
   end else
   begin
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'LP'#9'3');
-    writln(#9'ANMA'#9#9'; AND');
-    writln(#9'EXAB');
+    EmitInst('LP', '3');
+    EmitInstComment('ANMA', 'AND');
+    EmitInst('EXAB');
   end;
 end;
+
 {--------------------------------------------------------------}
 // to review and verify !
 procedure PopFloat;
 var i: integer;
 begin
-    writln(#9'LP 0x1F ; Pop 8 bytes, to Yreg'); /// Why YReg ???
+    EmitInst('LP', '0x1F', 'Pop 8 bytes, to Yreg');
     // Need to make a smarter ASM block! like Push
     for i := 0 to 7 do begin
-        writln(#9'POP'); dec(pushcnt);
-        writln(#9'EXAM');
-        writln(#9'DECP');  // should we go up?
+        EmitInst('POP');
+        dec(pushcnt);
+        EmitInst('EXAM');
+        EmitInst('DECP');  // should we go up?
     end;
 end;
 
@@ -1061,38 +2234,38 @@ end;
 { Push Primary to Stack }
 
 procedure Push;
-var i: integer; lb: String;
+var lb: String;
 begin
   if optype = otWord then
   begin
-    writln(#9'PUSH ; word (A, then B)');
+    EmitInst('PUSH', '', 'word (A, then B)');
     Inc(pushcnt);
-    writln(#9'EXAB');
-    writln(#9'PUSH');
+    EmitInst('EXAB');
+    EmitInst('PUSH');
     Inc(pushcnt);
   end
   else if optype = otFloat then
   begin
-    writln(#9'LP 0x'+IntToHex(FloatXReg,2)+' ; float');
-    writln(#9'LIJ 0x08');
+    EmitInst('LP', '0x'+IntToHex(FloatXReg,2), 'float');
+    EmitInst('LIJ', '0x08');
     lb := NewLabel;
     PostLabel(lb);
-    writln(#9'LDM');
-    writln(#9'PUSH'); inc(pushcnt);
-    writln(#9'INCP');
-    writln(#9'DECJ');
-    writln(#9'JRNZM '+ lb);
+    EmitInst('LDM');
+    EmitInst('PUSH'); inc(pushcnt);
+    EmitInst('INCP');
+    EmitInst('DECJ');
+    EmitInst('JRNZM', lb);
 {
     for i := 0 to 7 do begin
-      writln(#9'LDM');
-      writln(#9'PUSH'); inc(pushcnt);
-      writln(#9'INCP');
+      EmitInst('LDM');
+      EmitInst('PUSH'); inc(pushcnt);
+      EmitInst('INCP');
     end;
 }
   end
   else  // byte or char
   begin
-    writln(#9'PUSH ; byte');
+    EmitInst('PUSH', '', 'byte');
     Inc(pushcnt);
   end;
 end;
@@ -1102,50 +2275,49 @@ end;
 { Add TOS to Primary }
 
 procedure PopAdd;
-var i: integer;
 begin
   if optype = otWord then
   begin
-    writln(#9'LP'#9'0');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM');
-    writln(#9'POP');
+    EmitInst('LP', '0');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'EXAB');
-    writln(#9'POP'); dec(pushcnt);
-    //      writln( #9'EXAB');
-    writln(#9'LP'#9'0');
-    writln(#9'ADB'#9#9'; Addition');
-    writln(#9'LP'#9'1');
-    writln(#9'LDM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'0');
-    writln(#9'LDM');
+    EmitInst('EXAB');
+    EmitInst('POP'); dec(pushcnt);
+    //      EmitInst('EXAB');
+    EmitInst('LP', '0');
+    EmitInstComment('ADB', 'Addition');
+    EmitInst('LP', '1');
+    EmitInst('LDM');
+    EmitInst('EXAB');
+    EmitInst('LP', '0');
+    EmitInst('LDM');
   end
   else if optype = otFloat then
   begin
-    writln(#9'; PopAdd float');
+    EmitComment('PopAdd float');
     PopFloat;
-    writln( #9'LP 0x10 ; FloatXReg --> Xreg; (Q) -> (P), I+1 times' );
-    writln( #9'LIQ 0x'+IntToHex(FloatXReg,2) );
-    writln( #9'LII 7'); // 8 bytes
-    writln( #9'MVW');
+    EmitInst('LP', '0x10', 'FloatXReg --> Xreg; (Q) -> (P), I+1 times');
+    EmitInst('LIQ', '0x'+IntToHex(FloatXReg,2));
+    EmitInst('LII', '7');
+    EmitInst('MVW');
     // Floating point addition
-    writln( #9'CALL 0x10C2 ; Xreg + Yreg -> Xreg ( PC-1403 only? )');
-    writln( #9'LP 0x'+IntToHex(FloatXReg,2)+' ; Xreg --> FloatXReg; (Q) -> (P), I+1 times' );
-    writln( #9'LIQ 0x10' );
-    writln( #9'LII 7'); // 8 bytes
-    writln( #9'MVW');
+    EmitInst('CALL', '0x10C2', 'Xreg + Yreg -> Xreg ( PC-1403 only? )');
+    EmitInst('LP', '0x'+IntToHex(FloatXReg,2), 'Xreg --> FloatXReg; (Q) -> (P), I+1 times');
+    EmitInst('LIQ', '0x10');
+    EmitInst('LII', '7');
+    EmitInst('MVW');
   end else
   begin
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'LP'#9'3');
-    writln(#9'ADM'#9#9'; Addition');
-    writln(#9'EXAB');
+    EmitInst('LP', '3');
+    EmitInstComment('ADM', 'Addition');
+    EmitInst('EXAB');
   end;
 end;
 
@@ -1157,45 +2329,45 @@ procedure PopSub;
 begin
   if optype = otWord then
   begin
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM');
-    writln(#9'POP');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'EXAM');
-    writln(#9'LP'#9'0');
-    writln(#9'EXAM');
-    writln(#9'POP');
+    EmitInst('EXAM');
+    EmitInst('LP', '0');
+    EmitInst('EXAM');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'EXAM');
-    writln(#9'SBB'#9#9'; Subtraction');
-    writln(#9'LP'#9'1');
-    writln(#9'LDM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'0');
-    writln(#9'LDM');
+    EmitInst('EXAM');
+    EmitInstComment('SBB', 'Subtraction');
+    EmitInst('LP', '1');
+    EmitInst('LDM');
+    EmitInst('EXAB');
+    EmitInst('LP', '0');
+    EmitInst('LDM');
   end else if optype = otFloat then
   begin
-    writln(#9'; PopSub float');
+    EmitComment('PopSub float');
     PopFloat;
-    writln( #9'LP 0x10 ; FloatXReg --> Xreg; (Q) -> (P), I+1 times' );
-    writln( #9'LIQ 0x'+IntToHex(FloatXReg,2) );
-    writln( #9'LII 7'); // 8 bytes
-    writln( #9'MVW');
+    EmitInst('LP', '0x10', 'FloatXReg --> Xreg; (Q) -> (P), I+1 times');
+    EmitInst('LIQ', '0x'+IntToHex(FloatXReg,2));
+    EmitInst('LII', '7');
+    EmitInst('MVW');
     // Floating point subtraction
-    writln( #9'CALL 0x10D8 ; Yreg - Xreg -> Xreg ( PC-1403 only? )');
-    writln( #9'LP 0x'+IntToHex(FloatXReg,2)+' ; Xreg --> FloatXReg; (Q) -> (P), I+1 times' );
-    writln( #9'LIQ 0x10' );
-    writln( #9'LII 7'); // 8 bytes
-    writln( #9'MVW');
+    EmitInst('CALL', '0x10D8', 'Yreg - Xreg -> Xreg ( PC-1403 only? )');
+    EmitInst('LP', '0x'+IntToHex(FloatXReg,2), 'Xreg --> FloatXReg; (Q) -> (P), I+1 times');
+    EmitInst('LIQ', '0x10');
+    EmitInst('LII', '7');
+    EmitInst('MVW');
   end else
   begin
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'LP'#9'3');
-    writln(#9'EXAB');
-    writln(#9'SBM'#9#9'; Subtraction');
-    writln(#9'EXAB');
+    EmitInst('LP', '3');
+    EmitInst('EXAB');
+    EmitInstComment('SBM', 'Subtraction');
+    EmitInst('EXAB');
   end;
 end;
 {--------------------------------------------------------------}
@@ -1208,38 +2380,38 @@ procedure PopMul;
 begin
   if optype = otWord then
   begin
-    writln(#9'LP'#9'0');
-    writln(#9'EXAM');
-    writln(#9'EXAB');
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM');
-    writln(#9'POP');
+    EmitInst('LP', '0');
+    EmitInst('EXAM');
+    EmitInst('EXAB');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_MUL16'#9'; Multiplication');
+    EmitInst('CALL', 'LIB_MUL16', 'Multiplication');
     addlib(MUL16);
   end else if optype = otFloat then
   begin
-    writln(#9'; PopMul float');
+    EmitComment('PopMul float');
     PopFloat;
-    writln( #9'LP 0x10 ; FloatXReg --> Xreg; (Q) -> (P), I+1 times' );
-    writln( #9'LIQ 0x'+IntToHex(FloatXReg,2) );
-    writln( #9'LII 7'); // 8 bytes
-    writln( #9'MVW');
+    EmitInst('LP', '0x10', 'FloatXReg --> Xreg; (Q) -> (P), I+1 times');
+    EmitInst('LIQ', '0x'+IntToHex(FloatXReg,2));
+    EmitInst('LII', '7');
+    EmitInst('MVW');
     // Floating point multiplication
-    writln( #9'CALL 0x10E1 ; Yreg * Xreg -> Xreg ( PC-1403 only? )');
-    writln( #9'LP 0x'+IntToHex(FloatXReg,2)+' ; Xreg --> FloatXReg; (Q) -> (P), I+1 times' );
-    writln( #9'LIQ 0x10' );
-    writln( #9'LII 7'); // 8 bytes
-    writln( #9'MVW');
+    EmitInst('CALL', '0x10E1', 'Yreg * Xreg -> Xreg ( PC-1403 only? )');
+    EmitInst('LP', '0x'+IntToHex(FloatXReg,2), 'Xreg --> FloatXReg; (Q) -> (P), I+1 times');
+    EmitInst('LIQ', '0x10');
+    EmitInst('LII', '7');
+    EmitInst('MVW');
   end else
   begin
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_MUL8'#9'; Multiplication');
+    EmitInst('CALL', 'LIB_MUL8', 'Multiplication');
     addlib(MUL8);
   end;
 end;
@@ -1252,50 +2424,147 @@ begin
   // TODO - HANDLE RUNTIME ERRORS! (EG. DIV BY ZERO)
   if optype = otWord then
   begin
-    writln(#9'; 16 bit division B:A / J:I -> B:A' );
-    writln(#9'LP'#9'0');
-    writln(#9'EXAM'); // A -> I
-    writln(#9'EXAB');
-    writln(#9'LP'#9'1');
-    writln(#9'EXAM'); // B -> J
-    writln(#9'POP');
+    EmitComment ( '16 bit division B:A / J:I -> B:A' );
+    EmitInst('LP', '0');
+    EmitInst('EXAM');  // A -> I
+    EmitInst('EXAB');
+    EmitInst('LP', '1');
+    EmitInst('EXAM');  // B -> J
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_DIV16'#9'; Division'); // Carry set on error
+    EmitInst('CALL', 'LIB_DIV16', 'Division');
     addlib(DIV16);
   end else if optype = otFloat then
   begin
-    writln(#9'; PopDiv float');
+    EmitComment('PopDiv float');
     PopFloat;
-    writln( #9'LP 0x10 ; FloatXReg --> Xreg; (Q) -> (P), I+1 times' );
-    writln( #9'LIQ 0x'+IntToHex(FloatXReg,2) );
-    writln( #9'LII 7'); // 8 bytes
-    writln( #9'MVW');
+    EmitInst('LP', '0x10', 'FloatXReg --> Xreg; (Q) -> (P), I+1 times');
+    EmitInst('LIQ', '0x'+IntToHex(FloatXReg,2));
+    EmitInst('LII', '7');
+    EmitInst('MVW');
     // Floating point division
-    writln( #9'CALL 0x10EA ; Yreg / Xreg -> Xreg ( PC-1403 only? )');
-    writln( #9'LP 0x'+IntToHex(FloatXReg,2)+' ; Xreg --> FloatXReg; (Q) -> (P), I+1 times' );
-    writln( #9'LIQ 0x10' );
-    writln( #9'LII 7'); // 8 bytes
-    writln( #9'MVW');
+    EmitInst('CALL', '0x10EA', 'Yreg / Xreg -> Xreg ( PC-1403 only? )');
+    EmitInst('LP', '0x'+IntToHex(FloatXReg,2), 'Xreg --> FloatXReg; (Q) -> (P), I+1 times');
+    EmitInst('LIQ', '0x10');
+    EmitInst('LII', '7');
+    EmitInst('MVW');
   end else
   begin
-    writln(#9'EXAB');
-    writln(#9'POP');
+    EmitInst('EXAB');
+    EmitInst('POP');
     Dec(pushcnt);
-    writln(#9'CALL'#9'LIB_DIV8'#9'; Division');
+    EmitInst('CALL', 'LIB_DIV8', 'Division');
     addlib(DIVMOD8);
   end;
 end;
 {--------------------------------------------------------------}
 
 
+{--------------------------------------------------------------}
+{ Stack management functions (Task 4.1.12) }
+
+{ Allocate 'bytes' bytes on the stack.
+  If bytes < 8: emit PUSH x bytes (each increments pushcnt).
+  Otherwise: use R-register decrement via LP/EXAM/LDR/SBIA/STR/EXAM. }
+procedure AllocStackSpace(bytes: integer);
+var c: integer;
 begin
-  for libcnt := 0 to 100 do
-    libins[libcnt] := False;
+  if bytes < 8 then
+  begin
+    for c := 1 to bytes do
+    begin
+      EmitInst('PUSH');
+      Inc(pushcnt);
+    end;
+  end else
+  begin
+    EmitInst('LP',   '0');
+    EmitInst('EXAM');
+    EmitInst('LDR');
+    EmitInst('SBIA', IntToStr(bytes));
+    Inc(pushcnt, bytes);
+    EmitInst('STR');
+    EmitInst('EXAM');
+  end;
+end;
+
+{ Restore 'bytes' bytes from the stack after a procedure call.
+  isWord  → word return value in A:B (LP/EXAM/LDR/ADIA/STR/EXAM)
+  hasReturn (and not isWord) → byte return value in A (EXAB/LDR/ADIA/STR/EXAB)
+  neither → no return value; use POP x n (n<4) or LDR/ADIA/STR }
+procedure FreeStackSpace(bytes: integer; hasReturn, isWord: boolean);
+var i: integer;
+begin
+  EmitComment('restore stack pointer');
+  if isWord then
+  begin
+    EmitInst('LP',   '0');
+    EmitInst('EXAM');
+    EmitInst('LDR');
+    EmitInst('ADIA', IntToStr(bytes));
+    Dec(pushcnt, bytes);
+    EmitInst('STR');
+    EmitInst('EXAM');
+  end else if hasReturn then
+  begin
+    EmitInst('EXAB');
+    EmitInst('LDR');
+    EmitInst('ADIA', IntToStr(bytes));
+    Dec(pushcnt, bytes);
+    EmitInst('STR');
+    EmitInst('EXAB');
+  end else
+  begin
+    // no return value — we can overwrite A
+    if bytes < 4 then
+    begin
+      for i := 1 to bytes do
+      begin
+        EmitInst('POP');
+        Dec(pushcnt);
+      end;
+    end else
+    begin
+      EmitInst('LDR');
+      EmitInst('ADIA', IntToStr(bytes));
+      Dec(pushcnt, bytes);
+      EmitInst('STR');
+    end;
+  end;
+end;
+
+procedure EmitProcCall(const name: string; localBytes, stackBytes: integer;
+  hasReturn, isWord: boolean; const localComments: array of string);
+var i: integer;
+begin
+  if localBytes > 0 then
+  begin
+    EmitBlankLine;
+    EmitComment('reserving stack (R recalc)...');
+    for i := Low(localComments) to High(localComments) do
+      EmitComment(localComments[i]);
+    AllocStackSpace(localBytes);
+  end;
+
+  EmitBlankLine;
+  EmitInst('CALL', name);
+
+  if stackBytes > 0 then
+  begin
+    EmitBlankLine;
+    FreeStackSpace(stackBytes, hasReturn, isWord);
+  end;
+end;
+{--------------------------------------------------------------}
+
+
+begin
+  RequiredLibraries := TStringList.Create;
+  ResetRuntimeLibraries;
   asmcnt := 0;
-  libcnt := 0;
 
   libname[MUL8] := 'mul8';
   libname[DIVMOD8] := 'divmod8';
@@ -1322,4 +2591,3 @@ begin
   libname[CPGE16] := 'cpge16';
 
 end.
-

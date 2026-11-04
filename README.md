@@ -139,7 +139,7 @@ For each new test cycle, rebuild the binary, load it on MAME and restart the pro
  (cmd)> copy tmp.bin [...]\mame
  (debugger) load tmp.bin,e030:maincpu
  (debugger) 'soft reset' (repeat, if device is not responding)
- (Sharp PC) <PRO> mode
+ (Sharp PC) go to <RUN> mode
  (Sharp PC) RUN
 ```
 
@@ -165,41 +165,42 @@ to open the *Lua* scripting console, where you can load the script with:
 MAME debugger version 0.267 (mame0267)
 Currently targeting pc1403 (Pocket Computer 1403)
 
-[MAME]> dofile ("[...]\key.lua") 
+[MAME]> dofile ("[...]\pc1403_key.lua") 
 ```
 
-Replace `[...]` with your path to the location of LitteC where `key.lua` is found, or even easier, copy `key.lua` to your mame home beforehand, and no need to add a path.
+Replace `[...]` with your path to the location of LitteC where `pc1403_key.lua` is found, or even easier, 
+copy `pc1403_key.lua` to your mame home beforehand, and no need to add a path.
 
-With the script loaded, the `key()` function can be used to send key strokes from the console directly to the emulated device keyboard.
+With the script loaded, the `keyline()` function can be used to send a line of key strokes (auto-terminated with ENTER)
+to the emulated device keyboard.
 
 Or, `keyfile()`, to send a list of keystrokes as from an input file.
 
-For example, the below is to enter some of the instructions seen before (note how "#" is a shortcut to toggle BASIC mode):
- 
+For example, the below is to enter some of the instructions seen before.
+Start with Sharp PC in 'CALC' mode (note how "|" is a shortcut to toggle BASIC mode):
 ```
-[MAME]> key("##POKE&ff01,&30,&e8")
-[MAME]> key("#")
-[MAME]> key("new")
-[MAME]> key("mem")
-[MAME]> key("1 call&e030")
-[MAME]> key("#")
+[MAME]> keyline("_||POKE&ff01,&30,&e8")
+[MAME]> keyline("|NEW")
+[MAME]> keyline("MEM")
+[MAME]> keyline("1 CALL&E030")
+[MAME]> keyline("|")
 ```
+MEM step should return with on the PC.
 
-Alternatively, using a text file to store the key strokes, named `pc1403_ini.key`:
-
+Alternatively, using a text file to store the same key strokes, named `pc1403_init.key`:
 ```
-##POKE&ff01,&30,&e8
-# 
-new 
-mem 
+_||POKE&ff01,&30,&e8
+| 
+NEW 
+MEM 
 1 call&e030 
-#
+|
 ```
 
-and *executing* it from the Lua console:
+and *executing* it from the Lua console (still with PC in CALC mode):
 
 ```
-[MAME]> keyfile("pc1403_ini.key")
+[MAME]> keyfile("pc1403_init.key")
 ```
 
 More could be done, like interacting with the debugger, etc., but this is just a starting point, for easier test replay.
@@ -261,5 +262,6 @@ For detailed test cases, a verification harness and current status, see the dedi
 
 - `Source/C/pasm/README.md` — contains test instructions, `test_pasm.ps1` usage, current pass/fail status and debugging notes.
 
-#### 🔄 LCC (Compiler) - TODO
-Future plans include migrating the main compiler component (`lcc`) to complete the fully modernized, cross-platform toolchain.
+#### 🔄 LCC2 (Compiler) - UNDER DEVELOPMENT
+The new C compiler, `lcc2`, is under development alongside the Pascal `lcc`.
+See the [lcc2 project](Source/C/lcc2/README.md), its [language manual](Docs/lcc2_manual.md), and the [library reference](Docs/lcc2_libraries.md) for the currently supported subset and usage.
