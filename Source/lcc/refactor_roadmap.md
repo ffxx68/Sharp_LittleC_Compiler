@@ -1,6 +1,7 @@
 # Refactor roadmap for `lcc` (SC61860)
 
-This document collects the analysis and the refactor plan to make the `lcc` compiler located in `Source/lcc` more modular, readable and maintainable.
+This document collects the analysis and the refactor plan to make the `lcc` compiler located in `Source/lcc` 
+more modular, readable and maintainable.
 
 ## Executive summary
 
