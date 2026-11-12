@@ -11,6 +11,24 @@ File di interesse
 - `test/test_complicated_3.asm` — test con molte istruzioni e casi particolari
 - `test/test_case.asm` — tabelle `CASE`/`ELSE`/`ENDCASE` con riferimenti in avanti e label che sono prefissi di label già definite
 
+## Compilazione su Windows e Linux
+
+Sono necessari GCC e GNU Make. Dalla directory `Source/C/pasm`, esegui:
+
+```sh
+make
+```
+
+Su Windows, con GNU Make e GCC (ad esempio da MSYS2/MinGW), il target è
+`pasm.exe`. Su Linux il target è `pasm`, eseguibile senza suffisso. Per
+compilare direttamente senza Make:
+
+```sh
+gcc -Wall -Wextra -O2 -std=c99 -o pasm pasm.c
+```
+
+Usa `make clean` per rimuovere gli eseguibili generati.
+
 Come funziona lo script di test
 - Esegui `test/test_pasm.ps1` dalla subdirectory `test`, passando il nome del file `.asm` come parametro. Lo script:
   - compila con PASM C locale producendo `<nome>_c.bin` (opzionalmente con `-d` per generare `debug.txt`),

@@ -11,13 +11,21 @@ target-specific contracts, and compatibility helpers.
 
 ## Build
 
-From this directory, run:
+The build requires GCC, Flex, Bison, and GNU Make. From this directory, run
+`make` on either Windows or Linux:
 
 ```sh
+# Windows (for example, in an MSYS2/MinGW shell)
 make
+.\lcc2.exe --help
+
+# Linux
+make
+./lcc2.exe --help
 ```
 
-The build requires GCC, Flex, Bison, and GNU Make, and produces `lcc2.exe`.
+The current Makefile produces `lcc2.exe` on both platforms; on Linux it is
+still a normal executable despite the `.exe` suffix.
 The project target builds the command-line compiler, AST arena, Flex scanner,
 Bison parser, scalar resolver, and code-generation module. The parser can be
 exercised through `lcc2_parse_string`; the backend emits byte/word constants,

@@ -15,19 +15,28 @@ The preprocessor supports the following directives:
 
 ## Building
 
-### Using GCC:
+The build requires GCC and GNU Make. From this directory:
+
+```sh
+make
+```
+
+This builds `lcpp` on Linux. On Windows, run `make` for `lcpp`, or use the
+Makefile's Windows target to produce `lcpp.exe`:
+
+```bash
+make windows
+```
+
+To build directly with GCC on either platform:
+
 ```bash
 gcc -Wall -Wextra -O2 -std=c99 -o lcpp lcpp.c
 ```
 
-### Using the Makefile:
-```bash
-make          # Build lcpp
-make windows  # Build lcpp.exe for Windows
-make clean    # Clean build artifacts
-make install  # Install to main directory
-make test     # Run tests
-```
+`make clean` removes both executable names. `make test` runs the Makefile's
+sample test; `make install` copies the default `lcpp` target to the parent
+project directory.
 
 ## Usage
 
