@@ -1,41 +1,41 @@
 # PASM (Assembler) — Tests and Verification
 
-Questo folder contiene la versione C di PASM assembler e una suite di test per la verifica binaria rispetto all'implementazione Pascal originale.
+This directory contains the C version of the PASM assembler and a test suite for binary comparison with the original Pascal implementation.
 
-File di interesse
-- `pasm.c`, `pasm.exe` (build locale)
-- `test/test_pasm.ps1` — Script PowerShell che esegue sia PASM C che Pascal (atteso in `..\..\..\pasm.exe`) e confronta i binari.
-- `test/test_simple.asm` — test minimale: LIA, LIB, STP, RTN
-- `test/test_complicated.asm` — test esteso: opcode, .DB, label, salti, chiamate, espressioni, direttiva EQU
-- `test/test_complicated_2.asm` — test esteso con funzionalità aggiuntive
-- `test/test_complicated_3.asm` — test con molte istruzioni e casi particolari
-- `test/test_case.asm` — tabelle `CASE`/`ELSE`/`ENDCASE` con riferimenti in avanti e label che sono prefissi di label già definite
+Files of interest
+- `pasm.c`, `pasm.exe` (local build)
+- `test/test_pasm.ps1` — PowerShell script that runs both the C and Pascal versions of PASM (the latter is expected at `..\..\..\pasm.exe`) and compares their binaries.
+- `test/test_simple.asm` — minimal test: LIA, LIB, STP, RTN
+- `test/test_complicated.asm` — extended test: opcodes, `.DB`, labels, jumps, calls, expressions, and the `EQU` directive
+- `test/test_complicated_2.asm` — extended test with additional features
+- `test/test_complicated_3.asm` — test with many instructions and edge cases
+- `test/test_case.asm` — `CASE`/`ELSE`/`ENDCASE` tables with forward references and labels whose names are prefixes of already-defined labels
 
-## Compilazione su Windows e Linux
+## Building on Windows and Linux
 
-Sono necessari GCC e GNU Make. Dalla directory `Source/C/pasm`, esegui:
+GCC and GNU Make are required. From the `Source/C/pasm` directory, run:
 
 ```sh
 make
 ```
 
-Su Windows, con GNU Make e GCC (ad esempio da MSYS2/MinGW), il target è
-`pasm.exe`. Su Linux il target è `pasm`, eseguibile senza suffisso. Per
-compilare direttamente senza Make:
+On Windows, with GNU Make and GCC (for example, in an MSYS2/MinGW shell), the
+target is `pasm.exe`. On Linux, the target is `pasm`, with no file extension.
+To compile directly without Make:
 
 ```sh
 gcc -Wall -Wextra -O2 -std=c99 -o pasm pasm.c
 ```
 
-Usa `make clean` per rimuovere gli eseguibili generati.
+Run `make clean` to remove the generated executables.
 
-Come funziona lo script di test
-- Esegui `test/test_pasm.ps1` dalla subdirectory `test`, passando il nome del file `.asm` come parametro. Lo script:
-  - compila con PASM C locale producendo `<nome>_c.bin` (opzionalmente con `-d` per generare `debug.txt`),
-  - compila lo stesso `.asm` con PASM Pascal producendo `<nome>_pascal.bin`,
-  - mostra l'hexdump e confronta i binari (`fc /b`).
+How the test script works
+- Run `test/test_pasm.ps1` from the `test` subdirectory, passing the `.asm` filename as a parameter. The script:
+  - assembles it with the local C version of PASM, producing `<name>_c.bin` (optionally use `-d` to generate `debug.txt`),
+  - assembles the same `.asm` file with the Pascal version of PASM, producing `<name>_pascal.bin`,
+  - displays the hex dumps and compares the binaries (`fc /b`).
 
-Esempi di comandi (PowerShell)
+PowerShell command examples
 
 ```powershell
 cd test
@@ -45,33 +45,26 @@ cd test
 .\test_pasm.ps1 test_complicated_3.asm
 ```
 
-## Stato dei test
+## Test Status
 
-**Test eseguiti e passati:**
+**Tests run and passed:**
 - `test_simple.asm` — PASS
 - `test_complicated.asm` — PASS
 - `test_complicated_2.asm` — PASS
 - `test_case.asm` — PASS
 
-**Test falliti:**
-- `test_complicated_3.asm` — FAIL (molte differenze tra binari C e Pascal)
+**Failed test:**
+- `test_complicated_3.asm` — FAIL (many differences between the C and Pascal binaries)
 
-**Note:**
-- La versione C ora genera binari identici alla versione Pascal per i primi tre test, come verificato con `fc /b`.
-- Le tabelle `CASE`/`ENDCASE` sono supportate come in PASM Pascal: `PTC` con
-  conteggio e indirizzo di fine tabella patchati a `ENDCASE`, `ETC`, voci
-  `valore label` e `ELSE label` (solo indirizzo). Un `ELSE` con label in avanti
-  viene patchato sul proprio indirizzo (stessa correzione applicata a
-  `Source\pasm\pasm.dpr`).
-- `calcadr` ricalcola la lunghezza dei parametri dopo aver sostituito una label
-  risolta, e non scarta più i riferimenti in avanti il cui nome è contenuto in
-  una label già definita (es. `CPS1` dopo `LIB_CPS16`).
-- Tutti i fixture `Source\C\lcc2\build\*.asm` producono binari identici a PASM
-  Pascal; `pc1403_switch` assemblato con PASM C supera il test MAME.
-- La gestione delle label e delle direttive (.DW, .DB, .ORG) è stata allineata e validata.
-- **Da verificare ancora:**
-  - La direttiva `.EQU` (definizione simboli)
-- Per `test_complicated_3.asm` sono presenti molte differenze nei binari: analisi in corso.
+**Notes:**
+- The C version produces binaries identical to the Pascal version for the first three tests, as verified with `fc /b`.
+- `CASE`/`ENDCASE` tables are supported as in Pascal PASM: `PTC` with the count and end-of-table address patched at `ENDCASE`, `ETC`, `value label` entries, and `ELSE label` entries (address only). An `ELSE` with a forward-referenced label is patched to that label's address (the same fix was applied to `Source\pasm\pasm.dpr`).
+- `calcadr` recalculates the parameter length after replacing a resolved label and no longer discards forward references whose names are substrings of already-defined labels (for example, `CPS1` after `LIB_CPS16`).
+- All `Source\C\lcc2\build\*.asm` fixtures produce binaries identical to those from Pascal PASM; `pc1403_switch`, assembled with C PASM, passes the MAME test.
+- Label handling and the `.DW`, `.DB`, and `.ORG` directives have been aligned with the Pascal version and validated.
+- **Still to be verified:**
+  - The `.EQU` directive (symbol definition)
+- `test_complicated_3.asm` still produces many binary differences; analysis is ongoing.
 
 ---
-Ultimo aggiornamento: 2025-11-25
+Last updated: 2025-11-25
