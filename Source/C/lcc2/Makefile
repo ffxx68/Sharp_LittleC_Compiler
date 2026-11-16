@@ -3,16 +3,28 @@ FLEX ?= flex
 BISON ?= bison
 CFLAGS ?= -Wall -Wextra -Werror -O2 -std=c99
 BUILD_DIR := build
-TARGET := lcc2.exe
-OBJECTS := $(BUILD_DIR)/main.o $(BUILD_DIR)/ast.o $(BUILD_DIR)/symtab.o $(BUILD_DIR)/codegen.o $(BUILD_DIR)/peephole.o $(BUILD_DIR)/parser.o $(BUILD_DIR)/lexer.o
-TEST_TARGET := $(BUILD_DIR)/test_ast.exe
-LEXER_TEST_TARGET := $(BUILD_DIR)/test_lexer.exe
-PARSER_TEST_TARGET := $(BUILD_DIR)/test_parser.exe
-CODEGEN_TEST_TARGET := $(BUILD_DIR)/test_codegen.exe
-PEEPHOLE_TEST_TARGET := $(BUILD_DIR)/test_peephole.exe
-SYMTAB_TEST_TARGET := $(BUILD_DIR)/test_symtab.exe
+ifeq ($(OS),Windows_NT)
+EXEEXT := .exe
+else
+UNAME_S := $(shell uname -s)
+ifneq (,$(filter MINGW% MSYS% CYGWIN%,$(UNAME_S)))
+EXEEXT := .exe
+else
+EXEEXT :=
+endif
+endif
 
-.PHONY: all check-tools test clean
+TARGET := lcc2$(EXEEXT)
+PASM := ../pasm/pasm$(EXEEXT)
+OBJECTS := $(BUILD_DIR)/main.o $(BUILD_DIR)/ast.o $(BUILD_DIR)/symtab.o $(BUILD_DIR)/codegen.o $(BUILD_DIR)/peephole.o $(BUILD_DIR)/parser.o $(BUILD_DIR)/lexer.o
+TEST_TARGET := $(BUILD_DIR)/test_ast$(EXEEXT)
+LEXER_TEST_TARGET := $(BUILD_DIR)/test_lexer$(EXEEXT)
+PARSER_TEST_TARGET := $(BUILD_DIR)/test_parser$(EXEEXT)
+CODEGEN_TEST_TARGET := $(BUILD_DIR)/test_codegen$(EXEEXT)
+PEEPHOLE_TEST_TARGET := $(BUILD_DIR)/test_peephole$(EXEEXT)
+SYMTAB_TEST_TARGET := $(BUILD_DIR)/test_symtab$(EXEEXT)
+
+.PHONY: all check-tools test test-pasm clean
 
 all: check-tools $(TARGET)
 
@@ -63,7 +75,10 @@ $(CODEGEN_TEST_TARGET): tests/test_codegen.c codegen.c codegen.h peephole.c peep
 $(PEEPHOLE_TEST_TARGET): tests/test_peephole.c peephole.c peephole.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -I. -o $@ tests/test_peephole.c peephole.c
 
-test: all $(TEST_TARGET) $(LEXER_TEST_TARGET) $(PARSER_TEST_TARGET) $(SYMTAB_TEST_TARGET) $(CODEGEN_TEST_TARGET) $(PEEPHOLE_TEST_TARGET)
+test-pasm:
+	$(MAKE) -C ../pasm CC="$(CC)" TARGET="pasm$(EXEEXT)"
+
+test: all test-pasm $(TEST_TARGET) $(LEXER_TEST_TARGET) $(PARSER_TEST_TARGET) $(SYMTAB_TEST_TARGET) $(CODEGEN_TEST_TARGET) $(PEEPHOLE_TEST_TARGET)
 	./$(TEST_TARGET)
 	./$(LEXER_TEST_TARGET)
 	./$(PARSER_TEST_TARGET)
@@ -72,9 +87,9 @@ test: all $(TEST_TARGET) $(LEXER_TEST_TARGET) $(PARSER_TEST_TARGET) $(SYMTAB_TES
 	./$(PEEPHOLE_TEST_TARGET)
 	./$(TARGET) --help
 	./$(TARGET) --version
-	sh tests/test_cli.sh
-	sh tests/test_strings.sh
-	sh tests/test_libraries.sh
+	LCC2="$(abspath $(TARGET))" PASM="$(abspath $(PASM))" sh tests/test_cli.sh
+	LCC2="$(abspath $(TARGET))" PASM="$(abspath $(PASM))" sh tests/test_strings.sh
+	LCC2="$(abspath $(TARGET))" PASM="$(abspath $(PASM))" sh tests/test_libraries.sh
 
 clean:
 	rm -rf $(BUILD_DIR) $(TARGET)

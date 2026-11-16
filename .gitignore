@@ -2,3 +2,6 @@
 ./build_tmp/
 /Source/C/lcc2/build/
 /Source/C/lcc2/lcc2.exe
+/Source/C/lcc2/lcc2
+/Source/C/pasm/pasm.exe
+/Source/C/pasm/pasm

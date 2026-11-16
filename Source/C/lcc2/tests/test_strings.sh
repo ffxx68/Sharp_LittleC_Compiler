@@ -1,6 +1,9 @@
 #!/bin/sh
 set -eu
 
+LCC2=${LCC2:-"$(pwd)/lcc2"}
+PASM=${PASM:-../pasm/pasm}
+
 dir=build/string-tests
 mkdir -p "$dir"
 trap 'rm -f "$dir/source.c" "$dir/preprocessed.c" "$dir/output.asm" "$dir/output.bin" "$dir/expected.asm" "$dir/error.txt"; rmdir "$dir"' EXIT
@@ -8,7 +11,7 @@ trap 'rm -f "$dir/source.c" "$dir/preprocessed.c" "$dir/output.asm" "$dir/output
 compile()
 {
     gcc -E -P -nostdinc -Iinclude "$dir/source.c" -o "$dir/preprocessed.c"
-    ./lcc2.exe "$dir/preprocessed.c" -o "$dir/output.asm"
+    "$LCC2" "$dir/preprocessed.c" -o "$dir/output.asm"
 }
 
 assert_count()
@@ -43,9 +46,9 @@ for routine in strcpy strcat; do
         if grep -q '^LCC2_STRCPY_' "$dir/output.asm"; then exit 1; fi
     fi
     assert_no_device_runtime
-    ../../../pasm.exe "$dir/output.asm" "$dir/output.bin"
+    "$PASM" "$dir/output.asm" "$dir/output.bin"
     cp "$dir/output.asm" "$dir/expected.asm"
-    ./lcc2.exe --target PC1403 "$dir/preprocessed.c" -o "$dir/output.asm"
+    "$LCC2" --target PC1403 "$dir/preprocessed.c" -o "$dir/output.asm"
     cmp "$dir/output.asm" "$dir/expected.asm"
 done
 
@@ -54,7 +57,7 @@ compile
 assert_count strcpy 1
 assert_count strcat 1
 assert_no_device_runtime
-../../../pasm.exe "$dir/output.asm" "$dir/output.bin"
+"$PASM" "$dir/output.asm" "$dir/output.bin"
 
 printf '#include "string.h"\nchar *strcpy(char *d, const char *s) { return d; }\nchar *strcat(char *d, const char *s) { return d; }\n__xram __at(0xE600) char dest;\nvoid main(void) { strcpy(&dest, &dest); strcat(&dest, &dest); }\n' > "$dir/source.c"
 compile
@@ -64,7 +67,7 @@ if grep -Eq '^LCC2_(STRCPY|STRCAT)_' "$dir/output.asm"; then
     echo "User-defined string functions pulled in library implementations" >&2
     exit 1
 fi
-../../../pasm.exe "$dir/output.asm" "$dir/output.bin"
+"$PASM" "$dir/output.asm" "$dir/output.bin"
 cp "$dir/output.asm" "$dir/expected.asm"
 
 expect_failure()
@@ -88,7 +91,7 @@ expect_failure
 
 printf '#include "string.h"\n__xram __at(0xE600) char dest;\nvoid main(void) { strcpy(&dest, &dest); }\n' > "$dir/source.c"
 gcc -E -P -nostdinc -Iinclude "$dir/source.c" -o "$dir/preprocessed.c"
-if (cd "$dir"; ../../lcc2.exe preprocessed.c -o output.asm) \
+if (cd "$dir"; "$LCC2" preprocessed.c -o output.asm) \
     > /dev/null 2> "$dir/error.txt"; then
     echo "Missing string runtime was silently accepted" >&2
     exit 1
@@ -97,7 +100,7 @@ grep -q "cannot find runtime 'strcpy'" "$dir/error.txt"
 cmp "$dir/output.asm" "$dir/expected.asm"
 
 gcc -E -P -nostdinc -Iinclude tests/strings.c -o build/pc1403_strings.c
-./lcc2.exe build/pc1403_strings.c -o build/pc1403_strings.asm
-../../../pasm.exe build/pc1403_strings.asm build/pc1403_strings.bin
+"$LCC2" build/pc1403_strings.c -o build/pc1403_strings.asm
+"$PASM" build/pc1403_strings.asm build/pc1403_strings.bin
 test "$(wc -c < build/pc1403_strings.bin)" -le 1232
 echo "PASS: string headers and selective runtime inclusion"

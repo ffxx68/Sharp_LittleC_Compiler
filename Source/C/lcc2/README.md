@@ -11,21 +11,27 @@ target-specific contracts, and compatibility helpers.
 
 ## Build
 
-The build requires GCC, Flex, Bison, and GNU Make. From this directory, run
+The build requires GCC, Flex, Bison, GNU Make, and a POSIX shell and utilities
+(on Windows, use an MSYS2/MinGW shell). From this directory, run
 `make` on either Windows or Linux:
 
 ```sh
 # Windows (for example, in an MSYS2/MinGW shell)
 make
-.\lcc2.exe --help
+./lcc2.exe --help
 
 # Linux
 make
-./lcc2.exe --help
+./lcc2 --help
 ```
 
-The current Makefile produces `lcc2.exe` on both platforms; on Linux it is
-still a normal executable despite the `.exe` suffix.
+The Makefile produces `lcc2.exe` and `.exe` test executables on Windows
+(including MSYS2/MinGW and Cygwin), and extensionless executables on Linux/macOS.
+`make test` also builds the C assembler in `../pasm` using its existing
+Makefile and runs all shell tests against that local executable, not the
+Windows-only Pascal `pasm.exe` in the repository root. The shell scripts
+accept `LCC2` and `PASM` environment variables to select other executables;
+use an absolute path for `LCC2`, as one test changes directory.
 The project target builds the command-line compiler, AST arena, Flex scanner,
 Bison parser, scalar resolver, and code-generation module. The parser can be
 exercised through `lcc2_parse_string`; the backend emits byte/word constants,
