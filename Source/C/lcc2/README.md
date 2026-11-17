@@ -54,7 +54,7 @@ overrides the origin. Only called runtime modules are included.
 | Target option | Origin | Device APIs | Validation |
 |---------------|--------|-------------|------------|
 | `--target PC1403` | `0xE030` | `getchar`, `putchar`, `puts`; `key_scan`, `key_wait`, `keybrk`; `lcd_on`, `lcd_off`, `lcd_cls`, `lcd_pset`, `lcd_hline` | Build/assembly checks; MAME harnesses below. Physical-device validation not documented. |
-| `--target PC1350` | `0x6900` | `getchar`, `key_scan`, `key_wait`; `lcd_on`, `lcd_off`; `pc1350_str`, `pc1350_val`, `pc1350_compare` | ROM string APIs: MAME, ROM v1. Other APIs: build/assembly only. ROM v0 and hardware unverified. No pixel APIs. |
+| `--target PC1350` | `0x6900` | `getchar`, `key_scan`, `key_wait`; `lcd_on`, `lcd_off`; `pc1350_str`, `pc1350_val`, `pc1350_compare` | ROM strings (v1) and LCD control: MAME. Keyboard: build/assembly only. ROM v0 and hardware unverified. No pixel APIs. |
 | `--target PC1401` | `0x3801` (14337) | `getchar`, `key_scan`, `key_wait`; `lcd_on`, `lcd_off` | Build/assembly checks only; **not runtime-tested in MAME or on hardware**. LCD pixel APIs are not yet integrated. |
 | No `--target` | `0xE030` | None | Build/assembly checks. |
 

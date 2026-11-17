@@ -169,8 +169,45 @@ in the instruction reference.
 All endpoints preserve caller IRAM 8..95. Keyboard modules have private
 save areas; LCD modules share one save area. They are non-reentrant and
 are included only when called. `keybrk`, `putchar`, and pixel APIs are
-not supplied. Compilation and assembly are checked, but these keyboard/LCD
-endpoints are **not runtime-tested in MAME or on physical hardware**.
+not supplied. LCD control is runtime-checked in MAME: both endpoints preserve
+IRAM 8..95, balance the stack, leave display RAM unchanged, and set/clear only
+bit 0 of the CPU's output-C latch. Keyboard endpoints and physical devices
+remain runtime-unverified. Visual LCD blanking is a separate manual check.
+
+The repeatable LCD fixture is `tests\pc1350_lcd.c`, with the live-session
+harness `tests\pc1350_lcd.lua`. Preprocess, compile with `--target PC1350`,
+and assemble to `build\pc1350_lcd.bin`, saving the assembler's symbol output
+to `build\pc1350-lcd-assembly.log`. In the active PC-1350 Lua console:
+
+```lua
+dofile([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\tests\pc1350_lcd.lua]])
+lcc2_pc1350_lcd_test([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\build\pc1350_lcd.bin]], [[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\build\pc1350-lcd-assembly.log]])
+```
+
+Inspect `lcc2_pc1350_lcd_result.status` and `.error`. The harness temporarily
+borrows `0x6900` plus the fixture size and three trap bytes, preserving those
+bytes and the interrupted CPU/IRAM state. It checks all 64 control values
+without HALT/OFF bits, for both endpoints, then holds OFF and ON for three
+seconds each. It restores the session and leaves the LCD enabled. Do not
+type or interrupt execution during the test.
+
+For a visible pixel pattern, use `tests\pc1350_pixels.c` and
+`tests\pc1350_pixels.lua` instead. This is a test-only direct-LCD-memory
+writer, not a supplied `lcd_pset` API. It draws a border around the 150x32
+pixel area, a checkerboard on the left and a diagonal in the middle, then
+blocks in `key_wait()` for visual inspection.
+The pattern's border, checkerboard, diagonal and blank remainder were
+visually confirmed by the user in MAME on 2026-11-17, matching all 600
+verified LCD bytes. This confirms the direct-memory pixel layout, not a
+public pixel API or physical-device behavior.
+
+Preprocess/compile/assemble as above with basename `pc1350_pixels`, saving
+assembler output to `build\pc1350-pixels-assembly.log`. Load the Lua file and
+call `lcc2_pc1350_pixels_test(binary_path, listing_path)`. The harness verifies
+all 600 LCD bytes and reports `lcc2_pc1350_pixels_result.status = "waiting"`.
+Press a device key to finish and restore the previous session. While waiting,
+the fixture temporarily occupies BASIC RAM at `0x6030` onward; do not reset,
+reload scripts or edit BASIC before it finishes.
 
 ### PC-1350 `pc1350.h`: ROM-backed strings and BCD conversions
 
@@ -239,7 +276,7 @@ unchanged destinations on failure, caller IRAM and stack preservation.
 Unknown-ROM rejection is checked with a patched signature, and carry-error
 propagation with a temporary ROM stub; these are adapter checks, not evidence
 of real firmware conversion failures. **ROM version 0, physical devices, and
-the PC-1350 keyboard/LCD endpoints remain runtime-unverified.**
+the PC-1350 keyboard endpoints remain runtime-unverified.**
 
 To reproduce, build the fixture from the repository root:
 

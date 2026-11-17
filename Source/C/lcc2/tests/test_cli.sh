@@ -326,7 +326,8 @@ for routine in key_scan key_wait getchar lcd_on lcd_off; do
             ;;
         lcd_on|lcd_off)
             test "$(grep -c '^PC1350_LCD_SAVED_IRAM:' "$dir/output.asm")" = 1
-            grep -q 'LIDP[[:space:]]*PC1350_LCD_SAVED_IRAM+87' "$dir/output.asm"
+            grep -q 'LIDP[[:space:]]*PC1350_LCD_SAVED_CONTROL' "$dir/output.asm"
+            test "$(grep -c '^PC1350_LCD_SAVED_CONTROL:' "$dir/output.asm")" = 1
             grep -q 'OUTC' "$dir/output.asm"
             if test "$routine" = lcd_on; then
                 grep -q 'ORIA[[:space:]]*1' "$dir/output.asm"

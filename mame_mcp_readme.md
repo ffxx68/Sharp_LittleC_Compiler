@@ -154,6 +154,29 @@ If you want to start MAME manually (for advanced debugging or to see the Lua con
 > [MAME]> dofile("pc1403_key.lua")
 > ```
 
+For PC-1350, load the matching helper instead (use the full path if MAME's
+working directory is not the repository):
+
+```lua
+dofile([[C:\path\to\Sharp_LittleC_Compiler\pc1350_key.lua]])
+```
+
+It provides `key(char)`, `keyline(text)` (appends ENTER), `keyfile(path)`,
+and `key_press(port, mask)`. Run input from a coroutine because key timing
+uses `emu.wait`:
+
+```lua
+pc1350_typing = coroutine.create(function() keyline("PRINT 123") end)
+assert(coroutine.resume(pc1350_typing))
+```
+
+Letters, digits, BASIC punctuation and named keys such as `MODE`, `CLS`,
+`BRK`, `ENTER`, `SHIFT`, `DEF`, `SML`, arrows, `INS` and `DEL` are supported.
+For example, `key("MODE")` presses the mode key; PC-1403's `_`/`|` mode aliases
+do not apply. Lowercase uses the LCD's SML indicator to track letter case.
+Unsupported keys raise an error instead of being silently dropped.
+If a fresh PC-1350 session shows its initialization prompt, press ENTER first.
+
 ### Example commands (in Claude Desktop, or IntelliJ Copilot)
 
 Some snippets, or natural language commands, to control MAME:
