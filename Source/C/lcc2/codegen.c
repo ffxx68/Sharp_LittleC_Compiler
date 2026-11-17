@@ -135,6 +135,7 @@ static const struct {
 #define COMPACT_FILL_CHUNK 255
 
 struct CodegenContext {
+    unsigned long default_origin;
     char *output;
     size_t output_length;
     size_t output_capacity;
@@ -252,6 +253,7 @@ CodegenContext *codegen_context_create(void)
         return NULL;
     }
     ctx->output_capacity = 1;
+    ctx->default_origin = 0xE030;
     return ctx;
 }
 
@@ -279,6 +281,15 @@ void codegen_context_destroy(CodegenContext *ctx)
         free(ctx->external_functions);
         free(ctx);
     }
+}
+
+int codegen_set_default_origin(CodegenContext *ctx, unsigned long origin)
+{
+    if (ctx == NULL || origin > 65535UL) {
+        return set_error(ctx, "default origin must be a 16-bit value");
+    }
+    ctx->default_origin = origin;
+    return 0;
 }
 
 const char *codegen_output(const CodegenContext *ctx)
@@ -2649,7 +2660,7 @@ static int emit_global_initializers(CodegenContext *ctx,
 
 int codegen_program(CodegenContext *ctx, AstTranslationUnit *tu)
 {
-    unsigned long origin = 0xE030;
+    unsigned long origin;
     size_t index, other;
     int has_main = 0;
     char operand[32];
@@ -2661,6 +2672,7 @@ int codegen_program(CodegenContext *ctx, AstTranslationUnit *tu)
         ctx->startup_output != NULL || ctx->function_output != NULL) {
         return set_error(ctx, "program generation requires an empty context");
     }
+    origin = ctx->default_origin;
     if (tu->has_pc_pragma) {
         return set_error(ctx, "#pragma pc is not supported by program generation yet");
     }

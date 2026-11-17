@@ -6,7 +6,7 @@ PASM=${PASM:-../pasm/pasm}
 
 dir=build/cli-tests
 mkdir -p "$dir"
-trap 'rm -f "$dir/source.c" "$dir/output.asm" "$dir/output.bin" "$dir/expected.asm" "$dir/error.txt"; rmdir "$dir"' EXIT
+trap 'rm -f "$dir/source.c" "$dir/preprocessed.c" "$dir/output.asm" "$dir/output.bin" "$dir/expected.asm" "$dir/error.txt"; rmdir "$dir"' EXIT
 
 compile()
 {
@@ -180,3 +180,77 @@ cmp "$dir/output.asm" "$dir/expected.asm"
 "$PASM" "$dir/output.asm" "$dir/output.bin"
 printf 'void CPQ1(void) {} int main(void) { unsigned int left = 1; unsigned int right = 2; return left == right; }\n' > "$dir/source.c"
 expect_failure "$dir/source.c" -o "$dir/output.asm"
+
+printf 'void main(void) {}\n' > "$dir/source.c"
+"$LCC2" --target PC1401 "$dir/source.c" -o "$dir/output.asm"
+grep -q '^.ORG[[:space:]]*14337$' "$dir/output.asm"
+grep -q 'CALL.*main' "$dir/output.asm"
+grep -q '^SREG:' "$dir/output.asm"
+"$PASM" "$dir/output.asm" "$dir/output.bin"
+printf '#pragma org(0x3900)\nvoid main(void) {}\n' > "$dir/source.c"
+"$LCC2" --target PC1401 "$dir/source.c" -o "$dir/output.asm"
+grep -q '^.ORG[[:space:]]*14592$' "$dir/output.asm"
+
+for routine in key_scan key_wait; do
+    printf '#include "key.h"\nvoid main(void) { %s(); %s(); }\n' "$routine" "$routine" > "$dir/source.c"
+    gcc -E -P -nostdinc -Iinclude "$dir/source.c" -o "$dir/preprocessed.c"
+    "$LCC2" --target PC1401 "$dir/preprocessed.c" -o "$dir/output.asm"
+    test "$(grep -c "^$routine:" "$dir/output.asm")" = 1
+    test "$(grep -c 'CALL[[:space:]]*0x048F' "$dir/output.asm")" = 1
+    if grep -Eq '^PC1403_|^getchar:|^keybrk:' "$dir/output.asm"; then
+        echo "PC1401 key input selected an unrelated runtime" >&2
+        exit 1
+    fi
+    if test "$routine" = key_scan; then
+        test "$(grep -c '^key_wait:' "$dir/output.asm")" = 0
+    else
+        test "$(grep -c '^key_scan:' "$dir/output.asm")" = 0
+        grep -q 'CPIA[[:space:]]*0xFF' "$dir/output.asm"
+        grep -q 'JRZM[[:space:]]*PC1401_KEY_WAIT_LOOP' "$dir/output.asm"
+    fi
+    "$PASM" "$dir/output.asm" "$dir/output.bin"
+done
+printf '#include "key.h"\nvoid main(void) { key_scan(); key_wait(); }\n' > "$dir/source.c"
+gcc -E -P -nostdinc -Iinclude "$dir/source.c" -o "$dir/preprocessed.c"
+"$LCC2" --target PC1401 "$dir/preprocessed.c" -o "$dir/output.asm"
+test "$(grep -c '^key_scan:' "$dir/output.asm")" = 1
+test "$(grep -c '^key_wait:' "$dir/output.asm")" = 1
+"$PASM" "$dir/output.asm" "$dir/output.bin"
+printf 'unsigned char key_scan(void) { return 0; }\nunsigned char key_wait(void) { return 1; }\nvoid main(void) { key_scan(); key_wait(); }\n' > "$dir/source.c"
+"$LCC2" --target PC1401 "$dir/source.c" -o "$dir/output.asm"
+if grep -q '^PC1401_KEY_' "$dir/output.asm"; then
+    echo "User-defined PC1401 key functions selected the supplied runtime" >&2
+    exit 1
+fi
+"$PASM" "$dir/output.asm" "$dir/output.bin"
+
+printf '#include "stdio.h"\nvoid main(void) { getchar(); getchar(); }\n' > "$dir/source.c"
+gcc -E -P -nostdinc -Iinclude "$dir/source.c" -o "$dir/preprocessed.c"
+"$LCC2" --target PC1401 "$dir/preprocessed.c" -o "$dir/output.asm"
+test "$(grep -c '^getchar:' "$dir/output.asm")" = 1
+test "$(grep -c '^key_wait:' "$dir/output.asm")" = 1
+grep -q 'CALL[[:space:]]*0x048F' "$dir/output.asm"
+if grep -Eq '^putchar:|^key_scan:|^PC1403_|0x141F' "$dir/output.asm"; then
+    echo "PC1401 getchar selected an unrelated runtime or unsafe ROM entry" >&2
+    exit 1
+fi
+"$PASM" "$dir/output.asm" "$dir/output.bin"
+
+printf 'int getchar(void);\nunsigned char key_wait(void) { return 29; }\nint main(void) { return getchar(); }\n' > "$dir/source.c"
+"$LCC2" --target PC1401 "$dir/source.c" -o "$dir/output.asm"
+test "$(grep -c '^getchar:' "$dir/output.asm")" = 1
+test "$(grep -c '^key_wait:' "$dir/output.asm")" = 1
+if grep -q '^PC1401_KEY_WAIT_' "$dir/output.asm"; then
+    echo "PC1401 getchar ignored user-defined key_wait" >&2
+    exit 1
+fi
+"$PASM" "$dir/output.asm" "$dir/output.bin"
+
+printf 'int getchar(void) { return 29; }\nint main(void) { return getchar(); }\n' > "$dir/source.c"
+"$LCC2" --target PC1401 "$dir/source.c" -o "$dir/output.asm"
+test "$(grep -c '^getchar:' "$dir/output.asm")" = 1
+if grep -q '^key_wait:' "$dir/output.asm"; then
+    echo "User-defined PC1401 getchar selected the supplied key_wait" >&2
+    exit 1
+fi
+"$PASM" "$dir/output.asm" "$dir/output.bin"

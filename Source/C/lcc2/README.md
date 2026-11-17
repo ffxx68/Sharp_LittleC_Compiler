@@ -46,6 +46,27 @@ optimization, and codegen tests verify each comparison helper's runtime text is
 preserved byte-for-byte in the final output. The optimizer patterns have a
 standalone test target included in `make test`.
 
+## Targets and APIs
+
+`--target` selects device APIs and the default origin; `#pragma org(...)`
+overrides the origin. Only called runtime modules are included.
+
+| Target option | Origin | Device APIs | Validation |
+|---------------|--------|-------------|------------|
+| `--target PC1403` | `0xE030` | `getchar`, `putchar`, `puts`; `key_scan`, `key_wait`, `keybrk`; `lcd_on`, `lcd_off`, `lcd_cls`, `lcd_pset`, `lcd_hline` | Build/assembly checks; MAME harnesses below. Physical-device validation not documented. |
+| `--target PC1401` | `0x3801` (14337) | `getchar`, `key_scan`, `key_wait` | Build/assembly checks only; **not runtime-tested in MAME or on hardware**. LCD APIs are not yet integrated. |
+| No `--target` | `0xE030` | None | Build/assembly checks. |
+
+All configurations supply `strcpy`, `strcat`, and `int2str`. `puts` requires
+`putchar`, which must be user-defined outside PC-1403. `getchar` and the
+keyboard APIs return raw target-specific key codes, **not ASCII**.
+
+Reserve device RAM before loading code; selecting a target does not reserve
+it. PC-1401's origin assumes the 1 kB reservation in
+[`littleC manual.txt`](../../../Docs/littleC%20manual.txt), section
+"PC-1401 & PC-1421". See the
+[library reference](../../../Docs/lcc2_libraries.md) for API contracts.
+
 ## Compile and run the PC-1403 smoke program
 
 From the repository root in PowerShell:
@@ -55,18 +76,13 @@ From the repository root in PowerShell:
 .\pasm.exe Source\C\lcc2\build\pc1403_smoke.asm Source\C\lcc2\build\pc1403_smoke.bin
 ```
 
-The CLI accepts one source path and `-o` followed by an ASM path;
-`--target PC1403` is optional and selects external device runtime modules.
-The code generator emits target-independent calls for declared external
-functions. The driver includes only called library modules, once each.
-See the [library reference](../../../Docs/lcc2_libraries.md) for header usage,
-device-independent versus target-specific module selection, and function
-contracts. The source is parsed directly; preprocess separately when needed.
+The CLI accepts one source path and `-o` followed by an ASM path.
+The source is parsed directly; preprocess separately when needed.
 Compilation errors leave an existing output file untouched. Do not use the
 same file for input and output.
 
-Complete-program output requires a parameterless `main` definition. The
-default origin is `0xE030`; `#pragma org(...)` accepts a nonnegative 16-bit
+Complete-program output requires a parameterless `main` definition.
+`#pragma org(...)` accepts a nonnegative 16-bit
 integer constant or `+`/`-` expression. The default startup saves/restores
 registers using the Pascal wrapper and explicitly returns to the caller.
 `#pragma nosave` disables preservation, but still emits the final `RTN`.

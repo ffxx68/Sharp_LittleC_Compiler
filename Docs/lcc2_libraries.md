@@ -20,8 +20,9 @@ gcc -E -P -nostdinc -I Source\C\lcc2\include .\program.c -o .\program.preprocess
 .\pasm.exe .\program.asm .\program.bin
 ```
 
-Add `--target PC1403` to the `lcc2` invocation when using the supplied
-device-dependent I/O implementations. Without a target, no device runtime is
+Add `--target PC1403` to the `lcc2` invocation when using its supplied
+device-dependent I/O implementations, or `--target PC1401` for the PC-1401
+`key_scan`, `key_wait`, and `getchar` implementations. Without a target, no device runtime is
 appended; device-independent string and conversion routines remain available.
 
 The command-line driver appends each external library module only when its
@@ -36,7 +37,8 @@ no general external-object linker.
 
 Library implementations are outside codegen: device-independent SC61860
 modules are in `Source\C\lcc2\runtime`, and device implementations are in
-`Source\C\lcc2\targets\PC1403`. Standard API declarations and device-specific
+`Source\C\lcc2\targets\PC1403` and `Source\C\lcc2\targets\PC1401`.
+Standard API declarations and device-specific
 behavior are documented separately below.
 
 ## Standard-library subsets
@@ -107,16 +109,17 @@ int putchar(int character);
 int puts(const char *text);
 ```
 
-The declarations are target-independent. The supplied `getchar` and `putchar`
-implementations require `--target PC1403`. The separate `runtime\puts.asm`
+The declarations are target-independent. The supplied `getchar` implementations
+require `--target PC1401` or `--target PC1403`; the supplied `putchar`
+implementation requires `--target PC1403`. The separate `runtime\puts.asm`
 adapter uses `putchar` through the same ABI and can also use a program-defined
 `putchar`, including without `--target`. Without a target or such an
 implementation, its output dependency is unresolved at assembly time.
 Including the header alone adds nothing; input-only programs add no output
 routine or LCD buffer.
 
-The current PC-1403 adapter is not a conforming standard-C stream:
-`getchar` returns raw hardware key codes, and `putchar` supports only
+The current adapters are not conforming standard-C streams:
+`getchar` returns target-specific raw hardware key codes, and PC-1403 `putchar` supports only
 append-only printable output. Their exact contracts and accepted deviations
 are in the target-specific section below. Full hosted-C stdio is not supplied.
 
@@ -136,6 +139,45 @@ never writes `C`. Do not assume standard `puts` newline behavior when
 porting code.
 
 ## Target-specific library functions and adapters
+
+### PC-1401 `key.h`: raw keyboard input
+
+With `--target PC1401`, `key_scan()` calls ROM entry point `0x048F` once
+and returns its raw matrix code, or `0xFF` when no key is pressed.
+`key_wait()` polls the same entry point until the result is not `0xFF`;
+code zero is a valid key and also ends the wait. Neither function waits
+for key release, so a held key can be returned repeatedly. There is no
+ASCII conversion, software debounce, or autorepeat management.
+
+Examples of PC-1401 codes are `A` = 29, `ENTER` = 25 and `BRK` = 76.
+The routines preserve caller internal RAM 8..95 and return the code
+zero-extended in B:A through the normal `lcc2` ABI. Each owns a private
+save area and result byte; they are not reentrant. Only called modules
+are included, and neither depends on the other. The PC-1401 target does
+not yet supply `keybrk` or `putchar`.
+
+The ROM interface is described in
+[Walter Fischer's PC-1401 keyboard example](http://www.cavefischer.at/spc/html/tastaturmatrix1401rom.html)
+and on page 2 of
+[the PC-1401/1402 ROM routine reference](https://www.simon-lehmayr.de/PC-1360/d_Manuals/ROM1401.pdf).
+It has not yet been validated on PC-1401 hardware or in emulation.
+
+### PC-1401 `getchar`: blocking raw-key input
+
+The external module `targets\PC1401\getchar.asm` calls `key_wait()` and
+returns the same raw matrix code, zero-extended to an `int` in B:A, **not
+ASCII**. For example, `A` returns 29, `ENTER` returns 25, and `BRK` returns
+76. A held key can be returned repeatedly. There is no echo, line buffering,
+ASCII translation, or EOF handling. The driver includes `key_wait` once
+as a dependency, unless the program defines its own implementation.
+
+The implementation deliberately does not call ROM `INPKEY` at `0x141F`.
+Local analysis of the supplied PC-1401 CPU ROM confirms that this OS routine
+uses interpreter state at `0x6039` and `0x603D`, and that its path at
+`0x14F9` removes the caller's return address and substitutes `0x801B`.
+It is therefore not a general-purpose C-callable character-input routine.
+The adapter inherits the non-reentrancy and preservation contract of
+`key_wait`; runtime behavior is not yet validated in emulation.
 
 ### PC-1403 `getchar`: blocking raw-key input
 

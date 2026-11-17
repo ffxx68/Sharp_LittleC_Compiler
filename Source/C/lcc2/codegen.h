@@ -19,6 +19,7 @@ typedef enum CodegenSection {
 
 CodegenContext *codegen_context_create(void);
 void codegen_context_destroy(CodegenContext *ctx);
+int codegen_set_default_origin(CodegenContext *ctx, unsigned long origin);
 const char *codegen_output(const CodegenContext *ctx);
 const char *codegen_runtime_output(const CodegenContext *ctx);
 int codegen_external_function_used(const CodegenContext *ctx,
