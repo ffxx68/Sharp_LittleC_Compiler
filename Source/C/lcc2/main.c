@@ -8,7 +8,7 @@
 
 static void print_usage(FILE *stream)
 {
-    fprintf(stream, "Usage: lcc2 [--target PC1401|PC1403] source.c -o output.asm\n"
+    fprintf(stream, "Usage: lcc2 [--target PC1350|PC1401|PC1403] source.c -o output.asm\n"
                     "       lcc2 --help | --version\n");
 }
 
@@ -209,7 +209,8 @@ int main(int argc, char **argv)
         print_usage(stderr);
         return 2;
     }
-    if (target != NULL && strcmp(target, "PC1401") != 0 &&
+    if (target != NULL && strcmp(target, "PC1350") != 0 &&
+        strcmp(target, "PC1401") != 0 &&
         strcmp(target, "PC1403") != 0) {
         fprintf(stderr, "lcc2: unsupported target '%s'\n", target);
         return 2;
@@ -233,6 +234,11 @@ int main(int argc, char **argv)
     }
     if (target != NULL && strcmp(target, "PC1401") == 0 &&
         codegen_set_default_origin(ctx, 14337UL) != 0) {
+        fprintf(stderr, "lcc2: %s\n", codegen_error(ctx));
+        goto cleanup;
+    }
+    if (target != NULL && strcmp(target, "PC1350") == 0 &&
+        codegen_set_default_origin(ctx, 0x6900UL) != 0) {
         fprintf(stderr, "lcc2: %s\n", codegen_error(ctx));
         goto cleanup;
     }

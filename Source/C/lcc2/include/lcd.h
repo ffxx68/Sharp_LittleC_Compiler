@@ -1,7 +1,7 @@
 #ifndef LCC2_LCD_H
 #define LCC2_LCD_H
 
-/* PC-1401 and PC-1403 LCD controls; not standard C stream operations. */
+/* PC-1350, PC-1401 and PC-1403 LCD controls; not standard C stream operations. */
 void lcd_on(void);
 void lcd_off(void);
 /* PC-1403 pixel APIs.

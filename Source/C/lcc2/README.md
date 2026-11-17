@@ -54,6 +54,7 @@ overrides the origin. Only called runtime modules are included.
 | Target option | Origin | Device APIs | Validation |
 |---------------|--------|-------------|------------|
 | `--target PC1403` | `0xE030` | `getchar`, `putchar`, `puts`; `key_scan`, `key_wait`, `keybrk`; `lcd_on`, `lcd_off`, `lcd_cls`, `lcd_pset`, `lcd_hline` | Build/assembly checks; MAME harnesses below. Physical-device validation not documented. |
+| `--target PC1350` | `0x6900` | `getchar`, `key_scan`, `key_wait`; `lcd_on`, `lcd_off` | Build/assembly checks only; **not runtime-tested in MAME or on hardware**. No pixel APIs. |
 | `--target PC1401` | `0x3801` (14337) | `getchar`, `key_scan`, `key_wait`; `lcd_on`, `lcd_off` | Build/assembly checks only; **not runtime-tested in MAME or on hardware**. LCD pixel APIs are not yet integrated. |
 | No `--target` | `0xE030` | None | Build/assembly checks. |
 
@@ -62,7 +63,9 @@ All configurations supply `strcpy`, `strcat`, and `int2str`. `puts` requires
 keyboard APIs return raw target-specific key codes, **not ASCII**.
 
 Reserve device RAM before loading code; selecting a target does not reserve
-it. PC-1401's origin assumes the 1 kB reservation in
+it. PC-1350 uses the machine-language manual's example origin `0x6900`;
+keep BASIC programs and variables clear of the entire binary.
+PC-1401's origin assumes the 1 kB reservation in
 [`littleC manual.txt`](../../../Docs/littleC%20manual.txt), section
 "PC-1401 & PC-1421". See the
 [library reference](../../../Docs/lcc2_libraries.md) for API contracts.

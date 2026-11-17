@@ -288,3 +288,80 @@ if grep -q '^key_wait:' "$dir/output.asm"; then
     exit 1
 fi
 "$PASM" "$dir/output.asm" "$dir/output.bin"
+
+printf 'void main(void) {}\n' > "$dir/source.c"
+"$LCC2" --target PC1350 "$dir/source.c" -o "$dir/output.asm"
+grep -q '^.ORG[[:space:]]*26880$' "$dir/output.asm"
+if grep -q '^PC1350_' "$dir/output.asm"; then
+    echo "Unused PC1350 runtime was emitted" >&2
+    exit 1
+fi
+"$PASM" "$dir/output.asm" "$dir/output.bin"
+printf '#pragma org(0x6000)\nvoid main(void) {}\n' > "$dir/source.c"
+"$LCC2" --target PC1350 "$dir/source.c" -o "$dir/output.asm"
+grep -q '^.ORG[[:space:]]*24576$' "$dir/output.asm"
+
+for routine in key_scan key_wait getchar lcd_on lcd_off; do
+    printf '#include "key.h"\n#include "stdio.h"\n#include "lcd.h"\nvoid main(void) { %s(); %s(); }\n' "$routine" "$routine" > "$dir/source.c"
+    gcc -E -P -nostdinc -Iinclude "$dir/source.c" -o "$dir/preprocessed.c"
+    "$LCC2" --target PC1350 "$dir/preprocessed.c" -o "$dir/output.asm"
+    test "$(grep -c "^$routine:" "$dir/output.asm")" = 1
+    for candidate in key_scan key_wait getchar lcd_on lcd_off; do
+        if test "$candidate" = "$routine" ||
+            { test "$routine" = getchar && test "$candidate" = key_wait; }; then
+            test "$(grep -c "^$candidate:" "$dir/output.asm")" = 1
+        else
+            test "$(grep -c "^$candidate:" "$dir/output.asm")" = 0
+        fi
+    done
+    case "$routine" in
+        key_scan)
+            grep -q 'CALL[[:space:]]*0x0436' "$dir/output.asm"
+            grep -q 'JRCP[[:space:]]*PC1350_KEY_SCAN_RESULT_READY' "$dir/output.asm"
+            grep -q 'LIA[[:space:]]*0xFF' "$dir/output.asm"
+            ;;
+        key_wait|getchar)
+            grep -q 'CALL[[:space:]]*0x0436' "$dir/output.asm"
+            grep -q 'JRNCM[[:space:]]*PC1350_KEY_WAIT_LOOP' "$dir/output.asm"
+            ;;
+        lcd_on|lcd_off)
+            test "$(grep -c '^PC1350_LCD_SAVED_IRAM:' "$dir/output.asm")" = 1
+            grep -q 'LIDP[[:space:]]*PC1350_LCD_SAVED_IRAM+87' "$dir/output.asm"
+            grep -q 'OUTC' "$dir/output.asm"
+            if test "$routine" = lcd_on; then
+                grep -q 'ORIA[[:space:]]*1' "$dir/output.asm"
+            else
+                grep -q 'ANIA[[:space:]]*0xFE' "$dir/output.asm"
+            fi
+            ;;
+    esac
+    if grep -Eq '^PC140[13]_|^putchar:|^keybrk:' "$dir/output.asm"; then
+        echo "PC1350 selected an unrelated runtime" >&2
+        exit 1
+    fi
+    "$PASM" "$dir/output.asm" "$dir/output.bin"
+done
+
+printf '#include "key.h"\n#include "stdio.h"\n#include "lcd.h"\nvoid main(void) { key_scan(); key_wait(); getchar(); lcd_on(); lcd_off(); }\n' > "$dir/source.c"
+gcc -E -P -nostdinc -Iinclude "$dir/source.c" -o "$dir/preprocessed.c"
+"$LCC2" --target PC1350 "$dir/preprocessed.c" -o "$dir/output.asm"
+for routine in key_scan key_wait getchar lcd_on lcd_off PC1350_LCD_SAVED_IRAM; do
+    test "$(grep -c "^$routine:" "$dir/output.asm")" = 1
+done
+"$PASM" "$dir/output.asm" "$dir/output.bin"
+printf 'int getchar(void);\nunsigned char key_wait(void) { return 0; }\nint main(void) { return getchar(); }\n' > "$dir/source.c"
+"$LCC2" --target PC1350 "$dir/source.c" -o "$dir/output.asm"
+test "$(grep -c '^getchar:' "$dir/output.asm")" = 1
+test "$(grep -c '^key_wait:' "$dir/output.asm")" = 1
+if grep -q '^PC1350_KEY_WAIT_' "$dir/output.asm"; then
+    echo "PC1350 getchar ignored user-defined key_wait" >&2
+    exit 1
+fi
+"$PASM" "$dir/output.asm" "$dir/output.bin"
+printf 'unsigned char key_scan(void) { return 0; }\nunsigned char key_wait(void) { return 0; }\nint getchar(void) { return 0; }\nvoid lcd_on(void) {}\nvoid lcd_off(void) {}\nvoid main(void) { key_scan(); key_wait(); getchar(); lcd_on(); lcd_off(); }\n' > "$dir/source.c"
+"$LCC2" --target PC1350 "$dir/source.c" -o "$dir/output.asm"
+if grep -q '^PC1350_' "$dir/output.asm"; then
+    echo "User-defined PC1350 functions selected the supplied runtime" >&2
+    exit 1
+fi
+"$PASM" "$dir/output.asm" "$dir/output.bin"

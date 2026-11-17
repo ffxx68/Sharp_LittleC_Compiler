@@ -21,7 +21,7 @@ gcc -E -P -nostdinc -I Source\C\lcc2\include .\program.c -o .\program.preprocess
 ```
 
 Add `--target PC1403` to the `lcc2` invocation when using its supplied
-device-dependent I/O implementations, or `--target PC1401` for the PC-1401
+device-dependent I/O implementations, or `--target PC1350` / `--target PC1401` for their
 `key_scan`, `key_wait`, `getchar`, `lcd_on`, and `lcd_off` implementations.
 Without a target, no device runtime is
 appended; device-independent string and conversion routines remain available.
@@ -38,7 +38,8 @@ no general external-object linker.
 
 Library implementations are outside codegen: device-independent SC61860
 modules are in `Source\C\lcc2\runtime`, and device implementations are in
-`Source\C\lcc2\targets\PC1403` and `Source\C\lcc2\targets\PC1401`.
+`Source\C\lcc2\targets\PC1350`, `Source\C\lcc2\targets\PC1401`, and
+`Source\C\lcc2\targets\PC1403`.
 Standard API declarations and device-specific
 behavior are documented separately below.
 
@@ -111,7 +112,7 @@ int puts(const char *text);
 ```
 
 The declarations are target-independent. The supplied `getchar` implementations
-require `--target PC1401` or `--target PC1403`; the supplied `putchar`
+require `--target PC1350`, `--target PC1401`, or `--target PC1403`; the supplied `putchar`
 implementation requires `--target PC1403`. The separate `runtime\puts.asm`
 adapter uses `putchar` through the same ABI and can also use a program-defined
 `putchar`, including without `--target`. Without a target or such an
@@ -140,6 +141,36 @@ never writes `C`. Do not assume standard `puts` newline behavior when
 porting code.
 
 ## Target-specific library functions and adapters
+
+### PC-1350: raw keyboard input and display on/off
+
+`--target PC1350` supplies `key_scan`, `key_wait`, `getchar`, `lcd_on`, and
+`lcd_off`, with the same signatures as PC-1401. The default origin is `0x6900`,
+the example machine-code location in the
+[PC-1350 machine-language manual](../Source/C/lcc2/targets/PC1350_MachineLanguage_EN.docx).
+This does not reserve memory: keep BASIC code and variables away from the
+entire loaded binary, and use `#pragma org(...)` for another reserved area.
+
+The manual's **System Subroutines / Key scan** specifies ROM `0x0436`
+for both ROM versions 0 and 1: carry clear means no key; carry set means
+A contains a raw key number `0x00..0x3F`, or `0x40` for multiple keys.
+`key_scan()` converts no key to the shared API sentinel `0xFF`.
+`key_wait()` polls until carry is set, accepting key zero and the multiple-key
+code. Neither waits for release. `getchar()` reuses `key_wait()` and returns
+the raw code zero-extended to an `int`, **not ASCII**, with no echo or EOF.
+A program-defined `key_wait` overrides that dependency.
+
+The **LCD Display** section specifies bit 0 of internal RAM `0x5F` and
+`OUTC`: `lcd_on()` sets this bit and `lcd_off()` clears it, preserving the
+other control bits and display memory. This follows the explicit LCD
+description and its example, rather than the inconsistent bit-1 wording
+in the instruction reference.
+
+All endpoints preserve caller IRAM 8..95. Keyboard modules have private
+save areas; LCD modules share one save area. They are non-reentrant and
+are included only when called. `keybrk`, `putchar`, and pixel APIs are
+not supplied. Compilation and assembly are checked, but this target is
+**not runtime-tested in MAME or on physical hardware**.
 
 ### PC-1401 `key.h`: raw keyboard input
 
