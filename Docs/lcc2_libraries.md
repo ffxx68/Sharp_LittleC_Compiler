@@ -169,8 +169,96 @@ in the instruction reference.
 All endpoints preserve caller IRAM 8..95. Keyboard modules have private
 save areas; LCD modules share one save area. They are non-reentrant and
 are included only when called. `keybrk`, `putchar`, and pixel APIs are
-not supplied. Compilation and assembly are checked, but this target is
-**not runtime-tested in MAME or on physical hardware**.
+not supplied. Compilation and assembly are checked, but these keyboard/LCD
+endpoints are **not runtime-tested in MAME or on physical hardware**.
+
+### PC-1350 `pc1350.h`: ROM-backed strings and BCD conversions
+
+These APIs require `--target PC1350`. They do not replace portable `strcpy`,
+`strcat`, or `int2str`, and do not pull those modules into the binary.
+They share one adapter and an 88-byte caller-IRAM save area. There is no
+private 80-byte string buffer: callers explicitly borrow the firmware buffer
+at `PC1350_STRING_BUFFER` (`0x6E60`, 80 bytes).
+
+| API | Input | Successful result |
+|-----|-------|-------------------|
+| `int pc1350_str(const unsigned char *number)` | Valid normalized 8-byte BASIC/ROM BCD number | BASIC `STR$` text in the firmware buffer; returns its byte length, without adding a C NUL terminator |
+| `int pc1350_val(unsigned char length, unsigned char *number)` | 1..79 printable ASCII bytes at the buffer start | Writes 8-byte ROM-format BCD number; returns 0 |
+| `int pc1350_compare(unsigned char operation, unsigned char left_length, unsigned char right_length)` | Left string followed immediately by right string in the buffer, combined length <=80; printable ASCII, empty strings allowed | Returns 0 or 1 for `PC1350_COMPARE_EQ`, `_NE`, `_LT`, `_GT`, `_LE`, or `_GE` |
+
+The comparison result is a Boolean predicate, **not** `strcmp`'s signed
+ordering. String lengths exclude any terminator. `VAL` needs one spare
+buffer byte because ROM appends a carriage return, and parsing follows BASIC
+`VAL`, not strict C numeric parsing: for example, the supplied version-1 ROM
+converts `XYZ` to zero rather than reporting an error. Number pointers may address internal RAM
+8..95 (all eight bytes must fit) or external RAM. Buffers must not overlap
+live stack, generated code, or borrowed firmware scratch. Supply a valid BCD
+number to `pc1350_str`, for example one produced by `pc1350_val`; malformed
+BCD is outside the API contract.
+
+Every call checks `0xFFF0` before invoking a ROM routine: `0xCE` selects
+version 0 and `0x03` selects version 1. Other values return
+`PC1350_ROM_UNSUPPORTED` (-1), with no ROM call. Invalid lengths, operation,
+internal number-pointer range, or non-printable input return
+`PC1350_ROM_INVALID_ARGUMENT` (-2). A carry-set `VAL` result returns
+`PC1350_ROM_CONVERSION_ERROR` (-3). Failed conversions leave the destination
+number unchanged. ROM-version failure takes precedence over argument errors.
+
+| Operation | ROM version 0 | ROM version 1 |
+|-----------|---------------|---------------|
+| `STR$` | `0x8BA6` | `0x8CFC` |
+| `VAL` | `0x8C02` | `0x8D58` |
+| Equal / unequal | `0x8ABD` / `0x8B0A` | `0x8C13` / `0x8C60` |
+| Less / greater | `0x8A34` / `0x8A36` | `0x8B8A` / `0x8B8C` |
+| Less-or-equal / greater-or-equal | `0x8A18` / `0x8A1A` | `0x8B6E` / `0x8B70` |
+
+**Borrowed workspace and display side effects:** these non-reentrant APIs
+preserve caller IRAM and restore the firmware string-buffer pointer at
+`0x6F2F`, but do not back up other firmware state. They overwrite string
+buffer contents and may alter firmware scratch and display RAM. In the
+supplied version-1 ROM, `STR$` uses the 24 bytes at `0x7280..0x7297` as
+formatting scratch and modifies other system scratch, including `0x6F4C`.
+Do not call while BASIC has live data in this workspace or while another
+firmware operation is using it. Copy any results needed later before another
+ROM string call. RAM reservation for program code does not reserve this
+firmware workspace.
+Keep program code, its save area, and number storage below `0x6C30`, outside
+the system area. The default origin `0x6900` is only an example and can leave
+too little room; use an explicitly reserved lower origin for larger programs.
+The three adapters together occupy 660 bytes, including shared tables and
+97 bytes of writable state, before generated C code/data or other modules.
+
+The contracts and version tables come from **System Subroutines** in the
+[PC-1350 machine-language manual](../Source/C/lcc2/targets/PC1350_MachineLanguage_EN.docx).
+`tests\pc1350_rom.c` exercises the three APIs through the C ABI;
+`tests\test_pc1350_rom.sh` checks selective inclusion, shared support,
+target selection, and user overrides. `tests\pc1350_rom.lua` additionally
+checks 48 vectors in MAME with the supplied **version-1 ROM**: predicates,
+empty/maximum lengths, ASCII checks, internal/external number pointers,
+unchanged destinations on failure, caller IRAM and stack preservation.
+Unknown-ROM rejection is checked with a patched signature, and carry-error
+propagation with a temporary ROM stub; these are adapter checks, not evidence
+of real firmware conversion failures. **ROM version 0, physical devices, and
+the PC-1350 keyboard/LCD endpoints remain runtime-unverified.**
+
+To reproduce, build the fixture from the repository root:
+
+```powershell
+gcc -E -P -nostdinc -I Source\C\lcc2\include Source\C\lcc2\tests\pc1350_rom.c -o Source\C\lcc2\build\pc1350_rom.c
+.\Source\C\lcc2\lcc2.exe --target PC1350 Source\C\lcc2\build\pc1350_rom.c -o Source\C\lcc2\build\pc1350_rom.asm
+.\Source\C\pasm\pasm.exe Source\C\lcc2\build\pc1350_rom.asm Source\C\lcc2\build\pc1350_rom.bin | Tee-Object Source\C\lcc2\build\pc1350-rom-assembly.log
+```
+
+In the Lua console of a **disposable** PC-1350 MAME session with ROM v1:
+
+```lua
+dofile([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\tests\pc1350_rom.lua]])
+lcc2_pc1350_rom_test([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\build\pc1350_rom.bin]], [[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\build\pc1350-rom-assembly.log]])
+```
+
+Inspect `lcc2_pc1350_rom_result.status` for `PASS` or `FAIL` and `.error`
+for a failure detail. The harness overwrites BASIC at `0x6030` and deliberately
+borrows firmware/display scratch; do not use it with unsaved programs.
 
 ### PC-1401 `key.h`: raw keyboard input
 

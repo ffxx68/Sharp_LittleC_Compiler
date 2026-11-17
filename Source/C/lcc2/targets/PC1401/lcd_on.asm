@@ -1,0 +1,12 @@
+; Enable the PC-1401 LCD with its current contents (ROM LCD ON).
+lcd_on:
+	LIDP	PC1401_LCD_SAVED_IRAM
+	LP	8
+	LII	87
+	EXWD
+	CALL	0x05A2
+	LIDP	PC1401_LCD_SAVED_IRAM
+	LP	8
+	LII	87
+	MVWD
+	RTN

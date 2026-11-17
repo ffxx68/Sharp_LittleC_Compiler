@@ -90,6 +90,7 @@ test: all test-pasm $(TEST_TARGET) $(LEXER_TEST_TARGET) $(PARSER_TEST_TARGET) $(
 	LCC2="$(abspath $(TARGET))" PASM="$(abspath $(PASM))" sh tests/test_cli.sh
 	LCC2="$(abspath $(TARGET))" PASM="$(abspath $(PASM))" sh tests/test_strings.sh
 	LCC2="$(abspath $(TARGET))" PASM="$(abspath $(PASM))" sh tests/test_libraries.sh
+	LCC2="$(abspath $(TARGET))" PASM="$(abspath $(PASM))" sh tests/test_pc1350_rom.sh
 
 clean:
 	rm -rf $(BUILD_DIR) $(TARGET)

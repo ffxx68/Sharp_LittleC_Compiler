@@ -54,17 +54,20 @@ overrides the origin. Only called runtime modules are included.
 | Target option | Origin | Device APIs | Validation |
 |---------------|--------|-------------|------------|
 | `--target PC1403` | `0xE030` | `getchar`, `putchar`, `puts`; `key_scan`, `key_wait`, `keybrk`; `lcd_on`, `lcd_off`, `lcd_cls`, `lcd_pset`, `lcd_hline` | Build/assembly checks; MAME harnesses below. Physical-device validation not documented. |
-| `--target PC1350` | `0x6900` | `getchar`, `key_scan`, `key_wait`; `lcd_on`, `lcd_off` | Build/assembly checks only; **not runtime-tested in MAME or on hardware**. No pixel APIs. |
+| `--target PC1350` | `0x6900` | `getchar`, `key_scan`, `key_wait`; `lcd_on`, `lcd_off`; `pc1350_str`, `pc1350_val`, `pc1350_compare` | ROM string APIs: MAME, ROM v1. Other APIs: build/assembly only. ROM v0 and hardware unverified. No pixel APIs. |
 | `--target PC1401` | `0x3801` (14337) | `getchar`, `key_scan`, `key_wait`; `lcd_on`, `lcd_off` | Build/assembly checks only; **not runtime-tested in MAME or on hardware**. LCD pixel APIs are not yet integrated. |
 | No `--target` | `0xE030` | None | Build/assembly checks. |
 
 All configurations supply `strcpy`, `strcat`, and `int2str`. `puts` requires
 `putchar`, which must be user-defined outside PC-1403. `getchar` and the
 keyboard APIs return raw target-specific key codes, **not ASCII**.
+PC-1350's `pc1350.h` supplies ROM-backed BCD conversions and length-based
+comparisons, with ROM-version detection and borrowed firmware workspace.
 
 Reserve device RAM before loading code; selecting a target does not reserve
 it. PC-1350 uses the machine-language manual's example origin `0x6900`;
-keep BASIC programs and variables clear of the entire binary.
+keep the entire binary below system RAM at `0x6C30`, clear of BASIC programs
+and variables. Larger programs need a lower explicit origin.
 PC-1401's origin assumes the 1 kB reservation in
 [`littleC manual.txt`](../../../Docs/littleC%20manual.txt), section
 "PC-1401 & PC-1421". See the

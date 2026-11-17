@@ -1,0 +1,12 @@
+; Disable the PC-1401 LCD without clearing its memory (ROM LCD OFF).
+lcd_off:
+	LIDP	PC1401_LCD_SAVED_IRAM
+	LP	8
+	LII	87
+	EXWD
+	CALL	0x059E
+	LIDP	PC1401_LCD_SAVED_IRAM
+	LP	8
+	LII	87
+	MVWD
+	RTN
