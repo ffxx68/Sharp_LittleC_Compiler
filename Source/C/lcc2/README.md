@@ -54,7 +54,7 @@ overrides the origin. Only called runtime modules are included.
 | Target option | Origin | Device APIs | Validation |
 |---------------|--------|-------------|------------|
 | `--target PC1403` | `0xE030` | `getchar`, `putchar`, `puts`; `key_scan`, `key_wait`, `keybrk`; `lcd_on`, `lcd_off`, `lcd_cls`, `lcd_pset`, `lcd_hline` | Build/assembly checks; MAME harnesses below. Physical-device validation not documented. |
-| `--target PC1401` | `0x3801` (14337) | `getchar`, `key_scan`, `key_wait` | Build/assembly checks only; **not runtime-tested in MAME or on hardware**. LCD APIs are not yet integrated. |
+| `--target PC1401` | `0x3801` (14337) | `getchar`, `key_scan`, `key_wait`; `lcd_on`, `lcd_off` | Build/assembly checks only; **not runtime-tested in MAME or on hardware**. LCD pixel APIs are not yet integrated. |
 | No `--target` | `0xE030` | None | Build/assembly checks. |
 
 All configurations supply `strcpy`, `strcat`, and `int2str`. `puts` requires

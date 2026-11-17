@@ -1,10 +1,11 @@
 #ifndef LCC2_LCD_H
 #define LCC2_LCD_H
 
-/* PC-1403 LCD controls; not standard C stream operations. */
+/* PC-1401 and PC-1403 LCD controls; not standard C stream operations. */
 void lcd_on(void);
 void lcd_off(void);
-/* mode: 0 clears pixels; 1 sets pixels. Other values do nothing. */
+/* PC-1403 pixel APIs.
+   mode: 0 clears pixels; 1 sets pixels. Other values do nothing. */
 void lcd_cls(unsigned char mode);
 /* Coordinates: x=0..119, y=0..6 (0 is the bottom row).
    mode: 0 clears; 1 sets. Invalid coordinates or modes do nothing. */

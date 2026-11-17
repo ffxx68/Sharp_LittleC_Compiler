@@ -191,6 +191,40 @@ printf '#pragma org(0x3900)\nvoid main(void) {}\n' > "$dir/source.c"
 "$LCC2" --target PC1401 "$dir/source.c" -o "$dir/output.asm"
 grep -q '^.ORG[[:space:]]*14592$' "$dir/output.asm"
 
+for routine in lcd_on lcd_off; do
+    printf '#include "lcd.h"\nvoid main(void) { %s(); %s(); }\n' "$routine" "$routine" > "$dir/source.c"
+    gcc -E -P -nostdinc -Iinclude "$dir/source.c" -o "$dir/preprocessed.c"
+    "$LCC2" --target PC1401 "$dir/preprocessed.c" -o "$dir/output.asm"
+    test "$(grep -c "^$routine:" "$dir/output.asm")" = 1
+    test "$(grep -c '^PC1401_LCD_SAVED_IRAM:' "$dir/output.asm")" = 1
+    if test "$routine" = lcd_on; then
+        grep -q 'CALL[[:space:]]*0x05A2' "$dir/output.asm"
+        test "$(grep -c '^lcd_off:' "$dir/output.asm")" = 0
+    else
+        grep -q 'CALL[[:space:]]*0x059E' "$dir/output.asm"
+        test "$(grep -c '^lcd_on:' "$dir/output.asm")" = 0
+    fi
+    if grep -Eq '^PC1403_|^PC1401_LCD_PSET_' "$dir/output.asm"; then
+        echo "PC1401 LCD controls selected an unrelated runtime" >&2
+        exit 1
+    fi
+    "$PASM" "$dir/output.asm" "$dir/output.bin"
+done
+printf '#include "lcd.h"\nvoid main(void) { lcd_on(); lcd_off(); }\n' > "$dir/source.c"
+gcc -E -P -nostdinc -Iinclude "$dir/source.c" -o "$dir/preprocessed.c"
+"$LCC2" --target PC1401 "$dir/preprocessed.c" -o "$dir/output.asm"
+test "$(grep -c '^lcd_on:' "$dir/output.asm")" = 1
+test "$(grep -c '^lcd_off:' "$dir/output.asm")" = 1
+test "$(grep -c '^PC1401_LCD_SAVED_IRAM:' "$dir/output.asm")" = 1
+"$PASM" "$dir/output.asm" "$dir/output.bin"
+printf 'void lcd_on(void) {}\nvoid lcd_off(void) {}\nvoid main(void) { lcd_on(); lcd_off(); }\n' > "$dir/source.c"
+"$LCC2" --target PC1401 "$dir/source.c" -o "$dir/output.asm"
+if grep -q '^PC1401_LCD_' "$dir/output.asm"; then
+    echo "User-defined PC1401 LCD controls selected the supplied runtime" >&2
+    exit 1
+fi
+"$PASM" "$dir/output.asm" "$dir/output.bin"
+
 for routine in key_scan key_wait; do
     printf '#include "key.h"\nvoid main(void) { %s(); %s(); }\n' "$routine" "$routine" > "$dir/source.c"
     gcc -E -P -nostdinc -Iinclude "$dir/source.c" -o "$dir/preprocessed.c"

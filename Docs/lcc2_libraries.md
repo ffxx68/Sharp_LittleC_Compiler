@@ -22,7 +22,8 @@ gcc -E -P -nostdinc -I Source\C\lcc2\include .\program.c -o .\program.preprocess
 
 Add `--target PC1403` to the `lcc2` invocation when using its supplied
 device-dependent I/O implementations, or `--target PC1401` for the PC-1401
-`key_scan`, `key_wait`, and `getchar` implementations. Without a target, no device runtime is
+`key_scan`, `key_wait`, `getchar`, `lcd_on`, and `lcd_off` implementations.
+Without a target, no device runtime is
 appended; device-independent string and conversion routines remain available.
 
 The command-line driver appends each external library module only when its
@@ -161,6 +162,19 @@ The ROM interface is described in
 and on page 2 of
 [the PC-1401/1402 ROM routine reference](https://www.simon-lehmayr.de/PC-1360/d_Manuals/ROM1401.pdf).
 It has not yet been validated on PC-1401 hardware or in emulation.
+
+### PC-1401 `lcd.h`: display on/off
+
+With `--target PC1401`, `lcd_on()` calls ROM `0x05A2` to enable the display
+with its current contents; `lcd_off()` calls `0x059E` to disable it without
+clearing display memory. These entry points are listed on page 2 of
+[the PC-1401/1402 ROM routine reference](https://www.simon-lehmayr.de/PC-1360/d_Manuals/ROM1401.pdf)
+and were checked against the supplied CPU ROM.
+
+Both preserve caller internal RAM 8..95 using a shared 88-byte save area
+and are not reentrant. Only called endpoints and their shared save area are
+included. The PC-1401 pixel APIs are not yet integrated. Display on/off
+behavior is **not yet runtime-tested in MAME or on physical hardware**.
 
 ### PC-1401 `getchar`: blocking raw-key input
 
