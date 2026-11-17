@@ -13,10 +13,11 @@ called functions are included; the target option does not reserve memory.
 | `int getchar(void)` | Uses `key_wait`; returns the raw key code zero-extended to `int`, not ASCII. No echo or EOF. |
 | `void lcd_on(void)` | Enables the display without changing display memory. |
 | `void lcd_off(void)` | Disables the display without changing display memory. |
+| `void lcd_pset(unsigned char x, unsigned char y, unsigned char mode)` | Sets or clears one pixel; coordinates are x=0..149, y=0..31 with y=0 at the bottom. Mode 0 clears and 1 sets; invalid coordinates or modes do nothing. |
 
 The keyboard functions use private save state; the LCD functions share save
 state. These functions are non-reentrant and preserve caller internal RAM
-8..95. `keybrk`, `putchar`, and public pixel functions are not supplied.
+8..95. `keybrk` and `putchar` are not supplied.
 
 ## `pc1350.h`: ROM-backed string and BCD operations
 
@@ -54,8 +55,11 @@ that workspace. Keep program code, save state, and number storage below
 `0x6C30`, outside the system area. The default origin `0x6900` is an example,
 not a reservation.
 
-Runtime checks cover the supplied ROM version 1 in MAME. ROM version 0,
-physical devices, and keyboard endpoints have not been runtime-verified.
+The `lcd_pset` runtime has a MAME fixture at
+`Source/C/lcc2/tests/pc1350_lcd_pset.c` with its state-restoring harness in
+`pc1350_lcd_pset.lua`. Runtime checks cover the supplied ROM version 1 in
+MAME. ROM version 0, physical devices, and keyboard endpoints have not been
+runtime-verified.
 See the [PC-1350 machine-language manual](../Source/C/lcc2/targets/PC1350_MachineLanguage_EN.docx)
 and the [project tests](../Source/C/lcc2/README.md) for implementation and
 validation details.

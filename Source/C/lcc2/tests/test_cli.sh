@@ -350,6 +350,19 @@ for routine in key_scan key_wait getchar lcd_on lcd_off PC1350_LCD_SAVED_IRAM; d
     test "$(grep -c "^$routine:" "$dir/output.asm")" = 1
 done
 "$PASM" "$dir/output.asm" "$dir/output.bin"
+printf '#include "lcd.h"\nvoid main(void) { lcd_pset(0, 0, 1); lcd_pset(149, 31, 0); }\n' > "$dir/source.c"
+gcc -E -P -nostdinc -Iinclude "$dir/source.c" -o "$dir/preprocessed.c"
+"$LCC2" --target PC1350 "$dir/preprocessed.c" -o "$dir/output.asm"
+for routine in lcd_pset PC1350_LCD_PSET_IMPL PC1350_LCD_SAVED_IRAM; do
+    test "$(grep -c "^$routine:" "$dir/output.asm")" = 1
+done
+grep -q 'PC1350_LCD_PSET_SET_MASKS' "$dir/output.asm"
+grep -q 'PC1350_LCD_PSET_CLEAR_MASKS' "$dir/output.asm"
+if grep -Eq '^PC140[13]_|^PC1350_LCD_HLINE_' "$dir/output.asm"; then
+    echo "PC1350 lcd_pset selected an unrelated runtime" >&2
+    exit 1
+fi
+"$PASM" "$dir/output.asm" "$dir/output.bin"
 printf 'int getchar(void);\nunsigned char key_wait(void) { return 0; }\nint main(void) { return getchar(); }\n' > "$dir/source.c"
 "$LCC2" --target PC1350 "$dir/source.c" -o "$dir/output.asm"
 test "$(grep -c '^getchar:' "$dir/output.asm")" = 1

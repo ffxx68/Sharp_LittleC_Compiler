@@ -1,0 +1,39 @@
+; Set/clear one pixel on the 150x32 PC-1350 LCD.
+; Coordinates use x=0..149 and y=0..31, with y=0 at the bottom.
+; Stack at entry: R+2 = mode, R+3 = y, R+4 = x (last argument nearest R).
+lcd_pset:
+	LDR
+	ADIA	2
+	STP
+	LDM
+	LIDP	PC1350_LCD_PSET_MODE
+	STD
+	LDR
+	ADIA	3
+	STP
+	LDM
+	LIDP	PC1350_LCD_PSET_Y
+	STD
+	LDR
+	ADIA	4
+	STP
+	LDM
+	LIDP	PC1350_LCD_PSET_X
+	STD
+	LIDP	PC1350_LCD_SAVED_IRAM
+	LP	8
+	LII	87
+	EXWD
+	CALL	PC1350_LCD_PSET_IMPL
+	LIDP	PC1350_LCD_SAVED_IRAM
+	LP	8
+	LII	87
+	MVWD
+	RTN
+
+PC1350_LCD_PSET_X:
+	.DB	0
+PC1350_LCD_PSET_Y:
+	.DB	0
+PC1350_LCD_PSET_MODE:
+	.DB	0
