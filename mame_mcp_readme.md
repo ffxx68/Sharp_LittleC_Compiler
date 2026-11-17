@@ -177,6 +177,20 @@ do not apply. Lowercase uses the LCD's SML indicator to track letter case.
 Unsupported keys raise an error instead of being silently dropped.
 If a fresh PC-1350 session shows its initialization prompt, press ENTER first.
 
+For PC-1401, load `pc1401_key.lua` instead:
+
+```lua
+dofile([[C:\path\to\Sharp_LittleC_Compiler\pc1401_key.lua]])
+pc1401_typing = coroutine.create(function() keyline("PRINT 123") end)
+assert(coroutine.resume(pc1401_typing))
+```
+
+The same four helpers are available, with uppercase letters, digits, BASIC
+punctuation and named keys `CAL`, `BASIC`, `CLS`/`C-CE`, `SHIFT`, `DEF`,
+`ENTER`, `BRK`/`ON`, arrows, `INS` and `DEL`. `_` and `|` select CAL and
+BASIC respectively. Lowercase and unsupported characters raise an error;
+PC-1401 has no SML mode. Timing helpers require a coroutine as above.
+
 ### Example commands (in Claude Desktop, or IntelliJ Copilot)
 
 Some snippets, or natural language commands, to control MAME:

@@ -332,6 +332,26 @@ and are not reentrant. Only called endpoints and their shared save area are
 included. The PC-1401 pixel APIs are not yet integrated. Display on/off
 behavior is **not yet runtime-tested in MAME or on physical hardware**.
 
+The visual fixture `tests\pc1401_pixels.c` writes a border and spaced points
+directly into the 80x7 LCD, then blocks in `key_wait()`. This does not add a
+public pixel API. Columns 0..39 use `0x6400..0x6427`; columns 40..79 use
+`0x6467..0x6440` in reverse order.
+
+Preprocess with the supplied headers, compile with `--target PC1401`, and
+assemble to `build\pc1401_pixels.bin`. In the active PC-1401 Lua console:
+
+```lua
+dofile([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\tests\pc1401_pixels.lua]])
+lcc2_pc1401_pixels_test([[C:\path\to\Sharp_LittleC_Compiler\Source\C\lcc2\build\pc1401_pixels.bin]])
+```
+
+The harness checks all 80 LCD bytes and the enabled output-C bit, then reports
+`lcc2_pc1401_pixels_result.status = "waiting"`. These checks passed in MAME;
+visual confirmation and completion after a key press are separate checks.
+Press a device key to restore the previous program/display RAM and CPU state.
+The harness temporarily borrows `0x3800..0x47FF` and LCD/system RAM; do not
+reset or modify the session while it is waiting.
+
 ### PC-1401 `getchar`: blocking raw-key input
 
 The external module `targets\PC1401\getchar.asm` calls `key_wait()` and
